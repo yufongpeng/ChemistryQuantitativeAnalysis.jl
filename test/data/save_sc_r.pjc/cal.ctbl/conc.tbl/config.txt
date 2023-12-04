@@ -1,0 +1,8 @@
+[Analyte]
+Analyte
+
+[ISD]
+ISD
+
+[Sample]
+conc

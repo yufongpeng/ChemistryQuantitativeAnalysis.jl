@@ -1,0 +1,2 @@
+Sample	Analyte1	Analyte2	Analyte3	Analyte4	Analyte5	Analyte6	Analyte7
+qc	0	10	0	100	0	0	0

@@ -1,0 +1,6 @@
+Analyte	ISD	1	2	3	4	5	6
+Analyte1	2	1	2	5	10	20	50
+Analyte2	-1	1	1	1	1	1	1
+Analyte3	4	1	2	5	10	20	50
+Analyte4	-1	1	1	1	1	1	1
+Analyte5		1	2	5	10	20	50

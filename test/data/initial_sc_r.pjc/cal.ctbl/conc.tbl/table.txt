@@ -1,0 +1,8 @@
+Analyte	ISD	conc
+Analyte1	2	0
+Analyte2	-1	10
+Analyte3	4	0
+Analyte4	-1	100
+Analyte5	2	0
+Analyte6	4	0
+Analyte7	2	0

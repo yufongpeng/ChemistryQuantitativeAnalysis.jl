@@ -1,0 +1,12 @@
+[Analyte]
+Analyte1	2
+Analyte2	-1
+Analyte3	4
+Analyte4	-1
+Analyte5	0
+Analyte6	2
+Analyte7	0
+
+
+[Sample]
+Sample
