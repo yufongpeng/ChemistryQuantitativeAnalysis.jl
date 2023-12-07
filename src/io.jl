@@ -333,7 +333,8 @@ end
 """
     Calibration.read(file::String, T; table_type = T, analyte_fn = default_analyte_fn) -> Batch{A, table_type}
 
-Read ".batch" file into julia as `Batch`. `T` is the sink function for tabular data, `table_type` is `T` parameter in the type signature of `Batch` which determines the underlying table type, and `analyte_fn` is responsible for converting `analyte` in string type into user defined type `A`.
+Read ".batch" file into julia as `Batch`. `T` is the sink function for tabular data, `table_type` is `T` parameter in the type signature of `Batch` which determines the underlying table type
+, and `analyte_fn` is responsible for converting `analyte` in string type into user defined type `A`.
 
 If `table_type` is set to `nothing`, table type will be determined automatically which may be too restrict when using parameterized table types.
 

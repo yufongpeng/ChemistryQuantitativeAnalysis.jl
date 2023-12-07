@@ -28,7 +28,7 @@ relative_signal(batch::Batch, dt::AbstractDataTable) = relative_signal(batch.met
 
 Calculate relative signal, update or insert the value into `at` or a copy of `at` at index `relsig`, and return the object using `getproperty(at, signal)` as signal data.
 """
-set_relative_signal(at::AbstractDataTable, batch::Batch; signal = batch.method.signal, relsig = :relative_signal) = 
+set_relative_signal(at::AnalysisTable, batch::Batch; signal = batch.method.signal, relsig = :relative_signal) = 
     set_relative_signal(at, batch.method; signal, relsig)
 function set_relative_signal(at::AnalysisTable, method::MethodTable; signal = method.signal, relsig = :relative_signal)
     result = relative_signal(method, getproperty(at, signal))
@@ -185,7 +185,7 @@ Quantify `analyte`, and return the result as a vector using data in `dt` as sign
 quantification(cal::SingleCalibration) = [cal.conc]
 quantification(cal::MultipleCalibration) = inv_predict(cal, cal.table.y)
 function quantification(cal::AbstractCalibration, dt::AbstractDataTable; analyte = cal.analyte)
-    isnothing(last(analyte)) > 0 || return inv_predict(cal, get_analyte(dt, first(analyte)))
+    isnothing(last(analyte)) && return inv_predict(cal, get_analyte(dt, first(analyte)))
     inv_predict(cal, get_analyte(dt, first(analyte)) ./ get_analyte(dt, last(analyte)))
 end
 
@@ -399,7 +399,6 @@ It returns `GLM` object for non-mutating version and input object for mutating v
 calfit!(batch::Batch) = (calfit!.(batch.calibration); batch)
 function calfit!(cal::MultipleCalibration)
     cal.model = calfit(cal.table, cal.formula, cal.type, cal.zero, cal.weight)
-    update_calibration!(batch::Batch, cal_id::Int) 
     cal
 end
 
@@ -423,8 +422,9 @@ function update_calibration!(cal::MultipleCalibration, method::MethodTable)
     isd = isd_of(method, first(cal.analyte))
     cal.analyte = (first(cal.analyte), isd)
     ord = sortperm(method.level_map)
-    cal.table.y .= isnothing(isd) ? get_analyte(method.signaltable, analyte)[ord] : (get_analyte(method.signaltable, analyte) ./ get_analyte(method.signaltable, isd))[ord], 
-    cal.include .= true
+    cal.table.y .= isnothing(isd) ? get_analyte(method.signaltable, first(cal.analyte))[ord] : (get_analyte(method.signaltable, first(cal.analyte)) ./ get_analyte(method.signaltable, isd))[ord]
+    cal.table.include .= true
+    cal.formula = get_formula(cal)
     calfit!(cal)
     inv_predict_accuracy!(cal)
 end

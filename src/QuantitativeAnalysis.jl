@@ -3,10 +3,10 @@ module QuantitativeAnalysis
 using GLM, CSV, TypedTables, LinearAlgebra, Dictionaries, ThreadsX
 export MultipleCalibration, SingleCalibration, 
     ColumnDataTable, RowDataTable, AnalysisTable, MethodTable,
-    Batch, calibration,
+    Batch, calibration, update_calibration!,
     read_calibration, read_datatable, read_analysistable, read_methodtable, read_batch,
     cal_range, lloq, uloq, accuracy, accuracy!, set_accuracy, set_accuracy!, update_accuracy!,
-    inv_predict, inv_predict!, inv_predict_accuracy!, set_inv_predict, set_inv_predict!, update_accuracy!,
+    inv_predict, inv_predict!, inv_predict_accuracy!, set_inv_predict, set_inv_predict!, update_inv_predict!,
     relative_signal, set_relative_signal, set_relative_signal!, update_relative_signal!,
     quantification, quantification!, set_quantification, set_quantification!, update_quantification!,
     find_analyte, get_analyte, find_sample, get_sample, set_isd!,
@@ -40,20 +40,32 @@ struct ColumnDataTable{A, T} <: AbstractDataTable{A, T}
 end
 
 """
-    ColumnDataTable(sample_name, analyte_name, analytes, table)
+    ColumnDataTable(sample_name::Symbol, analyte_name::Vector{Symbol}, analytes::Vector, table)
+    ColumnDataTable(sample_name::Symbol, analyte_name::Vector, table; analyte_fn = default_analyte_fn)
+    ColumnDataTable(sample_name::Symbol, table; analyte_name = setdiff(propertynames(table), [sample_name]), analyte_fn = default_analyte_fn)
+    ColumnDataTable(table, sample_name::Symbol; analyte_name = setdiff(propertynames(table), [sample_name]), analyte_fn = default_analyte_fn)
 
-A user-friendly contructor for `ColumnDataTable`. See the documentation of the type for detail description.
+User-friendly contructors for `ColumnDataTable`. See the documentation of the type for detail description.
 """
-function ColumnDataTable(sample_name::Symbol, analyte_name::Vector{Symbol}, analytes::Vector{A}, table::T) where {A, T}
+function ColumnDataTable(sample_name::Symbol, analyte_name::Vector{Symbol}, analytes::Vector, table)
     length(analyte_name) == length(analytes) || throw(ArgumentError("Arguments `analyte_name` and `analytes` should have the same length."))
     ColumnDataTable(sample_name, Table(; analyte_name, analytes), table)
 end
+
+ColumnDataTable(sample_name::Symbol, analyte_name::Vector, table; analyte_fn = default_analyte_fn) = 
+    ColumnDataTable(sample_name, Symbol.(analyte_name), analyte_fn.(string.(analyte_name)), table)
+ColumnDataTable(sample_name::Symbol, table; analyte_name = setdiff(propertynames(table), [sample_name]), analyte_fn = default_analyte_fn) = 
+    ColumnDataTable(sample_name, analyte_name, table; analyte_fn)
+ColumnDataTable(table, sample_name::Symbol; analyte_name = setdiff(propertynames(table), [sample_name]), analyte_fn = default_analyte_fn) = 
+    ColumnDataTable(sample_name, analyte_name, table; analyte_fn) 
 
 function getproperty(tbl::ColumnDataTable, property::Symbol)
     if property in [:analyte_name, :analytes] 
         getproperty(getfield(tbl, :config), property)
     elseif property == :samples
         Symbol.(getproperty(tbl.table, tbl.sample_name))
+    elseif !in(property, fieldnames(ColumnDataTable))
+        getproperty(getfield(tbl, :table), property)
     else
         getfield(tbl, property)
     end
@@ -84,9 +96,25 @@ struct RowDataTable{A, T} <: AbstractDataTable{A, T}
     end
 end
 
+"""
+    RowDataTable(sample_name::Vector{Symbol}, analyte_name::Symbol, table; analyte_fn = default_analyte_fn)
+    RowDataTable(analyte_name::Symbol, table; sample_name = setdiff(propertynames(table), [analyte_name]), analyte_fn = default_analyte_fn)
+    RowDataTable(table, analyte_name::Symbol; sample_name = setdiff(propertynames(table), [analyte_name]), analyte_fn = default_analyte_fn)
+
+User-friendly contructors for `RowDataTable`. See the documentation of the type for detail description.
+"""
+RowDataTable(sample_name::Vector{Symbol}, analyte_name::Symbol, table; analyte_fn = default_analyte_fn) = 
+    RowDataTable(sample_name, analyte_name, analyte_fn.(string.(getproperty(table, analyte_name))), table)
+RowDataTable(analyte_name::Symbol, table; sample_name = setdiff(propertynames(table), [analyte_name]), analyte_fn = default_analyte_fn) = 
+    RowDataTable(sample_name, analyte_name, table; analyte_fn)
+RowDataTable(table, analyte_name::Symbol; sample_name = setdiff(propertynames(table), [analyte_name]), analyte_fn = default_analyte_fn) = 
+    RowDataTable(sample_name, analyte_name, table; analyte_fn)
+
 function getproperty(tbl::RowDataTable{A}, property::Symbol) where A
     if property == :samples
         getfield(tbl, :sample_name)
+    elseif !in(property, fieldnames(RowDataTable))
+        getproperty(getfield(tbl, :table), property)
     else
         getfield(tbl, property)
     end
@@ -212,7 +240,7 @@ MethodTable(
             analyte_map::Table{NamedTuple{(:analytes, :isd, :calibration), Tuple{A, Int, Int}}, 1, NamedTuple{(:analytes, :isd, :calibration), Tuple{Vector{A}, Vector{Int}, Vector{Int}}}},
             level_map::Vector{Int}, 
             conctable::AbstractDataTable{<: A, T}, 
-            signaltable::AbstractDataTable{<: A, S}) where {A, T, S} = MethodTable{A, promote_type{T, S}}(signal, analyte_map, level_map, conctable, signaltable)
+            signaltable::AbstractDataTable{<: A, S}) where {A, T, S} = MethodTable{promote_type(T, S)}(signal, analyte_map, level_map, conctable, signaltable)
 
 function getproperty(tbl::MethodTable, p::Symbol)
     if p == :analytes

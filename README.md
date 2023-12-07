@@ -15,6 +15,7 @@ This package provides two basic wrappers, `ColumnDataTable{A, T}` and `RowDataTa
 |`analytes`|`Vector{A}` stored in field `config`, analytes in user-defined types.|`Vector{A}`, analytes in user-defined types.|
 |`table`|Tabular data of type `T`|same|
 
+`ColumnDataTable` can be created by `ColumnDataTable(table, sample_name; analyte_fn, analyte_name)`. By default, `analyte_name` includes all properties of `table` without `sample_name`. `RowDataTable` can be created by `RowDataTable(table, analyte_name; analyte_fn, sample_name)`. By default, `analyte_name` includes all properties of `table` without `sample_name`.
 To add new samples to `ColumnDataTable{A, T}`, user can directly modify `table`; for `RowDataTable{A, T}`, user have to modify `sample_name` as well. To add new analytes, user can directly modify `table`, and modify `config` for `ColumnDataTable{A, T}` (`config` is a `TypedTables.Table`) and `analytes` for `RowDataTable{A, T}`.
 
 The package provides another two wrappers, `MethodTable{A, T}`, and `AnalysisTable{A, T} <: AbstractAnalysisTable{A, T}`.

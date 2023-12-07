@@ -64,7 +64,7 @@ get_analyte(dt::RowDataTable, id::Int) = collect(getproperties(dt.table[id], Tup
 function get_analyte(dt::RowDataTable{A}, analyte::B) where {A, B <: A}
     id = findfirst(==(analyte), dt.analytes)
     isnothing(id) && throw(ArgumentError("Analyte $analyte is not in the table"))
-    collect(getproperties(dt.table[id], Tuple(dt.sample_name)))
+    [getproperty(dt.table, p)[id] for p in dt.sample_name]
 end
 get_analyte(dt::ColumnDataTable, id::Int) = getproperty(dt.table, dt.analyte_name[id])
 function get_analyte(dt::ColumnDataTable{A}, analyte::B) where {A, B <: A}
