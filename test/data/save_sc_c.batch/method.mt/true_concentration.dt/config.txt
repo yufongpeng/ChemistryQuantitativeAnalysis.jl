@@ -1,0 +1,9 @@
+[Type]
+C
+
+[Analyte]
+Analyte2
+Analyte4
+
+[Sample]
+Sample

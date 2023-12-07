@@ -1,130 +1,157 @@
-# Calibration
+# QuantitativeAnalysis
 
-[![Build Status](https://github.com/yufongpeng/Calibration.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/yufongpeng/Calibration.jl/actions/workflows/CI.yml?query=branch%3Amain)
-[![Coverage](https://codecov.io/gh/yufongpeng/Calibration.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/yufongpeng/Calibration.jl)
+[![Build Status](https://github.com/yufongpeng/QuantitativeAnalysis.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/yufongpeng/QuantitativeAnalysis.jl/actions/workflows/CI.yml?query=branch%3Amain)
+[![Coverage](https://codecov.io/gh/yufongpeng/QuantitativeAnalysis.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/yufongpeng/QuantitativeAnalysis.jl)
 
-`Calibration.jl` is a package for instrument calibration and analyte quantification based on tabular data.
+`QuantitativeAnalysis.jl` is a package for instrument calibration and analyte quantification based on tabular data.
 
 ## Tabular data wrapper
-This package provides two basic wrappers, `ColumnAnalysisTable{A, T}` and `RowAnalysisTable{A, T}` which are subtypes of `AbstractAnalysisTable{A, T}`. `ColumnAnalysisTable` indicates that part of columns represent analytes, and all rows reprsent samples. `RowAnalysisTable` indicates that part of columns represent samples, and all rows represent analytes. Both types have the same properties, but the actual meanings may be different. 
-|Property|`ColumnAnalysisTable{A, T}`|`RowAnalysisTable{A, T}`|
+This package provides two basic wrappers, `ColumnDataTable{A, T}` and `RowDataTable{A, T}` which are subtypes of `AbstractDataTable{A, T}`. `ColumnDataTable` indicates that part of columns represent analytes, and all rows reprsent samples. `RowDataTable` indicates that part of columns represent samples, and all rows represent analytes. Both types have the same properties, but the actual meanings may be different. 
+|Property|`ColumnDataTable{A, T}`|`RowDataTable{A, T}`|
 |----------|---------------------|------------------|
 |`sample_name`|`Symbol`, the column name that each element is sample name.|`Vector{Symbol}`, the column names that are sample names.|
 |`analyte_name`|`Vector{Symbol}` stored in field `config`, the column names that are analytes names|`Symbol`, the column name that each element is analyte name.|
-|`analytes`|`Vector{A}` stored in field `config`, analytes in user-defined types. Its length and correponding analytes must matches those of `isd_map`.|same|
-|`isd_map`|`Vector{Int}` stored in field `config`, each element is the index of the correponding internal standrads in `analytes` of the analyte in this position. `0` means no internal standard, and `-1` means the analyte itself is internal standard. For example, `[2, -1]` means that internal standard of the first analyte is the second analyte, and the second analyte is an internal standrad.|`Symbol` or `Nothing`, the column name that contains internal standard information.|
+|`samples`|`Vector{Symbol}`, the column names that are sample names.|`Vector{Symbol}`, symbols transformed from column `sample_name`.|
+|`analytes`|`Vector{A}` stored in field `config`, analytes in user-defined types.|`Vector{A}`, analytes in user-defined types.|
 |`table`|Tabular data of type `T`|same|
-|`samples`|`Vector{Symbol}`, the column names that are sample names.|same|
-|`isds`|`Vector{A}` that each analytes are internal standards.|same|
+
+To add new samples to `ColumnDataTable{A, T}`, user can directly modify `table`; for `RowDataTable{A, T}`, user have to modify `sample_name` as well. To add new analytes, user can directly modify `table`, and modify `config` for `ColumnDataTable{A, T}` (`config` is a `TypedTables.Table`) and `analytes` for `RowDataTable{A, T}`.
+
+The package provides another two wrappers, `MethodTable{A, T}`, and `AnalysisTable{A, T} <: AbstractAnalysisTable{A, T}`.
+### MethodTable
+This type is used for storing method, containing all analytes, their internal standards and calibration curve setting, and data for fitting calibration curve.
+|Property|Description|
+|----------|---------|
+|`signal`|`Symbol`, propertyname for extracting signal data from an `AnalysisTable`|
+|`analyte_map`|`Table` with 3 columns, `analytes` identical to property `analytes`, `isd`, matching each analyte to index of its internal standard, and `calibration` matching each analyte to index of other analyte for fitting its calibration curve. `-1` indicates the analyte itself is internal standard, and `0` indicates no internal standard. For example, a row `(analytes = AnalyteX, isd = 2, calibration = 3)` means that internal standard of `AnalyteX` is the second analyte, and it will be quantified using calibration curve of the third analyte.|
+|`level_map`|`Vector{Int}` matching each point to level. It can be empty if there is only one level in `conctable`.|
+|`conctable`|`AbstractDataTable{A, <: T}` containing concentration data for each level. Sample names must be symbol or string of integers for multiple levels. One level indicates using `SingleCalibration`.|
+|`signaltable`|`AbstractDataTable{A, <: T}` containig signal for each point. It can be `nothing` if signal data is unecessary.|
+|`analytes`|`Vector{A}`, analytes in user-defined types.|
+|`isds`|`Vector{A}` that each analytes are internal standards.|
 |`nonisds`|`Vector{A}` that each analytes are not internal standards.|same|
+|`points`|`Vector{Symbol}`, calibration points, identical to `signaltable.samples`.|
+|`levels`|`Vector{Symbol}`, calibration levels, identical to `conctable.samples`.|
 
-To add new samples to `ColumnAnalysisTable{A, T}`, user can directly modify `table`; for `RowAnalysisTable{A, T}`, user have to modify `sample_name` as well. To add new analytes, user can directly modify `table`, and modify `config` for `ColumnAnalysisTable{A, T}` (`config` is a `TypedTables.Table`) and `analytes` for `RowAnalysisTable{A, T}`.
+### AnalysisTable
+`AnalysisTable{A, T}` is basically a `Dictionary{Symbol, <: AbstractDataTable{A, <: T}}` which data can be extracted using proeperty syntax. For example, `at.tables[:area] === at.area`.
+|Property|Description|
+|----------|---------|
+|`analytes`|`Vector{A}`, analytes in user-defined types.|
+|`samples`|`Vector{Symbol}`, sample names.|
+|`tables`|`Dictionary{Symbol, <: AbstractDataTable{A, <: T}}`, a dictionary mapping data type to datatable.|
+|Other|All keys of `tables`|
 
-The package provides another two wrappers, `SampleWrapperTable{A, T}`, and `CalWrapperTable{A, T}` which are subtypes of `AbstractWrapperTable{A, T}`. 
-### SampleWrapperTable
-This type wraps a `Vector{Int}` as attribute `cal_map` and an `AbstractAnalysisTable` as attribute `analysistable`. The length and corresponding analytes of `cal_map` matches analyte in `analysistable.analytes`, and each element is the index of another analyte that its calibration curve is used for quantification of this analyte. For example, `[1, -1, 1]` means that the first analyte uses calibration curve of itself, the second analyte is internal standard, and the third analyte also uses calibration curve of the first analyte. All properties for an `AbstractAnalysisTable` are also available for `SampleWrapperTable`.
-### CalWrapperTable
-This type has three attribute `level_map`, `conctable`,and `signaltable`. `conctable` is an `AbstractAnalysisTable{A, T}` containing concentration for each level, and ISD information. Sample names must be symbol or string of integers for multiple levels. With only one level, `level_map` and `signaltable` are ignored. With multiple levels, `signaltable` should be an `AbstractAnalysisTable{A}` containig signal for each points, and `level_map` will be a `Vector{Int}` matching each point to level.
+The key for signal data is determined by `method.signal`. Default names for relative signal, true concentration, estimated concentration and accuracy are `relative_signal`, `true_concentration`, `estimated_concentration` and `accuracty`.
 
 ## Calibration
-This package provides two calibration types, `MultipleCalibration{A, T}` and `SingleCalibration{A, T}` which are subtypes of `AbstractCalibration{A, T}`.
+This package provides two calibration types, `MultipleCalibration{A}` and `SingleCalibration{A}` which are subtypes of `AbstractCalibration{A}`.
 
 ### MultipleCalibration
-This type fits and stores calibration curve. It can be created from a `AbstractAnalysisTable{A, T}` containing calibration data, an analyte `A`.
+This type fits and stores calibration curve. It can be created from a `MethodTable{A, T}` containing calibration data, an analyte `A`.
 |Attributes|Description|
 |----------|-----------|
-|`analyte`|`Int` indicates the index the analyte in `caltable.conctable.analytes`|
-|`isd`|`Int` indicates the index internal standard in `caltable.conctable.analytes`. `0` indicates no internal standard.|
+|`analyte`|`Tuple{A, Any}`. First element is the analyte being quantified, and the second element is its internal standard for which `nothing` indicates no internal standard.|
 |`type`|`Bool` determines whether fitting a linear line (`true`) or quadratic curve (`false`).|
 |`zero`|`Bool` determines whether forcing the curve crossing (0, 0) (`true`) or ignoring it (`false`).|
 |`weight`|`Float64` represents the exponential applying to each element of `x` as a weighting vector.|
 |`formula`|`FormulaTerm`, the formula for fitting calibration curve.|
-|`caltable`|`CalWrapperTable{A, T}`, the original calibration data.|
 |`table`|`TypedTable.Table`, the clean up calibration data, containing 7 columns.|
 |`model`|`GLM` object|
 
 The columns in `table`:
 |Column|Description|
 |------|-----------|
-|`id`|Sample name|
+|`id`|Point name|
 |`level`|The index of concentration level. The larger, the higher concentraion it represents.|
-|`y`|Signal|
-|`x`|Concentraion|
+|`y`|Signal or relative signal|
+|`x`|True concentraion|
 |`x̂`|Predicted concentration|
 |`accuracy`|Accuracy, i.e. `x̂/x`.|
 |`include`|Whether this point is included or not|
 
-To fit a new model, call `calfit` or `calfit!` for inplace substitution of `model`. To predict concentration, call `inv_predict` or `inv_predict!` for inplace replacement of `table.x̂`. To calculate accuracy, call `accuracy` or `acccuracy!` for inplace replacement of `table.accuracy`. `inv_predict_accuracy!` calls `inv_predict!` and `acccuracy!` subsequently. `type`, `zero`, and `weigtht` can be modified directly. To switch internal standard, modified `isd_map` of `source` and recreate the object (It is not recommended to switch internal standard in this way, see `switch_isd!` in [`Project`](#project) section). 
+To fit a new model, call `calfit` or `calfit!` for inplace substitution of `model`. To predict concentration, call `inv_predict` or `inv_predict!` for inplace replacement of `table.x̂`. To calculate accuracy, call `accuracy` or `acccuracy!` for inplace replacement of `table.accuracy`. `inv_predict_accuracy!` calls `inv_predict!` and `acccuracy!` subsequently. `type`, `zero`, and `weigtht` can be modified directly. To change internal standard, modify `analyte` and call `update_calibration!` with method (It is not recommended to change internal standard in this way, see `set_isd!` in [`Batch`](#batch) section). 
 
 ### SingleCalibration
 This type contains data for single pont calibration. 
 |Attributes|Description|
 |----------|-----------|
-|`analyte`|`Int` indicates the index the analyte in `caltable.conctable.analytes`|
-|`isd`|`Int` indicates the index internal standard in `caltable.conctable.analytes`. `0` indicates no internal standard.|
-|`caltable`|`CalWrapperTable{A, T}`, the original calibration data.|
+|`analyte`|`Tuple{A}` is the analyte with known concentration (internal standard).|
+|`conc`|`Float64`, concentration of analyte.|
 
-## Project
-A type for holding all data. 
+## Batch
+`Batch{A, T}` represents a batch for quantitative analysis where `A` is analyte type and `T` is table type.
 |Attributes|Description|
 |----------|-----------|
-|`calibration`|`Vector{MultipleCalibration{A, T}}` or `Vector{SingleCalibration{A, T}}`|
-|`caltable`|`CalWrapperTable{A, T}`, the original calibration data.|
-|`sampletable`|Sample data, `SampleWrapperTable{A}` or `Nothing`.|
-|`resulttable`|Result data, an `SampleWrapperTable{A}` or `nothing`.|
+|`method`|`MethodTable{A, <: T}`, method.|
+|`calibration`|`Vector{MultipleCalibration{<: A}}` or `Vector{SingleCalibration{<: A}}`|
+|`data`|Data for analysis, `AnalysisTable{A, <: T}` or `Nothing`.|
 
-It can be created from function `project` by providing `caltable`, and optionally `sampletable`, `resulttable`.
+It can be created with only `method` and optionally `data`.
 
-To fit new models for all `calibration`, call `calfit!`. To predict concentration, call `inv_predict_cal!` for `caltable` and `inv_predict_sample!` for `sampletable`. To calculate accuracy, call `accuracy` or `acccuracy!` for inplace replacement. `inv_predict_accuracy!` calls `inv_predict_cal!` and `acccuracy!` subsequently. To switch internal standard, call `switch_isd!` with object `analyte` and id of the new internal standard.
+To fit new models for all `calibration`, call `calfit!`. To predict concentration and calculate accuracy for calibration points, call `inv_predict!` and `acccuracy!`, respectively. To calculate relative signal, concentration or accuracy and save the result, call `update_relative_signal!`, `update_inv_predict!` (in combination, `update_quantification!`) and `update_accuracy!`, respectively. `inv_predict_accuracy!` calls `inv_predict_cal!` and `acccuracy!` subsequently. To change internal standard, call `set_isd!` with object `analyte` and `isd`.
 
 ## Reading and writting data to disk
 To use data on disk, user should create a directory in the following structure:
 ```
-project_name.pjc
+batch_name.batch
 ├──config.txt
-├──cal.ctbl
-│  ├──conc.tbl
+├──method.mt
+│  ├──true_concentration.dt
 │  │  ├──config.txt
 │  │  └──table.txt
-│  ├──signal.tbl
+│  ├──area.dt
 │  │  ├──config.txt
 │  │  └──table.txt
-│  └──level_map.txt
-└──sample.tbl
-   ├──cal_map.txt
-   ├──config.txt 
-   └──table.txt
+│  ├──analyte_map.txt
+│  └──config.txt
+├──calibration
+│  ├──1.mcal
+│  └──2.mcal
+└──data.at
+   ├──0_quantity1.dt
+   ├──1_quantity2.dt 
+   └──2_quantity3.dt
 ```
-The config file in `project_name.pjc` should be the following form:
+Config files has the following general forms
 ```
-[delim]
-\t
-```
-or 
-```
-[delim]
-,
-```
-It indicates that all `table.txt` in this directory and subdirectories should use "\t" or "," as delim.
+[property1]
+value
 
-Other config files for `.tbl` have the following two forms:
-For `ColumnAnalysisTable`
+[property2]
+value1
+value2
+value3
+.
+.
+.
 ```
+The config file in `batch_name.batch` must contain property `delim` which determines the default delimiter for all `table.txt` in this directory and subdirectories.
+
+`data.at` and `calibration` is not necessary for initializing a batch. The former can be added to the batch directly in julia, and the latter will be generated after calibration.
+
+### *.dt
+All `*.dt` files will be read as `ColumnDataTable` or `RowDataTable`. They contain `config.txt` and `table.txt`.
+
+Config file for `ColumnDataTable` needs at least the following two properties.
+```
+[Type]
+C
+
 [Sample]
 sample_col_name
 
 [Analyte]
-analyte_col_name_1  isd1
-analyte_col_name_2  isd2
+analyte_col_name_1
+analyte_col_name_2
 .
 .
 .
 ``` 
-`analyte_col_name_x` and `isdx` should be separated by tab, and `isdx` should be an integer or empty which will be parsed as the property `isd_map`. Empty string will be parsed as `0`.
-For `RowAnalysisTable`
+Config file for `RowDataTable` needs at least the following two properties.
 ```
-[ISD]
-isd_col_name
+[Type]
+R
 
 [Analyte]
 analyte_col_name
@@ -136,37 +163,51 @@ sample_col_name_2
 .
 .
 ``` 
-If `isd_col_name` is not in the columns, the property `isd_map` will be `nothing`, and user cannot add `isd_map` afterwards (as `RowAnalysisTable` is immutable). To be noticed, `conctable` must contain the correct internal standard information.
-`[Analyte]`, `[Sample]` and `[ISD]` can be in any orders.
+User can also provide `delim` to overwrite the default one defined in `batch_name.batch/config.txt`.
 
-`level_map` matches points to levels:
+### *.mt
+It must contain two `*dt` files. `true_concentrstion.dt` contains true concentration for each analyte and level. The sample names must be integers.
+Another `*.dt` file is signal data for each analyte and calibration point. The file name is determined by `config.txt`.
+
+Config file for `method.mt` needs two properties, `signal` and `level_map`.
 ```
+[signal]
+area
+
+[level_map]
 level_for_1st_point
 level_for_2nd_point
 .
 .
 .
 ```
-This file as well as `signal.tbl` will be ignored if there is only one level in `conc.tbl` indicating this project will use `SingleCalibration`.
+`signal` specify `.dt` file serving as signal data. For the above file, `method.mt/area.dt` will be `method.signaltable`.
 
-`sample.tbl` is optional; user can add the sample data afterwards.
-`cal_map` matches analytes to analytes whose calibration curve is used.
-```
-calibration_analyte_id_for_1st_analyte
-calibration_analyte_id_for_2nd_analyte
-.
-.
-.
-```
-All elements should be integers.
-To read the project into julia, call `Calibration.read`.
-```julia-repl
-julia> Calibration.read("project_name.pjc", T)
-```
-`T` is sink for tabular data; it should create an object following `Tables.jl` interface.
+`level_map` maps each point to level which should be integera as well.
 
-To write project to disk, call `Calibration.write`. There is a keyword argument `delim` controling whether using "\t" or "," as delim for tables.
-```julia-repl
-julia> Calibration.write("project_name.pjc", project; delim = "\t")
+`analyte_map.txt` contains analyte names, index of their internal standards, and index of of other analytes whose calibration curve is used. 
 ```
-There will be a new folder `calibration` containing multiple `.mcal` or `.scal` folders. The former is for `MultipleCalibration` and the latter is for `SingleCalibration`. Prediction result will be stored as `result.tbl`.
+analytes isd   calibration
+analyte1 isd1  calibration_analyte_id1
+analyte2 isd2  calibration_analyte_id2
+.
+.
+.
+```
+The delimiter should be "\t".
+
+### *.at
+It can contain multiple `*.dt`. The file names must start from an integer, `_` and `name.dt`, e.g. `0_area.dt`. The integer is for the order of reading into `AnalysisTable`, and `name` will be the key. The name of signal data is determined in `method.mt/config.txt`.
+
+### Reading and writing Batch
+To read a batch into julia, call `QuantitativeAnalysis.read`.
+```julia-repl
+julia> QuantitativeAnalysis.read("batch_name.batch", T; table_type, analyte_fn)
+```
+`T` is the sink function for tabular data; it should create an object following `Tables.jl` interface. `table_type` is `T` parameter in the type signature of `Batch` which determines the underlying table type, and `analyte_fn` is responsible for converting `analyte` in string type into user defined type `A`.
+
+To write project to disk, call `QuantitativeAnalysis.write`. There is a keyword argument `delim` controling whether using "\t" or "," as delim for tables.
+```julia-repl
+julia> QuantitativeAnalysis.write("batch_name.pjc", batch; delim = "\t")
+```
+A new folder `calibration` containing multiple `*.mcal` or `*.scal` folders. The former is for `MultipleCalibration` and the latter is for `SingleCalibration`.

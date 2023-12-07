@@ -1,0 +1,8 @@
+[Type]
+R
+
+[Analyte]
+Analyte
+
+[Sample]
+conc

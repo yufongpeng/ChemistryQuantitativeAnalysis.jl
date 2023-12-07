@@ -1,0 +1,3 @@
+Analyte	ISD	conc
+Analyte2	-1.0	10.0
+Analyte4	-1.0	100.0

@@ -1,2 +1,0 @@
-analyte	isd	type	zero	weight
-1	2	true	false	0.0

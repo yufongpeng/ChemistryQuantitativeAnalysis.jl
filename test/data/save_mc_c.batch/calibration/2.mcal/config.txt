@@ -1,0 +1,14 @@
+[analyte]
+Analyte3
+
+[isd]
+Analyte4
+
+[type]
+true
+
+[zero]
+false
+
+[weight]
+0.0

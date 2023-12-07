@@ -1,31 +1,92 @@
 """
-    inv_predict(project::Project, tbl::SampleWrapperTable)
-    inv_predict(cal::SingleCalibration)
-    inv_predict(cal::MultipleCalibration)
+    relative_signal(batch::Batch, at::AnalysisTable; signal = batch.method.signal)
+    relative_signal(method::MethodTable, at::AnalysisTable; signal = method.signal)
+    relative_signal(batch::Batch, dt::AbstractDataTable)
+    relative_signal(method::MethodTable, dt::AbstractDataTable)
+
+Calculate relative signal, and return the result as `AbstractDataTable` using `getproperty(at, signal)` or `dt` as signal data.
+"""
+relative_signal(method::MethodTable, at::AnalysisTable; signal = method.signal) = relative_signal(method, getproperty(at, signal))
+relative_signal(batch::Batch, at::AnalysisTable; signal = batch.method.signal) = relative_signal(batch.method, at; signal)
+function relative_signal(method::MethodTable, dt::AbstractDataTable)
+    analyte_map = method.analyte_map
+    aid = [findfirst(==(analyte), analyte_map.analytes) for analyte in dt.analytes]
+    cs = ThreadsX.map(eachindex(aid)) do i
+        analyte_map.isd[i] < 0 ? repeat([NaN], length(dt.samples)) :
+                analyte_map.isd[i] == 0 ? get_analyte(dt, dt.analytes[i]) :
+                get_analyte(dt, dt.analytes[i]) ./ get_analyte(dt, analyte_map.analytes[analyte_map.isd[i]])
+    end
+    fill_result!(deepcopy(dt), cs)
+end
+relative_signal(batch::Batch, dt::AbstractDataTable) = relative_signal(batch.method, dt)
+
+"""
+    set_relative_signal(at::AbstractDataTable, batch::Batch; signal = batch.method.signal, relsig = :relative_signal)
+    set_relative_signal(at::AnalysisTable, method::MethodTable; signal = method.signal, relsig = :relative_signal)
+    set_relative_signal!(at::AnalysisTable, batch::Batch; signal = batch.method.signal, relsig = :relative_signal)
+    set_relative_signal!(at::AnalysisTable, method::MethodTable; signal = method.signal, relsig = :relative_signal)
+
+Calculate relative signal, update or insert the value into `at` or a copy of `at` at index `relsig`, and return the object using `getproperty(at, signal)` as signal data.
+"""
+set_relative_signal(at::AbstractDataTable, batch::Batch; signal = batch.method.signal, relsig = :relative_signal) = 
+    set_relative_signal(at, batch.method; signal, relsig)
+function set_relative_signal(at::AnalysisTable, method::MethodTable; signal = method.signal, relsig = :relative_signal)
+    result = relative_signal(method, getproperty(at, signal))
+    new = AnalysisTable(at.analytes, at.samples, Dictionary(at.tables))
+    set!(new.tables, relsig, result)
+    new
+end
+set_relative_signal!(at::AnalysisTable, batch::Batch; signal = batch.method.signal, relsig = :relative_signal) = 
+    set_relative_signal!(at, batch.method; signal, relsig)
+function set_relative_signal!(at::AnalysisTable, method::MethodTable; signal = method.signal, relsig = :relative_signal)
+    result = relative_signal(method, getproperty(at, signal))
+    set!(at.tables, relsig, result)
+    at
+end
+
+"""
+    update_relative_signal!(batch::Batch, at::AnalysisTable = batch.data; signal = batch.method.signal)
+
+Calculate relative signal and update or insert the value into `at` at index `relsig` using `getproperty(at, signal)` or `dt` as signal data.
+This function assigns `at` to `batch.data` and returns the updated `batch`.
+"""
+function update_relative_signal!(batch::Batch, at::AnalysisTable = batch.data; signal = batch.method.signal, relsig = :relative_signal)
+    batch.data = at
+    set_relative_signal!(at, batch.method; signal, relsig)
+    batch
+end
+"""
+    inv_predict(batch::Batch, at::AnalysisTable; relsig = :relative_signal)
+    inv_predict(batch::Batch, dt::AbstractDataTable)
+
+Inversely predict concentration based on relative signal data, and return the result as `AbstractDataTable` using `getproperty(at, signal)` or `dt` as signal data.
+"""
+inv_predict(batch::Batch, at::AnalysisTable; relsig = :relative_signal) = 
+    inv_predict(batch, getproperty(at, relsig))
+
+function inv_predict(batch::Batch, dt::AbstractDataTable)
+    analyte_map = batch.method.analyte_map
+    cid = [analyte_map.calibration[findfirst(==(analyte), analyte_map.analytes)] for analyte in dt.analytes]
+    cal_id = [id > 0 ? findfirst(cal -> first(cal.analyte) == analyte_map.analytes[id], batch.calibration) : nothing for id in cid]
+    cs = ThreadsX.map(eachindex(cal_id)) do i
+        isnothing(cal_id[i]) ? repeat([NaN], length(dt.samples)) : 
+            inv_predict(batch.calibration[cal_id[i]], get_analyte(dt, dt.analytes[i]))
+    end
+    fill_result!(deepcopy(dt), cs)
+end
+
+"""
+    inv_predict(cal::AbstractCalibration, dt::AbstractDataTable; analyte = first(cal.analyte))
     inv_predict(cal::SingleCalibration, y::AbstractArray)
     inv_predict(cal::MultipleCalibration, y::AbstractArray)
+    inv_predict(cal::SingleCalibration)
+    inv_predict(cal::MultipleCalibration)
 
-Apply inverse prediction to all analytes in `tbl` or analyte specified in `cal` with `cal.table.y` or `y` as signals. The result will be a `SampleWrapperTable` or a `Vector`.
+Inversely predict concentration of `analyte` or analyte specified in `cal`, and return the result as a vector using data in `dt`, `y` or `cal.table.y` as inverse predictors.
 """
-function inv_predict(project::Project, tbl::SampleWrapperTable)
-    cal_id = [i > 0 ? findfirst(c -> ==(project.caltable.conctable.analytes[c.analyte], tbl.analytes[i]), project.calibration) : 0 for i in tbl.cal_map]
-    replace!(cal_id, nothing => 0)
-    cs = Vector{Vector{Float64}}(undef, length(cal_id))
-    Threads.@threads for i in eachindex(cal_id)
-        cal_id[i] > 0 || (cs[i] = zeros(Float64, length(tbl.samples)); continue)
-        cal = project.calibration[cal_id[i]]
-        cs[i] = inv_predict(cal, tbl.analysistable; analyte = tbl.analytes[i])
-    end
-    SampleWrapperTable(tbl.cal_map, fill_sample_prediction!(tbl.analysistable, cs))
-end
-
-inv_predict(cal::SingleCalibration) = get_analyte(cal.caltable.conctable, cal.isd)
+inv_predict(cal::SingleCalibration) = [cal.conc]
 inv_predict(cal::MultipleCalibration) = inv_predict(cal, cal.table.y)
-
-function inv_predict(cal::AbstractCalibration, tbl::AbstractAnalysisTable; analyte = cal.caltable.conctable.analytes[cal.analyte])
-    cal.isd > 0 || return inv_predict(cal, get_analyte(tbl, analyte))
-    inv_predict(cal, get_analyte(tbl, analyte) ./ get_analyte(tbl, cal.caltable.conctable.analytes[cal.isd]))
-end
+inv_predict(cal::AbstractCalibration, dt::AbstractDataTable; analyte = first(cal.analyte)) = inv_predict(cal, get_analyte(dt, analyte))
 function inv_predict(cal::MultipleCalibration, y::AbstractArray)
     β = cal.model.model.pp.beta0
     if cal.type && cal.zero
@@ -38,87 +99,155 @@ function inv_predict(cal::MultipleCalibration, y::AbstractArray)
         @. (-b + sqrt(d)) / 2a
     end
 end
-inv_predict(cal::SingleCalibration, y::AbstractArray) = y .* first(get_analyte(cal.caltable.conctable, cal.isd))
+inv_predict(cal::SingleCalibration, y::AbstractArray) = y .* cal.conc
 
 """
-    inv_predict!(project::Project, tbl::SampleWrapperTable)
+    set_inv_predict(at::AnalysisTable, batch::Batch; relsig = :relative_signal, estimated_concentration = :estimated_concentration)
+    set_inv_predict!(at::AnalysisTable, batch::Batch; relsig = :relative_signal, estimated_concentration = :estimated_concentration)
+
+Inversely predict concantration, update or insert the value into `at` or a copy of `at` at index `estimated_concentration`, and return the object using `getproperty(at, relsig)` as relstive signal data.
+"""
+function set_inv_predict(at::AnalysisTable, batch::Batch; relsig = :relative_signal, estimated_concentration = :estimated_concentration)
+    result = inv_predict(batch, getproperty(at, relsig))
+    new = AnalysisTable(at.analytes, at.samples, Dictionary(at.tables))
+    set!(new.tables, estimated_concentration, result)
+    new
+end
+function set_inv_predict!(at::AnalysisTable, batch::Batch; relsig = :relative_signal, estimated_concentration = :estimated_concentration)
+    set!(at.tables, estimated_concentration, inv_predict(batch, getproperty(at, relsig)))
+    at
+end
+
+"""
+    update_inv_predict!(batch::Batch, at::AnalysisTable = batch.data; relsig = :relative_signal, estimated_concentration = :estimated_concentration)
+
+Inversely predict concentration and update or insert the value into `at` at index `estimated_concentration` using `getproperty(at, relsig)` or `dt` as relstive signal data.
+This function assigns `at` to `batch.data` and returns the updated `batch`.
+"""
+function update_inv_predict!(batch::Batch, at::AnalysisTable = batch.data; relsig = :relative_signal, estimated_concentration = :estimated_concentration)
+    batch.data = at
+    set!(at.tables, estimated_concentration, inv_predict(batch, getproperty(at, relsig)))
+    batch
+end
+
+"""
+    inv_predict!(batch::Batch) = (inv_predict!.(batch.calibration); batch)
     inv_predict!(cal::SingleCalibration)
     inv_predict!(cal::MultipleCalibration)
 
-Inplace inverse prediction which replacing `project.results` or `cal.table.x̂` and returning `project.results` and `cal` respectively.
+Inverse predict concentration, update each `cal.table.x̂` with the result(s) and returns `cal` or `batch`.
 """
-function inv_predict!(project::Project, tbl::SampleWrapperTable)
-    project.resulttable = inv_predict(project, tbl)
-end
+inv_predict!(batch::Batch) = (inv_predict!.(batch.calibration); batch)
 inv_predict!(cal::SingleCalibration) = cal
 function inv_predict!(cal::MultipleCalibration)
     cal.table.x̂ .= inv_predict(cal, cal.table.y)
     cal
 end
 
-"""
-    inv_predict_sample!(project::Project)
-    inv_predict_sample!(project::Project, tbl::SampleWrapperTable)
-
-Apply `inv_predict!` to `project.sampletable`. If a new `SampleWrapperTable` is provided, it updates `project.sampletable` first.
-"""
-inv_predict_sample!(project::Project) = inv_predict!(project, project.sampletable)
-function inv_predict_sample!(project::Project, tbl::SampleWrapperTable)
-    project.sampletable = tbl
-    inv_predict!(project, project.sampletable)
-end
-
-function fill_sample_prediction!(tbl::ColumnAnalysisTable, prediction::Vector{Vector{Float64}})
-    result = deepcopy(tbl)
-    for (a, c) in zip(tbl.analyte_name, prediction)
-        getproperty(result.table, a) .= c
+function fill_result!(dt::ColumnDataTable, result::Vector{Vector{Float64}})
+    for (a, c) in zip(dt.analyte_name, result)
+        getproperty(dt.table, a) .= c
     end
-    result
+    dt
 end
-function fill_sample_prediction!(tbl::RowAnalysisTable, prediction::Vector{Vector{Float64}})
-    result = deepcopy(tbl)
-    for (i, p) in enumerate(tbl.sample_name)
-        id = findfirst(==(p), propertynames(tbl.table))
-        getproperty(result.table, propertynames(tbl.table)[id]) .= getindex.(prediction, i)
+function fill_result!(dt::RowDataTable, result::Vector{Vector{Float64}})
+    for (i, p) in enumerate(dt.sample_name)
+        id = findfirst(==(p), propertynames(dt.table))
+        getproperty(dt.table, propertynames(dt.table)[id]) .= getindex.(result, i)
     end
-    result
+    dt
 end 
 
 """
-    inv_predict_cal!(project::Project)
+    quantification(batch::Batch, at::AnalysisTable; signal = batch.method.signal)
+    quantification(batch::Batch, dt::AbstractDataTable)
 
-Apply `inv_predict!` to each calibration curve and return `project`.
+Quantify all analyes based on relative signal data, and return the result as `AbstractDataTable` using `getproperty(at, signal)` or `dt` as signal data.
 """
-inv_predict_cal!(project::Project) = (inv_predict!.(project.calibration); project)
+quantification(batch::Batch, at::AnalysisTable; signal = batch.method.signal) = quantification(batch, getproperty(at, signal))
+function quantification(batch::Batch, dt::AbstractDataTable)
+    analyte_map = batch.method.analyte_map
+    cid = [analyte_map.calibration[findfirst(==(analyte), analyte_map.analytes)] for analyte in dt.analytes]
+    cal_id = [id > 0 ? findfirst(cal -> first(cal.analyte) == analyte_map.analytes[id], batch.calibration) : nothing for id in cid]
+    cs = ThreadsX.map(eachindex(cal_id)) do i
+        isnothing(cal_id[i]) && return repeat([NaN], length(dt.samples))
+        cal = batch.calibration[cal_id[i]]
+        quantification(cal, dt; analyte = (dt.analytes[i], last(cal.analyte)))
+    end
+    fill_result!(deepcopy(dt), cs)
+end
 
 """
-    accuracy(project::Project, tbl = project.calibration.table) 
+    quantification(cal::AbstractCalibration, dt::AbstractDataTable; analyte = cal.analyte)
+
+Quantify `analyte`, and return the result as a vector using data in `dt` as signals.
+"""
+quantification(cal::SingleCalibration) = [cal.conc]
+quantification(cal::MultipleCalibration) = inv_predict(cal, cal.table.y)
+function quantification(cal::AbstractCalibration, dt::AbstractDataTable; analyte = cal.analyte)
+    isnothing(last(analyte)) > 0 || return inv_predict(cal, get_analyte(dt, first(analyte)))
+    inv_predict(cal, get_analyte(dt, first(analyte)) ./ get_analyte(dt, last(analyte)))
+end
+
+"""
+    set_quantification(at::AnalysisTable, batch::Batch; signal = batch.method.signal, relsig = :relative_signal, estimated_concentration = :estimated_concentration)
+    set_quantification!(at::AnalysisTable, batch::Batch; signal = batch.method.signal, relsig = :relative_signal, estimated_concentration = :estimated_concentration)
+
+Quantify all analytes, update or insert the values into `at` or a copy of `at` at index `relsig` for relative signal and `estimated_concentration` for concentration, and return the object using `getproperty(at, signal)` as signal data.
+"""
+function set_quantification(at::AnalysisTable, batch::Batch; signal = batch.method.signal, relsig = :relative_signal, estimated_concentration = :estimated_concentration)
+    new = set_relative_signal(at, batch; signal, relsig)
+    result = inv_predict(batch, getproperty(new, relsig))
+    set!(new.tables, estimated_concentration, result)
+    new
+end
+function set_quantification!(at::AnalysisTable, batch::Batch; signal = batch.method.signal, relsig = :relative_signal, estimated_concentration = :estimated_concentration)
+    set_relative_signal!(at, batch; signal, relsig)
+    set_inv_predict!(at, batch; relsig, estimated_concentration)
+end
+
+"""
+    update_quantification!(batch::Batch, at::AnalysisTable = batch.data; signal = batch.method.signal, relsig = :relative_signal, estimated_concentration = :estimated_concentration)
+
+Quantify all analytes, and update or insert the values into `at` or a copy of `at` at index `relsig` for relative signal and `estimated_concentration` for concentration using `getproperty(at, signal)` as signal data. 
+This function assigns `at` to `batch.data` and returns the updated `batch`.
+
+"""
+function update_quantification!(batch::Batch, at::AnalysisTable = batch.data; signal = batch.method.signal, relsig = :relative_signal, estimated_concentration = :estimated_concentration)
+    set_relative_signal!(at, batch; signal, relsig)
+    update_inv_predict!(batch, at; relsig, estimated_concentration)
+end
+
+"""
+    accuracy(at::AnalysisTable; true_concentration = :true_concentration, estimated_concentration = :estimated_concentration) 
+    accuracy(dtp::AbstractDataTable, dtt::AbstractDataTable)
     accuracy(cal::MultipleCalibration, tbl = cal.table)
     accuracy(cal::SingleCalibration, tbl)
     accuracy(x̂::AbstractVector, x::AbstractVector)
-    accuracy!(project::Project)
-    accuracy!(cal::MultipleCalibration)
-    accuracy!(cal::SingleCalibration)
 
-Calculate accuracy. Return the calculated accuracy for non-mutating version, and input object for mutating version. Nothing will be changed for `SingleCalibration` because it does not store accuracy.
+Calculate accuracy and return the values as `AbstractDataTable` or `Vector`. `tbl` must contain two properties, `y` and `x`, as same as `cal.table`.
 """
-accuracy(project::Project, tbl = project.calibration.table) = accuracy(project.calibration, tbl)
+accuracy(at::AnalysisTable; true_concentration = :true_concentration, estimated_concentration = :estimated_concentration) = 
+    accuracy(getproperty(at, estimated_concentration), getproperty(at, true_concentration))
+
+function accuracy(dtp::AbstractDataTable, dtt::AbstractDataTable)
+    cs = ThreadsX.map(dtp.analytes) do analyte
+        accuracy(get_analyte(dtp, analyte), get_analyte(dtt, analyte))
+    end
+    fill_result!(deepcopy(dtp), cs)
+end
 accuracy(cal::MultipleCalibration, tbl = cal.table) = accuracy(inv_predict(cal, tbl.y), tbl.x)
 accuracy(cal::SingleCalibration, tbl) = accuracy(inv_predict(cal, tbl.y), tbl.x)
 accuracy(x̂::AbstractVector, x::AbstractVector) = @. x̂ / x
 
 """
-    accuracy(project::Project, tbl = project.calibration.table) 
-    accuracy(cal::MultipleCalibration, tbl = cal.table)
-    accuracy(cal::SingleCalibration, tbl)
-    accuracy(x̂::AbstractVector, x::AbstractVector)
-    accuracy!(project::Project)
+    accuracy!(batch::Batch) = (accuracy!.(batch.calibration); batch)
     accuracy!(cal::MultipleCalibration)
     accuracy!(cal::SingleCalibration)
 
-Calculate accuracy. Return the calculated accuracy for non-mutating version, and input object for mutating version. Nothing will be changed for `SingleCalibration` because it does not store accuracy.
+Calculate accuracy for analyte specified by `cal`, update each `cal.table.x̂` with the result(s), and return `cal` or `batch`.
 """
-accuracy!(project::Project) = (accuracy!(project.calibration); project)
+accuracy!(batch::Batch) = (accuracy!.(batch.calibration); batch)
 function accuracy!(cal::MultipleCalibration)
     cal.table.accuracy .= accuracy(cal.table.x̂, cal.table.x)
     cal
@@ -126,40 +255,62 @@ end
 accuracy!(cal::SingleCalibration) = cal
 
 """
+    set_accuracy(at::AnalysisTable; true_concentration = :true_concentration, estimated_concentration = :estimated_concentration, acc = :accuracy)
+
+Calculate accuracy, update or insert the values into `at` or a copy of `at` at index `acc`, and return the object 
+using `getproperty(at, true_concentration)` as true concentration and `getproperty(at, estimated_concentration)` as estimated concentration.
+"""
+function set_accuracy(at::AnalysisTable; true_concentration = :true_concentration, estimated_concentration = :estimated_concentration, acc = :accuracy)
+    result = accuracy(at; true_concentration, estimated_concentration)
+    new = AnalysisTable(at.analytes, at.samples, Dictionary(at.tables))
+    set!(new.tables, acc, result)
+    new
+end
+function set_accuracy!(at::AnalysisTable; true_concentration = :true_concentration, estimated_concentration = :estimated_concentration, acc = :accuracy)
+    set!(at.tables, acc, accuracy(at; true_concentration, estimated_concentration))
+    at
+end
+
+"""
+    update_accuracy!(batch::Batch, at::AnalysisTable = batch.data; true_concentration = :true_concentration, estimated_concentration = :estimated_concentration, acc = :accuracy)
+
+Calculate accuracy, and update or insert the values into `at` or a copy of `at` at index `acc` 
+using `getproperty(at, true_concentration)` as true concentration and `getproperty(at, estimated_concentration)` as estimated concentration. 
+This function assigns `at` to `batch.data` and returns the updated `batch`.
+"""
+function update_accuracy!(batch::Batch, at::AnalysisTable = batch.data; true_concentration = :true_concentration, estimated_concentration = :estimated_concentration, acc = :accuracy)
+    batch.data = at
+    set!(at.tables, acc, accuracy(at; true_concentration, estimated_concentration))
+    batch
+end
+
+"""
     const inv_predict_accuracy! = accuracy! ∘ inv_predict!
 
-Apply `inv_predict!` and `accuracy!` subsequantly to an `AbstractCalibration`.
+Apply `inv_predict!` and `accuracy!` subsequantly to `Batch` or `AbstractCalibration`.
 """
 const inv_predict_accuracy! = accuracy! ∘ inv_predict!
-"""
-    const inv_predict_cal_accuracy! = accuracy! ∘ inv_predict!
-
-Apply `inv_predict_cal!` and `accuracy!` subsequantly to a `Project`.
-"""
-const inv_predict_cal_accuracy! = accuracy! ∘ inv_predict_cal!
 
 """
-    calibration(tbl::Table, caltable::CalWrapperTable; analyte = 1, isd = 0, type = true, zero = false, weight = 0)
-    calibration(project::Project{A}, analyte::B; id = project.caltable.signaltable.samples,
+    calibration(analyte::Tuple, tbl::Table;; analyte = 1, isd = 0, type = true, zero = false, weight = 0)
+    calibration(batch::Batch{A}, analyte::B; id = batch.method.signaltable.samples, isd = isd_of(batch.method, analyte),
                         type = true, zero = false, weight = 0) where {A, B <: A}
-    calibration(caltable::CalWrapperTable{A}, analyte::B; id = caltable.signaltable.samples, type = true, zero = false, weight = 0) where {A, B <: A}
+    calibration(method::MethodTable{A}, analyte::B; id = method.signaltable.samples, isd = isd_of(method, analyte),
+                type = true, zero = false, weight = 0) where {A, B <: A}
 
 Create `MultipleCalibration`.
 
 * `tbl`: `TypedTable.Table` which will be stored as `table`. It is clean-up calibration data for points selection.
-* `caltable`: `CalWrapperTable`, calibration data which will be stored as `caltable`. 
-* `project`: `Project`.
+* `method`: `MethodTable`, calibration method and data. 
+* `batch`: `Batch`.
 
 # Keyword arguments
-* `analyte`: `Int` which will be stored as `analyte`.
-* `isd`: `Int` which will be stored as `isd`.
+* `analyte`: `Tuple{B <: A, Any}` which will be stored as `analyte`. The first element is the analyte to be quantified, and the second element is its internal standard, which `nothing` means no internal standard.
 * `type`: `Bool` determines whether fitting a linear line (`true`) or quadratic curve (`false`), which will be stored as `type`.
 * `zero`: `Bool` determines whether forcing the curve crossing (0, 0) (`true`) or ignoring it (`false`), which will be stored as `zero`.
 * `weight`: `Float64` represents the exponential applying to each element of `x` as a weighting vector, which will be stored as `weight`.
 """
-function calibration(tbl::Table, caltable::CalWrapperTable; 
-                    analyte = 1,
-                    isd = 0,
+function calibration(analyte::Tuple, tbl::Table;
                     type = true, 
                     zero = false, 
                     weight = 0
@@ -173,54 +324,50 @@ function calibration(tbl::Table, caltable::CalWrapperTable;
     f = get_formula(type, zero)
     model = calfit(table, f, type, zero, weight)
     table = Table(; id = table.id, level = table.level, y = table.y, x = table.x, x̂ = zeros(Float64, length(table)), accuracy = zeros(Float64, length(table)), include = table.include)
-    cal = MultipleCalibration(analyte, isd, type, zero, weight, f, caltable, table, model)
-    inv_predict_accuracy!(cal)
-    cal
+    inv_predict_accuracy!(MultipleCalibration(analyte, type, zero, weight, f, table, model))
 end
-calibration(project::Project{A}, analyte::B; 
-                    id = project.caltable.signaltable.samples,
+calibration(batch::Batch{A}, analyte::B; 
+                    id = batch.method.signaltable.samples,
+                    isd = isd_of(batch.method, analyte),
                     type = true, 
                     zero = false, 
                     weight = 0
-                    ) where {A, B <: A} = calibration(project.caltable, analyte; id, type, zero, weight)
-function calibration(caltable::CalWrapperTable{A}, analyte::B; 
-                    id = caltable.signaltable.samples,
+                    ) where {A, B <: A} = calibration(batch.method, analyte; id, isd, type, zero, weight)
+function calibration(method::MethodTable{A}, analyte::B; 
+                    id = method.signaltable.samples,
+                    isd = isd_of(method, analyte),
                     type = true, 
                     zero = false, 
                     weight = 0
                     ) where {A, B <: A}
 
-    ord = sortperm(caltable.level_map)
-    iid = find_isd(caltable.conctable, analyte)
-    aid = find_analyte(caltable.conctable, analyte)
-    level = caltable.level_map[ord]
-    conc = get_analyte(caltable.conctable, analyte)
+    ord = sortperm(method.level_map)
+    level = method.level_map[ord]
+    conc = get_analyte(method.conctable, analyte)
     table = Table(; 
                     id = id[ord], 
                     level = level, 
                     x = map(level) do l
-                        conc[find_sample(caltable.conctable, Symbol(l))]
+                        conc[find_sample(method.conctable, Symbol(l))]
                     end, 
-                    y = (get_analyte(caltable.signaltable, analyte) ./ get_isd(caltable.signaltable, iid))[ord], 
+                    y = isnothing(isd) ? get_analyte(method.signaltable, analyte)[ord] : (get_analyte(method.signaltable, analyte) ./ get_analyte(method.signaltable, isd))[ord], 
                     x̂ = zeros(Float64, length(id)), 
                     accuracy = zeros(Float64, length(id)),
                     include = trues(length(id)))
     f = get_formula(type, zero)
     model = calfit(table, f, type, zero, weight)
-    cal = MultipleCalibration(aid, iid, type, zero, Float64(weight), f, caltable, table, model)
-    inv_predict_accuracy!(cal)
-    cal
+    inv_predict_accuracy!(MultipleCalibration((analyte, isd), type, zero, Float64(weight), f, table, model))
 end
 
 """
     calfit(tbl, formula, type, zero, weight)
     calfit(cal::MultipleCalibration)
-    calfit!(project::Project)
+    calfit!(batch::Batch)
     calfit!(cal::MultipleCalibration)
 
 Fit a `GLM` model based on provided `formula`, `type`, `zero` and `weight` or parameters from calibration curves. 
 
-Field `model` will be mutated for mutating version. Calling `calfit!` on a `Project` will apply `calfit!` to all calibration curves.
+Field `model` will be mutated for mutating version. Calling `calfit!` on a `Batch` will apply `calfit!` to all calibration curves.
 
 It returns `GLM` object for non-mutating version and input object for mutating version.
 """
@@ -240,63 +387,74 @@ calfit(cal::MultipleCalibration) = calfit(cal.table, cal.formula, cal.type, cal.
 """
     calfit(tbl, formula, type, zero, weight)
     calfit(cal::MultipleCalibration)
-    calfit!(project::Project)
+    calfit!(batch::Batch)
     calfit!(cal::MultipleCalibration)
 
 Fit a `GLM` model based on provided `formula`, `type`, `zero` and `weight` or parameters from calibration curves. 
 
-Field `model` will be mutated for mutating version. Calling `calfit!` on a `Project` will apply `calfit!` to all calibration curves.
+Field `model` will be mutated for mutating version. Calling `calfit!` on a `Batch` will apply `calfit!` to all calibration curves.
 
 It returns `GLM` object for non-mutating version and input object for mutating version.
 """
-calfit!(project::Project) = (calfit!.(project.calibration); project)
+calfit!(batch::Batch) = (calfit!.(batch.calibration); batch)
 function calfit!(cal::MultipleCalibration)
     cal.model = calfit(cal.table, cal.formula, cal.type, cal.zero, cal.weight)
+    update_calibration!(batch::Batch, cal_id::Int) 
     cal
 end
 
 """
-    switch_isd!(project::Project{A}, analyte::B, isd::C) where {A, B <: A, C <: A}
+    update_calibration!(batch::Batch{A}, analyte::B) where {A, B <: A}
+    update_calibration!(batch::Batch, cal_id::Int)
+    update_calibration!(cal::MultipleCalibration, method::MethodTable)
 
-Switch internal standard of `analyte` to `isd`.
+Update calibration obeject for `analyte`, `batch.calibration[cal_id]` or `cal` after modifying any parameters in method or calibration object.
 """
-function switch_isd!(project::Project{A}, analyte::B, isd::C) where {A, B <: A, C <: A}
-    aid = find_analyte(project.caltable.conctable, analyte)
-    id = findfirst(x -> ==(x.analyte, aid), project.calibration)
-    isnothing(id) && throw(ArgumentError("No fitted calibration data for $analyte"))
-    set_isd!(project.caltable, analyte, isd)
-    project.calibration[id] = calibration(project.caltable, analyte; 
-            type = project.calibration[id].type,
-            zero = project.calibration[id].zero,
-            weight = project.calibration[id].weight)
-    isnothing(project.sampletable) || set_isd!(project.sampletable, analyte, isd)
-    @warn "Call `inv_predict` on samples to get the updated results."
-    project
+function update_calibration!(batch::Batch{A}, analyte::B) where {A, B <: A}
+    aid = findfirst(==(analyte), batch.analytes)
+    isnothing(aid) && throw(ArgumentError("Analyte $analyte is not in this batch"))
+    ca = batch.analytes[aid]
+    cid = findfirst(x -> ==(first(x.analyte), ca), batch.calibration)
+    isnothing(cid) && throw(ArgumentError("No fitted calibration data for $analyte"))
+    update_calibration!(batch, cid)
+end
+update_calibration!(batch::Batch, cal_id::Int) = update_calibration!(batch.calibration[cal_id], batch.method)
+function update_calibration!(cal::MultipleCalibration, method::MethodTable)
+    isd = isd_of(method, first(cal.analyte))
+    cal.analyte = (first(cal.analyte), isd)
+    ord = sortperm(method.level_map)
+    cal.table.y .= isnothing(isd) ? get_analyte(method.signaltable, analyte)[ord] : (get_analyte(method.signaltable, analyte) ./ get_analyte(method.signaltable, isd))[ord], 
+    cal.include .= true
+    calfit!(cal)
+    inv_predict_accuracy!(cal)
+end
+function update_calibration!(cal::SingleCalibration, method::MethodTable)
+    cal.conc = first(get_analyte(method.conctable, first(cal.analyte)))
+    cal
 end
 
 """
-    project(cal::CalWrapperTable{A, T}, sample = nothing, result = nothing;
-                    type = true, 
-                    zero = false, 
-                    weight = 0
-                    ) where {A, T}
+    set_isd!(batch::Batch{A}, analyte::B, isd::C) where {A, B <: A, C <: A}
 
-Create `Project` from `cal`, and optionally `sample`, `result` with specified calibration parameters. See "MultipleCalibration" for detail description of keyword arguments.
+Set internal standard of `analyte` to `isd`.
 """
-function project(cal::CalWrapperTable{A, T}, sample = nothing, result = nothing;
-                type = true, 
-                zero = false, 
-                weight = 0
-                ) where {A, T}
-    Project(
-        length(cal.conctable.samples) > 1 ? map(cal.conctable.analytes) do analyte
-            calibration(cal, analyte; type, zero, weight)
-        end : map(enumerate(cal.conctable.analytes)) do (id, analyte)
-            SingleCalibration(id, cal.isd, cal)
-        end
-        ,
-        cal,
-        sample,
-        result
-    )
+function set_isd!(batch::Batch{A}, analyte::B, isd::Union{C, Nothing} = nothing) where {A, B <: A, C <: A}
+    aid = findfirst(==(analyte), batch.analytes)
+    isnothing(aid) && throw(ArgumentError("Analyte $analyte is not in this batch"))
+    ca = batch.analytes[aid]
+    cid = findfirst(x -> ==(first(x.analyte), ca), batch.calibration)
+    isnothing(cid) && throw(ArgumentError("No fitted calibration data for $analyte"))
+    set_isd!(batch.method, analyte, isd)
+    update_calibration!(batch, cid)
+    @warn "Call quantification function on data to get the updated results."
+    batch
+end
+function set_isd!(method::MethodTable{A}, analyte::B, isd::Union{C, Nothing} = nothing) where {A, B <: A, C <: A}
+    aid = findfirst(==(analyte), method.analytemap.analytes)
+    isnothing(aid) && throw(ArgumentError("Analyte $analyte is not in the method"))
+    isnothing(isd) && (method.analyte_map.isd[aid] = 0; return method)
+    iid = findfirst(==(isd), method.analytemap.analytes)
+    isnothing(iid) && throw(ArgumentError("Analyte $isd is not in the method"))
+    method.analyte_map.isd[aid] = iid
+    method
 end

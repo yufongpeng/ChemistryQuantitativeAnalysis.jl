@@ -1,0 +1,5 @@
+[signal]
+area
+
+[level_map]
+1

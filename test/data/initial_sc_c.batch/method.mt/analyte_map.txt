@@ -1,0 +1,8 @@
+analytes	isd
+Analyte1	2
+Analyte2	-1
+Analyte3	4
+Analyte4	-1
+Analyte5	4
+Analyte6	2
+Analyte7	4

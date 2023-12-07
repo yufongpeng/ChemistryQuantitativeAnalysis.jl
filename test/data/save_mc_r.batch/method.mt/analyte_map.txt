@@ -1,0 +1,8 @@
+analytes	isd	calibration
+Analyte1	2	1
+Analyte2	-1	-1
+Analyte3	4	3
+Analyte4	-1	-1
+Analyte5	0	5
+Analyte6	2	1
+Analyte7	0	5

@@ -1,6 +1,6 @@
-using Calibration
+using QuantitativeAnalysis
 using Test
 
-@testset "Calibration.jl" begin
+@testset "QuantitativeAnalysis.jl" begin
     # Write your tests here.
 end

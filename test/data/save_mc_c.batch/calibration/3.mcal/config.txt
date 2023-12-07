@@ -1,0 +1,14 @@
+[analyte]
+Analyte5
+
+[isd]
+nothing
+
+[type]
+true
+
+[zero]
+false
+
+[weight]
+0.0
