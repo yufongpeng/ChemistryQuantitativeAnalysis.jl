@@ -1,4 +1,4 @@
-using QuantitativeAnalysis, TypedTables, DataFrames
+using ChemistryQuantitativeAnalysis, TypedTables, DataFrames
 using Test
 import Base: show
 
@@ -61,7 +61,7 @@ macro test_noerror(x)
     end
 end
 
-@testset "QuantitativeAnalysis.jl" begin
+@testset "ChemistryQuantitativeAnalysis.jl" begin
     @testset "Constructors" begin
         @test @test_noerror begin
             global conctable = ColumnDataTable(
@@ -140,26 +140,26 @@ end
         @test all(isapprox.(update_inv_predict!(update_relative_signal!(cbatch)).data.estimated_concentration.var"G1(drug_b)", set_quantification(cbatch.data, cbatch).estimated_concentration.var"G1(drug_b)"))
     end
     @testset "IO" begin
-        global initial_mc_c = QuantitativeAnalysis.read(joinpath(datapath, "initial_mc_c.batch"), Table)
-        global initial_mc_r = QuantitativeAnalysis.read(joinpath(datapath, "initial_mc_r.batch"), Table)
-        global initial_sc_c = QuantitativeAnalysis.read(joinpath(datapath, "initial_sc_c.batch"), Table)
-        global initial_sc_r = QuantitativeAnalysis.read(joinpath(datapath, "initial_sc_r.batch"), Table)
+        global initial_mc_c = ChemistryQuantitativeAnalysis.read(joinpath(datapath, "initial_mc_c.batch"), Table)
+        global initial_mc_r = ChemistryQuantitativeAnalysis.read(joinpath(datapath, "initial_mc_r.batch"), Table)
+        global initial_sc_c = ChemistryQuantitativeAnalysis.read(joinpath(datapath, "initial_sc_c.batch"), Table)
+        global initial_sc_r = ChemistryQuantitativeAnalysis.read(joinpath(datapath, "initial_sc_r.batch"), Table)
         update_quantification!(initial_mc_c)
         update_quantification!(initial_mc_r)
         update_quantification!(initial_sc_c)
         update_quantification!(initial_sc_r)
-        global save_mc_c = QuantitativeAnalysis.read(joinpath(datapath, "save_mc_c.batch"), Table)
-        global save_mc_r = QuantitativeAnalysis.read(joinpath(datapath, "save_mc_r.batch"), Table)
-        global save_sc_c = QuantitativeAnalysis.read(joinpath(datapath, "save_sc_c.batch"), Table)
-        global save_sc_r = QuantitativeAnalysis.read(joinpath(datapath, "save_sc_r.batch"), Table)
+        global save_mc_c = ChemistryQuantitativeAnalysis.read(joinpath(datapath, "save_mc_c.batch"), Table)
+        global save_mc_r = ChemistryQuantitativeAnalysis.read(joinpath(datapath, "save_mc_r.batch"), Table)
+        global save_sc_c = ChemistryQuantitativeAnalysis.read(joinpath(datapath, "save_sc_c.batch"), Table)
+        global save_sc_r = ChemistryQuantitativeAnalysis.read(joinpath(datapath, "save_sc_r.batch"), Table)
         @test all(isapprox_nan.(collect(initial_mc_c.data.estimated_concentration.table[1]), collect(save_mc_c.data.estimated_concentration.table[1])))
         @test all(isapprox_nan.(collect(initial_mc_r.data.estimated_concentration.table[1]), collect(save_mc_r.data.estimated_concentration.table[1])))
         @test all(isapprox_nan.(collect(initial_sc_c.data.estimated_concentration.table[1]), collect(save_sc_c.data.estimated_concentration.table[1])))
         @test all(isapprox_nan.(collect(initial_sc_r.data.estimated_concentration.table[1]), collect(save_sc_r.data.estimated_concentration.table[1])))
-        @test @test_noerror QuantitativeAnalysis.write(joinpath(datapath, "save_mc_c.batch"), initial_mc_c)
-        @test @test_noerror QuantitativeAnalysis.write(joinpath(datapath, "save_mc_r.batch"), initial_mc_r)
-        @test @test_noerror QuantitativeAnalysis.write(joinpath(datapath, "save_sc_c.batch"), initial_sc_c)
-        @test @test_noerror QuantitativeAnalysis.write(joinpath(datapath, "save_sc_r.batch"), initial_sc_r)
+        @test @test_noerror ChemistryQuantitativeAnalysis.write(joinpath(datapath, "save_mc_c.batch"), initial_mc_c)
+        @test @test_noerror ChemistryQuantitativeAnalysis.write(joinpath(datapath, "save_mc_r.batch"), initial_mc_r)
+        @test @test_noerror ChemistryQuantitativeAnalysis.write(joinpath(datapath, "save_sc_c.batch"), initial_sc_c)
+        @test @test_noerror ChemistryQuantitativeAnalysis.write(joinpath(datapath, "save_sc_r.batch"), initial_sc_r)
         @test @test_noerror test_show(save_mc_c)
         @test @test_noerror test_show(save_mc_r)
         @test @test_noerror test_show(save_sc_c)

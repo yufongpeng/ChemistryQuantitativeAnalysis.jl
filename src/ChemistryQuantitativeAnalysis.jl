@@ -1,4 +1,4 @@
-module QuantitativeAnalysis
+module ChemistryQuantitativeAnalysis
 
 using GLM, CSV, TypedTables, LinearAlgebra, Dictionaries, ThreadsX
 export MultipleCalibration, SingleCalibration, 

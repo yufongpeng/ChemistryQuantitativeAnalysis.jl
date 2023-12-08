@@ -1,9 +1,9 @@
-# QuantitativeAnalysis
+# ChemistryQuantitativeAnalysis
 
-[![Build Status](https://github.com/yufongpeng/QuantitativeAnalysis.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/yufongpeng/QuantitativeAnalysis.jl/actions/workflows/CI.yml?query=branch%3Amain)
-[![Coverage](https://codecov.io/gh/yufongpeng/QuantitativeAnalysis.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/yufongpeng/QuantitativeAnalysis.jl)
+[![Build Status](https://github.com/yufongpeng/ChemistryQuantitativeAnalysis.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/yufongpeng/ChemistryQuantitativeAnalysis.jl/actions/workflows/CI.yml?query=branch%3Amain)
+[![Coverage](https://codecov.io/gh/yufongpeng/ChemistryQuantitativeAnalysis.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/yufongpeng/ChemistryQuantitativeAnalysis.jl)
 
-`QuantitativeAnalysis.jl` is a package for instrument calibration and analyte quantification based on tabular data.
+`ChemistryQuantitativeAnalysis.jl` is a package for quantitative analysis of chemicals based on tabular data.
 
 ## Tabular data wrapper
 This package provides two basic wrappers, `ColumnDataTable{A, T}` and `RowDataTable{A, T}` which are subtypes of `AbstractDataTable{A, T}`. `ColumnDataTable` indicates that part of columns represent analytes, and all rows reprsent samples. `RowDataTable` indicates that part of columns represent samples, and all rows represent analytes. Both types have the same properties, but the actual meanings may be different. 
@@ -201,14 +201,14 @@ The delimiter should be "\t".
 It can contain multiple `*.dt`. The file names must start from an integer, `_` and `name.dt`, e.g. `0_area.dt`. The integer is for the order of reading into `AnalysisTable`, and `name` will be the key. The name of signal data is determined in `method.mt/config.txt`.
 
 ### Reading and writing Batch
-To read a batch into julia, call `QuantitativeAnalysis.read`.
+To read a batch into julia, call `ChemistryQuantitativeAnalysis.read`.
 ```julia-repl
-julia> QuantitativeAnalysis.read("batch_name.batch", T; table_type, analyte_fn)
+julia> ChemistryQuantitativeAnalysis.read("batch_name.batch", T; table_type, analyte_fn)
 ```
 `T` is the sink function for tabular data; it should create an object following `Tables.jl` interface. `table_type` is `T` parameter in the type signature of `Batch` which determines the underlying table type, and `analyte_fn` is responsible for converting `analyte` in string type into user defined type `A`.
 
-To write project to disk, call `QuantitativeAnalysis.write`. There is a keyword argument `delim` controling whether using "\t" or "," as delim for tables.
+To write project to disk, call `ChemistryQuantitativeAnalysis.write`. There is a keyword argument `delim` controling whether using "\t" or "," as delim for tables.
 ```julia-repl
-julia> QuantitativeAnalysis.write("batch_name.pjc", batch; delim = "\t")
+julia> ChemistryQuantitativeAnalysis.write("batch_name.pjc", batch; delim = "\t")
 ```
 A new folder `calibration` containing multiple `*.mcal` or `*.scal` folders. The former is for `MultipleCalibration` and the latter is for `SingleCalibration`.
