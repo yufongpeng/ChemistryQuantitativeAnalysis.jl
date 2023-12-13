@@ -1,4 +1,4 @@
-analytes	isd
+analyte	isd
 Analyte1	2
 Analyte2	-1
 Analyte3	4

@@ -1,13 +1,13 @@
 """
-    get_formula(cal::MultipleCalibration)
-    get_formula(type::Bool, zero::Bool)
+    getformula(cal::MultipleCalibration)
+    getformula(type::Bool, zero::Bool)
 
 Get a `FormulaTerm` based on `type` and `zero` or parameters from `cal`.
 
 See `MultipleCalibration` for detail description of `type` and `zero`.
 """
-get_formula(cal::MultipleCalibration) = get_formula(cal.type, cal.zero)
-get_formula(type::Bool, zero::Bool) = if type 
+getformula(cal::MultipleCalibration) = getformula(cal.type, cal.zero)
+getformula(type::Bool, zero::Bool) = if type 
     zero ? @formula(y ~ 0 + x) : @formula(y ~ x)
 else
     zero ? @formula(y ~ 0 + x + x ^ 2) : @formula(y ~ x + x ^ 2)
@@ -19,10 +19,10 @@ end
 Return internal standard of `analyte` based on `method`.
 """
 function isd_of(method::MethodTable{A}, analyte::B) where {A, B <: A}
-    aid = findfirst(==(analyte), method.analyte_map.analytes)
+    aid = findfirst(==(analyte), method.analyte_map.analyte)
     isnothing(aid) && throw(ArgumentError("Analyte $analyte is not in the method"))
     iid = method.analyte_map.isd[aid]
-    iid > 0 ? method.analyte_map.analytes[iid] : nothing
+    iid > 0 ? method.analyte_map.analyte[iid] : nothing
 end
 """
     isisd(method::MethodTable{A}, analyte::B) where {A, B <: A}
@@ -30,68 +30,68 @@ end
 Return if `analyte` is a internal standard based on `method`.
 """
 function isisd(method::MethodTable{A}, analyte::B) where {A, B <: A}
-    aid = findfirst(==(analyte), method.analyte_map.analytes)
+    aid = findfirst(==(analyte), method.analyte_map.analyte)
     isnothing(aid) && throw(ArgumentError("Analyte $analyte is not in the method"))
     method.analyte_map.isd[aid] < 0
 end
 """
-    find_analyte(dt::RowDataTable{A}, analyte::B) where {A, B <: A}
-    find_analyte(dt::ColumnDataTable{A}, analyte::B) where {A, B <: A}
+    findanalyte(dt::AbstractDataTable{A}, analyte::B) where {A, B <: A}
+    findanalyte(dt::AbstractDataTable, analyte::Symbol)
 
-Return the index of the first element of `dt.analytes` for which the element equals to `analyte`.
+Return the index of the first element of `dt.analyte` for which the element equals to `analyte`.
 """
-find_analyte(dt::RowDataTable{A}, analyte::B) where {A, B <: A} = findfirst(==(analyte), dt.analytes)
-find_analyte(dt::ColumnDataTable{A}, analyte::B) where {A, B <: A} = findfirst(==(analyte), dt.analytes)
-
-"""
-    find_sample(dt::RowDataTable, sample::Symbol)
-    find_sample(dt::ColumnDataTable, sample::Symbol)
-
-Return the index of the first element of `dt.samples` for which the element equals to `sample`.
-"""
-find_sample(dt::RowDataTable, sample::Symbol) = findfirst(==(sample), dt.samples)
-find_sample(dt::ColumnDataTable, sample::Symbol) = findfirst(==(sample), dt.samples)
+findanalyte(dt::AbstractDataTable{A}, analyte::B) where {A, B <: A} = findfirst(==(analyte), dt.analyte)
+findanalyte(dt::AbstractDataTable, analyte::Symbol) = findfirst(==(analyte), dt.analytename)
 
 """
-    get_analyte(dt::RowDataTable, id::Int)
-    get_analyte(dt::ColumnDataTable, id::Int)
-    get_analyte(dt::RowDataTable{A}, analyte::B) where {A, B <: A}
-    get_analyte(dt::ColumnDataTable{A}, analyte::B) where {A, B <: A}
+    findsample(dt::AbstractDataTable, sample::AbstractString)
+    findsample(dt::AbstractDataTable, sample::Symbol)
 
-Get data belonging to `analyte` or `dt.analytes[id]` as a `Vector`.
+Return the index of the first element of `dt.sample` for which the element equals to `sample`.
 """
-get_analyte(dt::RowDataTable, id::Int) = collect(getproperties(dt.table[id], Tuple(dt.sample_name)))
-function get_analyte(dt::RowDataTable{A}, analyte::B) where {A, B <: A}
-    id = findfirst(==(analyte), dt.analytes)
+findsample(dt::AbstractDataTable, sample::AbstractString) = findfirst(==(sample), dt.sample)
+findsample(dt::AbstractDataTable, sample::Symbol) = findfirst(==(sample), dt.samplename)
+
+"""
+    getanalyte(dt::RowDataTable, id::Int)
+    getanalyte(dt::ColumnDataTable, id::Int)
+    getanalyte(dt::RowDataTable, analyte)
+    getanalyte(dt::ColumnDataTable, analyte)
+
+Get data belonging to `analyte` or `dt.analyte[id]` as a `Vector`.
+"""
+getanalyte(dt::RowDataTable, id::Int) = [getproperty(dt.table, p)[id] for p in dt.samplename]
+function getanalyte(dt::RowDataTable, analyte)
+    id = findanalyte(dt, analyte)
     isnothing(id) && throw(ArgumentError("Analyte $analyte is not in the table"))
-    [getproperty(dt.table, p)[id] for p in dt.sample_name]
+    [getproperty(dt.table, p)[id] for p in dt.samplename]
 end
-get_analyte(dt::ColumnDataTable, id::Int) = getproperty(dt.table, dt.analyte_name[id])
-function get_analyte(dt::ColumnDataTable{A}, analyte::B) where {A, B <: A}
-    id = findfirst(==(analyte), dt.analytes)
+getanalyte(dt::ColumnDataTable, id::Int) = getproperty(dt.table, dt.analytename[id])
+function getanalyte(dt::ColumnDataTable, analyte)
+    id = findanalyte(dt, analyte)
     isnothing(id) && throw(ArgumentError("Analyte $analyte is not in the table"))
-    getproperty(dt.table, dt.analyte_name[id])
+    getproperty(dt.table, dt.analytename[id])
 end
 
 """
-    get_sample(dt::RowDataTable, id::Int)
-    get_sample(dt::ColumnDataTable, id::Int)
-    get_sample(dt::RowDataTable, sample::Symbol)
-    get_sample(dt::ColumnDataTable, sample::Symbol)
+    getsample(dt::RowDataTable, id::Int)
+    getsample(dt::ColumnDataTable, id::Int)
+    getsample(dt::RowDataTable, sample::Symbol)
+    getsample(dt::ColumnDataTable, sample::Symbol)
 
-Get data belonging to `sample` or `dt.samples[id]` as a `Vector`.
+Get data belonging to `sample` or `dt.sample[id]` as a `Vector`.
 """
-get_sample(dt::RowDataTable, id::Int) = collect(getproperties(dt.table[id], Tuple(dt.sample_name)))
-function get_sample(dt::RowDataTable, sample::Symbol)
-    id = findfirst(==(sample), dt.samples)
+getsample(dt::RowDataTable, id::Int) = getproperty(dt.table, dt.samplename[id])
+function getsample(dt::RowDataTable, sample)
+    id = findsample(dt, sample)
     isnothing(id) && throw(ArgumentError("Sample $sample is not in the table"))
-    collect(getproperties(dt.table[id], Tuple(dt.sample_name)))
+    getproperty(dt.table, dt.samplename[id])
 end
-get_sample(dt::ColumnDataTable, id::Int) = getproperty(dt.table, dt.analyte_name[id])
-function get_sample(dt::ColumnDataTable, sample::Symbol)
-    id = findfirst(==(sample), dt.samples)
+getsample(dt::ColumnDataTable, id::Int) = [getproperty(dt.table, p)[id] for p in dt.analytename]
+function getsample(dt::ColumnDataTable, sample)
+    id = findsample(dt, sample)
     isnothing(id) && throw(ArgumentError("Sample $sample is not in the table"))
-    getproperty(dt.table, dt.analyte_name[id])
+    [getproperty(dt.table, p)[id] for p in dt.analytename]
 end
 
 function critical_point(cal::MultipleCalibration)
@@ -166,7 +166,7 @@ end
 
 Return string representation of formula of `cal` with specified `digits` and `sigdigits`. See `format_number`.
 """
-formula_repr(cal::SingleCalibration; digits = nothing, sigdigits = 4) = "y = $(format_number(1/first(get_analyte(cal.caltable.conctable, cal.isd)); digits, sigdigits))x"
+formula_repr(cal::SingleCalibration; digits = nothing, sigdigits = 4) = "y = $(format_number(1/first(getanalyte(cal.caltable.conctable, cal.isd)); digits, sigdigits))x"
 function formula_repr(cal::MultipleCalibration; digits = nothing, sigdigits = 4)
     β = cal.model.model.pp.beta0
     cal.type && cal.zero && return "y = $(format_number(β[1]; digits, sigdigits))x"

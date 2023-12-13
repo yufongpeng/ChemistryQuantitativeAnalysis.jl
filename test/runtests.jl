@@ -12,7 +12,7 @@ end
 struct AnalyteOther <: AnalyteTest
     name::String
 end
-show(io::IO, analyte::AnalyteTest) = show(io, analyte.name)
+show(io::IO, analyte::AnalyteTest) = print(io, analyte.name)
 function string2analyte(name::String)
     g = match(r"^G(\d)\(.*\)$", name)
     isnothing(g) && return AnalyteOther(name)
@@ -63,71 +63,98 @@ end
 
 @testset "ChemistryQuantitativeAnalysis.jl" begin
     @testset "Constructors" begin
-        @test @test_noerror begin
-            global conctable = ColumnDataTable(
+        global conctable = ColumnDataTable(
+            DataFrame(
+                "level" => collect(1:7), 
+                "G1(drug_a)" => conc,
+                "G1(drug_b)" => conc .* 10), 
+            :level; 
+            analyte_fn = string2analyte
+        )
+        global signaltable = ColumnDataTable(
+            DataFrame(
+                "point" => repeat(1:7, 3), 
+                "G1(drug_a)" => signal1,
+                "G2(drug_a)" => repeat([5.0], 21),
+                "G1(drug_b)" => signal2,
+                "G2(drug_b)" => repeat([2.0], 21)), 
+            :point; 
+            analyte_fn = string2analyte
+        )
+        global method = MethodTable(Table(; analyte = string2analyte.(analyte_names), isd = [2, -1, 4, -1], calibration = [1, -1, 3, -1]), :area, repeat(1:7, 3), conctable, signaltable)
+        global rdata = AnalysisTable([:area], [
+            RowDataTable(
                 DataFrame(
-                    "level" => collect(1:7), 
-                    "G1(drug_a)" => conc,
-                    "G1(drug_b)" => conc .* 10), 
-                :level; 
+                    "Analyte" => ["G1(drug_a)", "G2(drug_a)", "G1(drug_b)", "G2(drug_b)"], 
+                    "S1" => Float64[6, 6, 200, 2],
+                    "S2" => Float64[24, 6, 800, 2],
+                    "S3" => Float64[54, 6, 9800, 2]
+                    ), 
+                :Analyte; 
                 analyte_fn = string2analyte
-            )
-        end
-        @test @test_noerror begin
-            global signaltable = ColumnDataTable(
+                )
+            ]
+        )
+        global cdata = AnalysisTable([:area], [
+            ColumnDataTable(
                 DataFrame(
-                    "point" => repeat(1:7, 3), 
-                    "G1(drug_a)" => signal1,
-                    "G2(drug_a)" => repeat([5.0], 21),
-                    "G1(drug_b)" => signal2,
-                    "G2(drug_b)" => repeat([2.0], 21)), 
-                :point; 
+                    "Sample" => ["S1", "S2", "S3"], 
+                    "G1(drug_a)" => Float64[6, 24, 54],
+                    "G2(drug_a)" => Float64[6, 6, 6],
+                    "G1(drug_b)" => Float64[200, 800, 9800],
+                    "G2(drug_b)" => Float64[2, 2, 2]), 
+                :Sample; 
                 analyte_fn = string2analyte
-            )
-        end
-        @test @test_noerror begin
-            global method = MethodTable(:area, string2analyte.(analyte_names), [2, -1, 4, -1], [1, -1, 3, -1], repeat(1:7, 3), conctable, signaltable)
-        end
-        @test @test_noerror begin
-            global cdata = AnalysisTable([:area], [
-                ColumnDataTable(
-                    DataFrame(
-                        "Sample" => ["S1", "S2", "S3"], 
-                        "G1(drug_a)" => Float64[6, 24, 54],
-                        "G2(drug_a)" => Float64[6, 6, 6],
-                        "G1(drug_b)" => Float64[200, 800, 9800],
-                        "G2(drug_b)" => Float64[2, 2, 2]), 
-                    :Sample; 
-                    analyte_fn = string2analyte
-                    )
-                ]
-            )
-            global rdata = AnalysisTable([:area], [
-                RowDataTable(
-                    DataFrame(
-                        "Analyte" => ["G1(drug_a)", "G2(drug_a)", "G1(drug_b)", "G2(drug_b)"], 
-                        "S1" => Float64[6, 6, 200, 2],
-                        "S2" => Float64[24, 6, 800, 2],
-                        "S3" => Float64[54, 6, 9800, 2]
-                        ), 
-                    :Analyte; 
-                    analyte_fn = string2analyte
-                    )
-                ]
-            )
-        end
-        @test @test_noerror begin
-            global cbatch = Batch(method, cdata)
-            global rbatch = Batch(method, rdata)
-        end
+                )
+            ]
+        )
+        global rdata = AnalysisTable([:area], [
+            RowDataTable(
+                DataFrame(
+                    "Analyte" => ["G1(drug_a)", "G2(drug_a)", "G1(drug_b)", "G2(drug_b)"], 
+                    "S1" => Float64[6, 6, 200, 2],
+                    "S2" => Float64[24, 6, 800, 2],
+                    "S3" => Float64[54, 6, 9800, 2]
+                    ), 
+                :Analyte; 
+                analyte_fn = string2analyte
+                )
+            ]
+        )
+        global cbatch = Batch(method, cdata)
+        global rbatch = Batch(method, rdata)
+        @test getanalyte(cdata.area, 1) == getanalyte(rdata.area, 1)
+        @test getsample(cdata.area, 2) == getsample(rdata.area, 2)
+    end
+    @testset "Tables.jl" begin
+        cdata2 = AnalysisTable([:area], [
+            ColumnDataTable(
+                Table(cdata.area.table), 
+                :Sample; 
+                analyte_fn = string2analyte
+                )
+            ]
+        )
+        rdata2 = AnalysisTable([:area], [
+            RowDataTable(
+                Table(rdata.area.table), 
+                :Analyte; 
+                analyte_fn = string2analyte
+                )
+            ]
+        )
+        @test [i for i in cdata2.area] == [i for i in cdata2.area.table]
+        @test [i for i in rdata2.area] == [i for i in rdata2.area.table]
+        @test columns(cdata2.area) == columns(cdata2.area.table)
+        @test columns(rdata2.area) == columns(rdata2.area.table)
+        @test rows(cdata2.area) == rows(cdata2.area.table)
+        @test rows(rdata2.area) == rows(rdata2.area.table)
     end
     @testset "Calibration" begin
         cbatch.calibration[2].type = false
         rbatch.calibration[2].type = false
-        @test @test_noerror begin
-            update_calibration!(cbatch, AnalyteG1("G1(drug_b)"))
-            update_calibration!(rbatch, AnalyteG1("G1(drug_b)"))
-        end
+        update_calibration!(cbatch, AnalyteG1("G1(drug_b)"))
+        update_calibration!(rbatch, AnalyteG1("G1(drug_b)"))
         @test all(isapprox.(cbatch.calibration[1].table.accuracy[1:3], [1, 1.1, 0.9]))
         @test all(isapprox.(cbatch.calibration[2].table.accuracy[1:3], [1, sqrt(1.1), sqrt(0.9)]))
         @test all(isapprox.(rbatch.calibration[1].table.accuracy[1:3], [1, 1.1, 0.9]))

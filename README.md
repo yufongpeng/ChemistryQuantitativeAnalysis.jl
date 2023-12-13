@@ -9,37 +9,37 @@
 This package provides two basic wrappers, `ColumnDataTable{A, T}` and `RowDataTable{A, T}` which are subtypes of `AbstractDataTable{A, T}`. `ColumnDataTable` indicates that part of columns represent analytes, and all rows reprsent samples. `RowDataTable` indicates that part of columns represent samples, and all rows represent analytes. Both types have the same properties, but the actual meanings may be different. 
 |Property|`ColumnDataTable{A, T}`|`RowDataTable{A, T}`|
 |----------|---------------------|------------------|
-|`sample_name`|`Symbol`, the column name that each element is sample name.|`Vector{Symbol}`, the column names that are sample names.|
-|`analyte_name`|`Vector{Symbol}` stored in field `config`, the column names that are analytes names|`Symbol`, the column name that each element is analyte name.|
-|`samples`|`Vector{Symbol}`, the column names that are sample names.|`Vector{Symbol}`, symbols transformed from column `sample_name`.|
-|`analytes`|`Vector{A}` stored in field `config`, analytes in user-defined types.|`Vector{A}`, analytes in user-defined types.|
+|`analytename`|`Vector{Symbol}`, the column names that are analytes names|`Vector{Symbol}`, symbols transformed from column `analytecol`.|
+|`samplename`|`Vector{Symbol}`, symbols transformed from column `samplecol`.|`Vector{Symbol}`, the column names that are sample names.|
+|`analyte`|`Vector{A}` stored in field `config`, analytes in user-defined types.|`Vector{A}`, analytes in user-defined types.|
+|`sample`|`Vector{String}`, strings transformed from column `samplecol`.|`Vector{String}`, the column names that are sample names..|
 |`table`|Tabular data of type `T`|same|
 
-`ColumnDataTable` can be created by `ColumnDataTable(table, sample_name; analyte_fn, analyte_name)`. By default, `analyte_name` includes all properties of `table` without `sample_name`. `RowDataTable` can be created by `RowDataTable(table, analyte_name; analyte_fn, sample_name)`. By default, `analyte_name` includes all properties of `table` without `sample_name`.
-To add new samples to `ColumnDataTable{A, T}`, user can directly modify `table`; for `RowDataTable{A, T}`, user have to modify `sample_name` as well. To add new analytes, user can directly modify `table`, and modify `config` for `ColumnDataTable{A, T}` (`config` is a `TypedTables.Table`) and `analytes` for `RowDataTable{A, T}`.
+`ColumnDataTable` can be created by `ColumnDataTable(table, samplecol; analyte_fn, analyte_name)`. By default, `analyte_name` includes all properties of `table` without `samplecol`. `RowDataTable` can be created by `RowDataTable(table, analytecol; analyte_fn, sample_name)`. By default, `sample_name` includes all properties of `table` without `analytecol`.
+To add new samples to `ColumnDataTable{A, T}`, user can directly modify `table`; for `RowDataTable{A, T}`, user have to modify `samplename` as well. To add new analytes, user can directly modify `table`, and modify `analyte`.
 
 The package provides another two wrappers, `MethodTable{A, T}`, and `AnalysisTable{A, T} <: AbstractAnalysisTable{A, T}`.
 ### MethodTable
 This type is used for storing method, containing all analytes, their internal standards and calibration curve setting, and data for fitting calibration curve.
 |Property|Description|
 |----------|---------|
-|`signal`|`Symbol`, propertyname for extracting signal data from an `AnalysisTable`|
 |`analyte_map`|`Table` with 3 columns, `analytes` identical to property `analytes`, `isd`, matching each analyte to index of its internal standard, and `calibration` matching each analyte to index of other analyte for fitting its calibration curve. `-1` indicates the analyte itself is internal standard, and `0` indicates no internal standard. For example, a row `(analytes = AnalyteX, isd = 2, calibration = 3)` means that internal standard of `AnalyteX` is the second analyte, and it will be quantified using calibration curve of the third analyte.|
+|`signal`|`Symbol`, propertyname for extracting signal data from an `AnalysisTable`|
 |`level_map`|`Vector{Int}` matching each point to level. It can be empty if there is only one level in `conctable`.|
 |`conctable`|`AbstractDataTable{A, <: T}` containing concentration data for each level. Sample names must be symbol or string of integers for multiple levels. One level indicates using `SingleCalibration`.|
 |`signaltable`|`AbstractDataTable{A, <: T}` containig signal for each point. It can be `nothing` if signal data is unecessary.|
-|`analytes`|`Vector{A}`, analytes in user-defined types.|
-|`isds`|`Vector{A}` that each analytes are internal standards.|
-|`nonisds`|`Vector{A}` that each analytes are not internal standards.|same|
-|`points`|`Vector{Symbol}`, calibration points, identical to `signaltable.samples`.|
-|`levels`|`Vector{Symbol}`, calibration levels, identical to `conctable.samples`.|
+|`analyte`|`Vector{A}`, analytes in user-defined types.|
+|`isd`|`Vector{A}` that each analytes are internal standards.|
+|`nonisd`|`Vector{A}` that each analytes are not internal standards.|same|
+|`point`|`Vector{Symbol}`, calibration points, identical to `signaltable.samples`.|
+|`level`|`Vector{Symbol}`, calibration levels, identical to `conctable.samples`.|
 
 ### AnalysisTable
 `AnalysisTable{A, T}` is basically a `Dictionary{Symbol, <: AbstractDataTable{A, <: T}}` which data can be extracted using proeperty syntax. For example, `at.tables[:area] === at.area`.
 |Property|Description|
 |----------|---------|
-|`analytes`|`Vector{A}`, analytes in user-defined types.|
-|`samples`|`Vector{Symbol}`, sample names.|
+|`analyte`|`Vector{A}`, analytes in user-defined types.|
+|`sample`|`Vector{Symbol}`, sample names.|
 |`tables`|`Dictionary{Symbol, <: AbstractDataTable{A, <: T}}`, a dictionary mapping data type to datatable.|
 |Other|All keys of `tables`|
 
@@ -50,7 +50,7 @@ This package provides two calibration types, `MultipleCalibration{A}` and `Singl
 
 ### MultipleCalibration
 This type fits and stores calibration curve. It can be created from a `MethodTable{A, T}` containing calibration data, an analyte `A`.
-|Attributes|Description|
+|Field|Description|
 |----------|-----------|
 |`analyte`|`Tuple{A, Any}`. First element is the analyte being quantified, and the second element is its internal standard for which `nothing` indicates no internal standard.|
 |`type`|`Bool` determines whether fitting a linear line (`true`) or quadratic curve (`false`).|
@@ -75,18 +75,23 @@ To fit a new model, call `calfit` or `calfit!` for inplace substitution of `mode
 
 ### SingleCalibration
 This type contains data for single pont calibration. 
-|Attributes|Description|
+|Field|Description|
 |----------|-----------|
 |`analyte`|`Tuple{A}` is the analyte with known concentration (internal standard).|
 |`conc`|`Float64`, concentration of analyte.|
 
 ## Batch
 `Batch{A, T}` represents a batch for quantitative analysis where `A` is analyte type and `T` is table type.
-|Attributes|Description|
+|Property|Description|
 |----------|-----------|
 |`method`|`MethodTable{A, <: T}`, method.|
 |`calibration`|`Vector{MultipleCalibration{<: A}}` or `Vector{SingleCalibration{<: A}}`|
 |`data`|Data for analysis, `AnalysisTable{A, <: T}` or `Nothing`.|
+|`analyte`|`Vector{A}`, analytes in user-defined types, identical to `method.analyte_map.analyte`.|
+|`isd`|`Vector{<: A}`, analytes which are internal standards.|
+|`nonisd`|`Vector{A}` that each analytes are not internal standards.|same|
+|`point`|`Vector{Symbol}`, calibration points, identical to `method.signaltable.samples`.|
+|`level`|`Vector{Symbol}`, calibration levels, identical to `method.conctable.samples`.|
 
 It can be created with only `method` and optionally `data`.
 

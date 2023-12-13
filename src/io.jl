@@ -57,12 +57,11 @@ function read_datatable(file::String, T; analyte_fn = default_analyte_fn, delim 
         for i in sample_name
             replace!(getproperty(tbl, i), missing => 0)
         end
-        RowDataTable(sample_name, analyte_name, analyte_fn.(getproperty(tbl, analyte_name)), tbl)
+        RowDataTable(analyte_fn.(getproperty(tbl, analyte_name)), analyte_name, sample_name, tbl)
     else
         sample_name = Symbol(first(split(config[:Sample], "\t")))
         tbl = CSV.read(joinpath(file, "table.txt"), T; delim, typemap = Dict(Int => Float64), types = Dict(sample_name => String))
         analyte_name = String.(filter!(!isempty, vectorize(config[:Analyte])))
-
         analyte_name = String[]
         isd_map = Int[]
         for i in config[:Analyte]
@@ -74,7 +73,7 @@ function read_datatable(file::String, T; analyte_fn = default_analyte_fn, delim 
         for i in Symbol.(analyte_name)
             replace!(getproperty(tbl, i), missing => 0)
         end
-        ColumnDataTable(sample_name, Symbol.(analyte_name), analyte_fn.(analyte_name), tbl)
+        ColumnDataTable(analyte_fn.(analyte_name), sample_name, tbl)
     end
 end
 
@@ -112,16 +111,16 @@ function read_methodtable(file::String, T; table_type = T, analyte_fn = default_
     config = read_config(joinpath(file, "config.txt"))
     signal = Symbol(get(config, :signal, :area))
     analyte_map = CSV.read(joinpath(file, "analyte_map.txt"), Table)
-    analytes = analyte_fn.(analyte_map.analytes)
+    analyte = analyte_fn.(analyte_map.analyte)
     isd = replace(analyte_map.isd, missing => 0)
     conctable = read_datatable(joinpath(file, "true_concentration.dt"), T; analyte_fn, delim)
-    if length(conctable.samples) > 1
+    if length(conctable.sample) > 1
         signaltable = read_datatable(joinpath(file, "$signal.dt"), T; analyte_fn, delim)
         if haskey(config, :level_map)
             level_map = parse.(Int, config[:level_map])
         else
-            nl = length(conctable.samples)
-            ns = length(signal.samples)
+            nl = length(conctable.sample)
+            ns = length(signal.sample)
             nr = ns ÷ nl
             rr = ns - nl * nr
             level_map = vcat(repeat([1], rr), repeat(1:nl, nr))
@@ -135,7 +134,7 @@ function read_methodtable(file::String, T; table_type = T, analyte_fn = default_
         calibration = isd
     end
     Cons = isnothing(table_type) ? MethodTable : MethodTable{table_type}
-    Cons(signal, analytes, isd, calibration, level_map, conctable, signaltable)
+    Cons(Table(; analyte, isd, calibration), signal, level_map, conctable, signaltable)
 end
 """
     read_batch(file::String, T; table_type = T, analyte_fn = default_analyte_fn) -> Batch{A, table_type}
@@ -154,9 +153,9 @@ function read_batch(file::String, T; table_type = T, analyte_fn = default_analyt
     method = read_methodtable(joinpath(file, "method.mt"), T; table_type, analyte_fn, delim)
     if !in("calibration", readdir(file)) || isempty(readdir(joinpath(file, "calibration")))
         if isnothing(method.signaltable)
-            cal = [SingleCalibration((analyte, ), first(get_analyte(method.conctable, analyte))) for analyte in method.conctable.analytes]
+            cal = [SingleCalibration((analyte, ), first(getanalyte(method.conctable, analyte))) for analyte in method.conctable.analyte]
         else
-            cal = [calibration(method, analyte) for analyte in method.conctable.analytes if !isisd(method, analyte)]
+            cal = [calibration(method, analyte) for analyte in method.conctable.analyte if !isisd(method, analyte)]
         end
     else
         cal = [read_calibration(joinpath(file, "calibration", f); delim, analyte_fn) for f in readdir(joinpath(file, "calibration")) if endswith(f, ".mcal") || endswith(f, ".scal")]
@@ -194,7 +193,7 @@ function show(io::IO, ::MIME"text/plain", cal::SingleCalibration)
 end
 
 function show(io::IO, batch::Batch{A, T}) where {A, T}
-    print(io, string("Batch{$A, $(shorten_type_repr(T))} with $(length(batch.method.analyte_map.isd .< 0)) internal standards out of $(length(batch.method.analyte_map.analytes)) analytes"))
+    print(io, string("Batch{$A, $(shorten_type_repr(T))} with $(length(batch.method.analyte_map.isd .< 0)) internal standards out of $(length(batch.method.analyte_map.analyte)) analytes"))
 end
 
 function show(io::IO, ::MIME"text/plain", batch::Batch)
@@ -213,7 +212,7 @@ function shorten_type_repr(T)
 end
 
 function show(io::IO, tbl::ColumnDataTable{A, T}) where {A, T}
-    print(io, string("ColumnDataTable{$A, $(shorten_type_repr(T))} with $(length(tbl.analytes)) analytes and $(length(tbl.samples)) samples"))
+    print(io, string("ColumnDataTable{$A, $(shorten_type_repr(T))} with $(length(tbl.analyte)) analytes and $(length(tbl.sample)) samples"))
 end
 
 function show(io::IO, ::MIME"text/plain", tbl::ColumnDataTable)
@@ -222,7 +221,7 @@ function show(io::IO, ::MIME"text/plain", tbl::ColumnDataTable)
 end
 
 function show(io::IO, tbl::RowDataTable{A, T}) where {A, T}
-    print(io, string("RowDataTable{$A, $(shorten_type_repr(T))} with $(length(tbl.analytes)) analytes and $(length(tbl.samples)) samples"))
+    print(io, string("RowDataTable{$A, $(shorten_type_repr(T))} with $(length(tbl.analyte)) analytes and $(length(tbl.sample)) samples"))
 end
 
 function show(io::IO, ::MIME"text/plain", tbl::RowDataTable)
@@ -231,7 +230,7 @@ function show(io::IO, ::MIME"text/plain", tbl::RowDataTable)
 end
 
 function show(io::IO, tbl::AnalysisTable{A, T}) where {A, T}
-    print(io, string("AnalysisTable{$A, $(shorten_type_repr(T))} with $(length(tbl.analytes)) analytes and $(length(tbl.samples)) samples"))
+    print(io, string("AnalysisTable{$A, $(shorten_type_repr(T))} with $(length(tbl.analyte)) analytes and $(length(tbl.sample)) samples"))
 end
 
 function show(io::IO, ::MIME"text/plain", tbl::AnalysisTable)
@@ -243,8 +242,8 @@ function show(io::IO, ::MIME"text/plain", tbl::AnalysisTable)
 end
 
 function show(io::IO, tbl::MethodTable{A, T}) where {A, T}
-    isnothing(tbl.signaltable) && return print(io, string("MethodTable{$A, $(shorten_type_repr(T))} with $(length(tbl.analyte_map.analytes)) analytes"))
-    print(io, string("MethodTable{$A, $(shorten_type_repr(T))} with $(length(tbl.analyte_map.analytes)) analytes, $(length(tbl.conctable.samples)) levels and $(length(tbl.signaltable.samples)) points."))
+    isnothing(tbl.signaltable) && return print(io, string("MethodTable{$A, $(shorten_type_repr(T))} with $(length(tbl.analyte_map.analyte)) analytes"))
+    print(io, string("MethodTable{$A, $(shorten_type_repr(T))} with $(length(tbl.analyte_map.analyte)) analytes, $(length(tbl.conctable.sample)) levels and $(length(tbl.signaltable.sample)) points."))
 end
 
 function show(io::IO, ::MIME"text/plain", tbl::MethodTable)
@@ -261,7 +260,7 @@ end
 function write(file::String, tbl::RowDataTable; delim = "\t")
     mkpath(file)
     open(joinpath(file, "config.txt"), "w+") do config
-        Base.write(config, "[Type]\nR\n\n[Analyte]\n", tbl.analyte_name, "\n\n[Sample]\n", join(tbl.sample_name, "\n"))
+        Base.write(config, "[Type]\nR\n\n[Analyte]\n", tbl.analytecol, "\n\n[Sample]\n", join(tbl.sample, "\n"))
     end
     CSV.write(joinpath(file, "table.txt"), tbl.table; delim)
 end
@@ -269,7 +268,7 @@ end
 function write(file::String, tbl::ColumnDataTable; delim = "\t")
     mkpath(file)
     open(joinpath(file, "config.txt"), "w+") do config
-        Base.write(config, "[Type]\nC\n\n[Analyte]\n", join(tbl.analyte_name, "\n"), "\n\n[Sample]\n", tbl.sample_name)
+        Base.write(config, "[Type]\nC\n\n[Analyte]\n", join(tbl.analytename, "\n"), "\n\n[Sample]\n", tbl.samplecol)
     end
     CSV.write(joinpath(file, "table.txt"), tbl.table; delim)
 end
