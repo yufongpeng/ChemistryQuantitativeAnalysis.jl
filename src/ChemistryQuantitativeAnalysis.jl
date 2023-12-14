@@ -6,7 +6,7 @@ export MultipleCalibration, SingleCalibration,
     ColumnDataTable, RowDataTable, AnalysisTable, MethodTable,
     Batch, calibration, update_calibration!,
     read_calibration, read_datatable, read_analysistable, read_methodtable, read_batch,
-    cal_range, lloq, uloq, accuracy, accuracy!, set_accuracy, set_accuracy!, update_accuracy!,
+    dynamic_range, lloq, uloq, accuracy, accuracy!, set_accuracy, set_accuracy!, update_accuracy!,
     inv_predict, inv_predict!, inv_predict_accuracy!, set_inv_predict, set_inv_predict!, update_inv_predict!,
     relative_signal, set_relative_signal, set_relative_signal!, update_relative_signal!,
     quantification, quantification!, set_quantification, set_quantification!, update_quantification!,
@@ -32,7 +32,7 @@ Tabular data wrapper indicates part of columns represent analytes, and all rows 
 # Properties
 * `analytename`: `Vector{Symbol}`, the column names of `table` that are analyte names.
 * `samplename`: `Vector{Symbol}`, sample names in type symbol.
-* `sample`: `Vector{String}`, sample names in type string.
+* `sample`: `Vector`, sample names.
 """
 struct ColumnDataTable{A, T} <: AbstractDataTable{A, T}
     analyte::Vector{A}
@@ -41,22 +41,25 @@ struct ColumnDataTable{A, T} <: AbstractDataTable{A, T}
 end
 
 """
-    ColumnDataTable(analyte_name::Vector{Symbol}, samplecol::Symbol, table; analyte_fn = default_analyte_fn)
-    ColumnDataTable(samplecol::Symbol, table; analyte_name = setdiff(propertynames(table), [samplecol]), analyte_fn = default_analyte_fn)
-    ColumnDataTable(table, samplecol::Symbol; analyte_name = setdiff(propertynames(table), [samplecol]), analyte_fn = default_analyte_fn)
+    ColumnDataTable(analytename::Vector{Symbol}, samplecol::Symbol, table; analytetype = String)
+    ColumnDataTable(samplecol::Symbol, table; analytename = setdiff(propertynames(table), [samplecol]), analytetype = String)
+    ColumnDataTable(table, samplecol::Symbol; analytename = setdiff(propertynames(table), [samplecol]), analytetype = String)
 
-User-friendly contructors for `ColumnDataTable`. See the documentation of the type for detail description.
+User-friendly contructors for `ColumnDataTable`.
+
+* `analytename`
+* `samplecol`
 """
-ColumnDataTable(analyte_name::Vector{Symbol}, samplecol::Symbol, table; analyte_fn = default_analyte_fn) = 
-    ColumnDataTable(analyte_fn.(string.(analyte_name)), samplecol, table)
-ColumnDataTable(samplecol::Symbol, table; analyte_name = setdiff(propertynames(table), [samplecol]), analyte_fn = default_analyte_fn) = 
-    ColumnDataTable(analyte_name, samplecol, table; analyte_fn)
-ColumnDataTable(table, samplecol::Symbol; analyte_name = setdiff(propertynames(table), [samplecol]), analyte_fn = default_analyte_fn) = 
-    ColumnDataTable(analyte_name, samplecol, table; analyte_fn)
+ColumnDataTable(analytename::Vector{Symbol}, samplecol::Symbol, table; analytetype = String) = 
+    ColumnDataTable(analytetype.(string.(analytename)), samplecol, table)
+ColumnDataTable(samplecol::Symbol, table; analytename = setdiff(propertynames(table), [samplecol]), analytetype = String) = 
+    ColumnDataTable(analytename, samplecol, table; analytetype)
+ColumnDataTable(table, samplecol::Symbol; analytename = setdiff(propertynames(table), [samplecol]), analytetype = String) = 
+    ColumnDataTable(analytename, samplecol, table; analytetype)
 
 function getproperty(tbl::ColumnDataTable, property::Symbol)
     if property == :sample
-        string.(getproperty(tbl.table, tbl.samplecol))
+        getproperty(tbl.table, tbl.samplecol)
     elseif property == :samplename
         Symbol.(getproperty(tbl.table, tbl.samplecol))
     elseif property == :analytename
@@ -81,36 +84,36 @@ Tabular data wrapper indicates part of columns represent analyte, and all rows r
 
 # Properties
 * `analytename`: `Symbol`, the column name that each element is analyte name.
-* `sample`: `Vector{String}`, sample names in type string.
+* `sample`: `Vector{Symbol}`, identical to `samplename`.
 """
 struct RowDataTable{A, T} <: AbstractDataTable{A, T}
     analyte::Vector{A}
     analytecol::Symbol
     samplename::Vector{Symbol}
     table::T
-    function RowDataTable(analyte::Vector{A}, analytecol::Symbol, sample_name::Vector{Symbol}, table::T) where {A, T}
+    function RowDataTable(analyte::Vector{A}, analytecol::Symbol, samplename::Vector{Symbol}, table::T) where {A, T}
         length(analyte) == length(getproperty(table, analytecol)) || throw(ArgumentError("The length of `analyte` is different from that of `table`."))
-        new{A, T}(analyte, analytecol, sample_name, table)
+        new{A, T}(analyte, analytecol, samplename, table)
     end
 end
 
 """
-    RowDataTable(analytecol::Symbol, sample_name::Vector{Symbol}, table; analyte_fn = default_analyte_fn)
-    RowDataTable(analytecol::Symbol, table; sample_name = setdiff(propertynames(table), [analytecol]), analyte_fn = default_analyte_fn)
-    RowDataTable(table, analytecol::Symbol; sample_name = setdiff(propertynames(table), [analytecol]), analyte_fn = default_analyte_fn)
+    RowDataTable(analytecol::Symbol, samplename::Vector{Symbol}, table; analytetype = String)
+    RowDataTable(analytecol::Symbol, table; samplename = setdiff(propertynames(table), [analytecol]), analytetype = String)
+    RowDataTable(table, analytecol::Symbol; samplename = setdiff(propertynames(table), [analytecol]), analytetype = String)
 
 User-friendly contructors for `RowDataTable`. See the documentation of the type for detail description.
 """
-RowDataTable(analytecol::Symbol, sample_name::Vector{Symbol}, table; analyte_fn = default_analyte_fn) = 
-    RowDataTable(analyte_fn.(string.(getproperty(table, analytecol))), analytecol, sample_name, table)
-RowDataTable(analytecol::Symbol, table; sample_name = setdiff(propertynames(table), [analytecol]), analyte_fn = default_analyte_fn) = 
-    RowDataTable(analytecol, sample_name, table; analyte_fn)
-RowDataTable(table, analytecol::Symbol; sample_name = setdiff(propertynames(table), [analytecol]), analyte_fn = default_analyte_fn) = 
-    RowDataTable(analytecol, sample_name, table; analyte_fn)
+RowDataTable(analytecol::Symbol, samplename::Vector{Symbol}, table; analytetype = String) = 
+    RowDataTable(analytetype.(string.(getproperty(table, analytecol))), analytecol, samplename, table)
+RowDataTable(analytecol::Symbol, table; samplename = setdiff(propertynames(table), [analytecol]), analytetype = String) = 
+    RowDataTable(analytecol, samplename, table; analytetype)
+RowDataTable(table, analytecol::Symbol; samplename = setdiff(propertynames(table), [analytecol]), analytetype = String) = 
+    RowDataTable(analytecol, samplename, table; analytetype)
 
 function getproperty(tbl::RowDataTable{A}, property::Symbol) where A
     if property == :sample
-        string.(getfield(tbl, :samplename))
+        getfield(tbl, :samplename)
     elseif property == :analytename
         Symbol.(getfield(tbl, :analyte))
     elseif !in(property, fieldnames(RowDataTable))
@@ -127,7 +130,7 @@ Tabular data wrapper of multiple tables for analysis. `A` determines analyte typ
 
 # Fields
 * `analyte`: `Vector{A}`, analyte in user-defined types.
-* `sample`: `Vector{String}`, sample names.
+* `sample`: `Vector`, sample names.
 * `tables`: `Dictionary{Symbol, <: AbstractDataTable{A, <: T}}`, a dictionary mapping data type to datatable.
 
 # Properties
@@ -139,10 +142,10 @@ All keys of `tables` are available.
 """
 struct AnalysisTable{A, T} <: AbstractAnalysisTable{A, T}
     analyte::Vector{A}
-    sample::Vector{String}
+    sample::Vector
     tables::Dictionary{Symbol, <: AbstractDataTable{A}}
-    AnalysisTable(analyte::Vector{A}, sample::Vector{String}, tables::Dictionary{Symbol, <: AbstractDataTable{A, T}}) where {A, T} = new{A, T}(analyte, sample, tables)
-    AnalysisTable{T}(analyte::Vector{A}, sample::Vector{String}, tables::Dictionary{Symbol, <: AbstractDataTable{A, <: T}}) where {A, T} = new{A, T}(analyte, sample, tables)
+    AnalysisTable(analyte::Vector{A}, sample::Vector, tables::Dictionary{Symbol, <: AbstractDataTable{A, T}}) where {A, T} = new{A, T}(analyte, sample, tables)
+    AnalysisTable{T}(analyte::Vector{A}, sample::Vector, tables::Dictionary{Symbol, <: AbstractDataTable{A, <: T}}) where {A, T} = new{A, T}(analyte, sample, tables)
 end
 
 """
@@ -442,23 +445,23 @@ include("cal.jl")
 include("io.jl")
 
 """
-    ColumnDataTable(tbl::RowDataTable{A, T}, sample_name::Symbol) where {A, T}
-    ColumnDataTable{S}(tbl::RowDataTable{A, T}, sample_name::Symbol) where {A, S, T}
+    ColumnDataTable(tbl::RowDataTable{A, T}, samplecol::Symbol) where {A, T}
+    ColumnDataTable{S}(tbl::RowDataTable{A, T}, samplecol::Symbol) where {A, S, T}
 
-Convert `RowDataTable` to `ColumnDataTable` with `sample_name` as the column name of sample. `S` must be provided if `T` is not a valid constructor.
+Convert `RowDataTable` to `ColumnDataTable` with `samplecol` as the column name of sample. `S` must be provided if `T` is not a valid constructor.
 """
-ColumnDataTable(tbl::RowDataTable{A, T}, sample_name::Symbol) where {A, T} = ColumnDataTable{T}(tbl, sample_name)
-ColumnDataTable{T}(tbl::RowDataTable{A}, sample_name::Symbol) where {A, T} = 
-    ColumnDataTable{T}(tbl.analyte, sample_name, T((; (sample_name => tbl.sample, (tbl.analytename .=> getanalyte.(Ref(tbl), tbl.analyte))...)...)))
+ColumnDataTable(tbl::RowDataTable{A, T}, samplecol::Symbol) where {A, T} = ColumnDataTable{T}(tbl, samplecol)
+ColumnDataTable{T}(tbl::RowDataTable{A}, samplecol::Symbol) where {A, T} = 
+    ColumnDataTable{T}(tbl.analyte, samplecol, T((; (samplecol => tbl.sample, (tbl.analytename .=> getanalyte.(Ref(tbl), tbl.analytename))...)...)))
 
 """
-    RowDataTable(tbl::RowDataTable{A, T}, sample_name::Symbol) where {A, T}
-    RowDataTable{S}(tbl::RowDataTable{A, T}, sample_name::Symbol) where {A, S, T}
+    RowDataTable(tbl::RowDataTable{A, T}, analytecol::Symbol) where {A, T}
+    RowDataTable{S}(tbl::RowDataTable{A, T}, analytecol::Symbol) where {A, S, T}
 
-Convert `RowDataTable` to `ColumnDataTable` with `sample_name` as the column name of sample. `S` must be provided if `T` is not a valid constructor.
+Convert `RowDataTable` to `ColumnDataTable` with `analytecol` as the column name of sample. `S` must be provided if `T` is not a valid constructor.
 """
-RowDataTable(tbl::ColumnDataTable{A, T}, analyte_name::Symbol) where {A, T} = RowDataTable{T}(tbl, analyte_name)
-RowDataTable{T}(tbl::ColumnDataTable{A}, analyte_name::Symbol) where {A, T} = 
-    RowDataTable{T}(tbl.analyte, tbl.samplename, T((; (analyte_name => string.(tbl.analytename), (tbl.samplename .=> getsample.(Ref(tbl), tbl.samplename))...)...)))
+RowDataTable(tbl::ColumnDataTable{A, T}, analytecol::Symbol) where {A, T} = RowDataTable{T}(tbl, analytecol)
+RowDataTable{T}(tbl::ColumnDataTable{A}, analytecol::Symbol) where {A, T} = 
+    RowDataTable{T}(tbl.analyte, tbl.samplename, T((; (analytecol => tbl.analyte, (tbl.samplename .=> getsample.(Ref(tbl), tbl.samplename))...)...)))
 
 end

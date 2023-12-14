@@ -2,18 +2,18 @@ using ChemistryQuantitativeAnalysis, TypedTables, DataFrames
 using Test
 import Base: show
 
-abstract type AnalyteTest end
-struct AnalyteG1 <: AnalyteTest
+struct AnalyteG1
     name::String
 end
-struct AnalyteG2 <: AnalyteTest
+struct AnalyteG2
     name::String
 end
-struct AnalyteOther <: AnalyteTest
+struct AnalyteOther
     name::String
 end
+const AnalyteTest = Union{AnalyteG1, AnalyteG2, AnalyteOther}
 show(io::IO, analyte::AnalyteTest) = print(io, analyte.name)
-function string2analyte(name::String)
+function Union{AnalyteG1, AnalyteG2, AnalyteOther}(name::String)
     g = match(r"^G(\d)\(.*\)$", name)
     isnothing(g) && return AnalyteOther(name)
     g = parse(Int, first(g))
@@ -27,7 +27,7 @@ signal2 = vcat(Float64[1, 2, 5, 10, 20, 50, 100] .^ 2, [1, 2, 5, 10, 20, 50, 100
 const datapath = joinpath(@__DIR__(), "data")
 isapprox_nan(x::Float64, y::Float64) = isnan(x) && isnan(y) ? true : isapprox(x, y)
 isapprox_nan(x::T, y::T) where T = true
-test_show(x) = show(IOBuffer(), x)
+test_show(x) = show(IOBuffer(), MIME"text/plain"(), x)
 macro test_error(err, x)
     return quote
         try 
@@ -69,7 +69,7 @@ end
                 "G1(drug_a)" => conc,
                 "G1(drug_b)" => conc .* 10), 
             :level; 
-            analyte_fn = string2analyte
+            analytetype = AnalyteTest
         )
         global signaltable = ColumnDataTable(
             DataFrame(
@@ -79,9 +79,9 @@ end
                 "G1(drug_b)" => signal2,
                 "G2(drug_b)" => repeat([2.0], 21)), 
             :point; 
-            analyte_fn = string2analyte
+            analytetype = AnalyteTest
         )
-        global method = MethodTable(Table(; analyte = string2analyte.(analyte_names), isd = [2, -1, 4, -1], calibration = [1, -1, 3, -1]), :area, repeat(1:7, 3), conctable, signaltable)
+        global method = MethodTable(Table(; analyte = AnalyteTest.(analyte_names), isd = [2, -1, 4, -1], calibration = [1, -1, 3, -1]), :area, repeat(1:7, 3), conctable, signaltable)
         global rdata = AnalysisTable([:area], [
             RowDataTable(
                 DataFrame(
@@ -91,7 +91,7 @@ end
                     "S3" => Float64[54, 6, 9800, 2]
                     ), 
                 :Analyte; 
-                analyte_fn = string2analyte
+                analytetype = AnalyteTest
                 )
             ]
         )
@@ -104,7 +104,7 @@ end
                     "G1(drug_b)" => Float64[200, 800, 9800],
                     "G2(drug_b)" => Float64[2, 2, 2]), 
                 :Sample; 
-                analyte_fn = string2analyte
+                analytetype = AnalyteTest
                 )
             ]
         )
@@ -117,7 +117,7 @@ end
                     "S3" => Float64[54, 6, 9800, 2]
                     ), 
                 :Analyte; 
-                analyte_fn = string2analyte
+                analytetype = AnalyteTest
                 )
             ]
         )
@@ -131,7 +131,7 @@ end
             ColumnDataTable(
                 Table(cdata.area.table), 
                 :Sample; 
-                analyte_fn = string2analyte
+                analytetype = AnalyteTest
                 )
             ]
         )
@@ -139,7 +139,7 @@ end
             RowDataTable(
                 Table(rdata.area.table), 
                 :Analyte; 
-                analyte_fn = string2analyte
+                analytetype = AnalyteTest
                 )
             ]
         )
@@ -165,6 +165,16 @@ end
         @test all(isapprox.(quantification(cbatch, cbatch.data).var"G1(drug_a)", inv_predict(cbatch.calibration[1], relative_signal(cbatch, cbatch.data))))
         @test all(isapprox_nan.(quantification(rbatch, rbatch.data).S2, update_quantification!(rbatch, rbatch.data).data.estimated_concentration.S2))
         @test all(isapprox.(update_inv_predict!(update_relative_signal!(cbatch)).data.estimated_concentration.var"G1(drug_b)", set_quantification(cbatch.data, cbatch).estimated_concentration.var"G1(drug_b)"))
+    end
+    @testset "Utils" begin
+        @test getanalyte(cdata.area, AnalyteG1("G1(drug_b)")) == getanalyte(cdata.area, Symbol("G1(drug_b)"))
+        @test getanalyte(rdata.area, AnalyteG1("G1(drug_b)")) == getanalyte(rdata.area, Symbol("G1(drug_b)"))
+        @test getsample(cdata.area, "S2") == getsample(cdata.area, Symbol("S2"))
+        @test getsample(rdata.area, Symbol("S2")) == getproperty(rdata.area.table, Symbol("S2"))
+        @test all(isapprox.(dynamic_range(cbatch.calibration[1]), (1, 100)))
+        @test endswith(formula_repr_utf8(cbatch.calibration[2]), "x^2")
+        @test weight_repr_utf8(cbatch.calibration[1]) == "none"
+        @test weight_value("1/x^3") == -3
     end
     @testset "IO" begin
         global initial_mc_c = ChemistryQuantitativeAnalysis.read(joinpath(datapath, "initial_mc_c.batch"), Table)
@@ -199,5 +209,9 @@ end
         @test @test_noerror test_show(save_mc_r.method)
         @test @test_noerror test_show(save_sc_c.method)
         @test @test_noerror test_show(save_sc_r.method)
+        @test @test_noerror test_show(save_mc_c.data)
+        @test @test_noerror test_show(save_mc_r.data)
+        @test @test_noerror test_show(save_sc_c.data)
+        @test @test_noerror test_show(save_sc_r.data)
     end
 end

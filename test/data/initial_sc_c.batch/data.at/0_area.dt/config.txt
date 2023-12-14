@@ -8,7 +8,7 @@ Analyte3
 Analyte4
 Analyte5
 Analyte6
-Analyte7	
+Analyte7
 
 [Sample]
 Sample

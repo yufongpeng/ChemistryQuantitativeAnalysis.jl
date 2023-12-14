@@ -44,12 +44,12 @@ findanalyte(dt::AbstractDataTable{A}, analyte::B) where {A, B <: A} = findfirst(
 findanalyte(dt::AbstractDataTable, analyte::Symbol) = findfirst(==(analyte), dt.analytename)
 
 """
-    findsample(dt::AbstractDataTable, sample::AbstractString)
+    findsample(dt::AbstractDataTable, sample)
     findsample(dt::AbstractDataTable, sample::Symbol)
 
 Return the index of the first element of `dt.sample` for which the element equals to `sample`.
 """
-findsample(dt::AbstractDataTable, sample::AbstractString) = findfirst(==(sample), dt.sample)
+findsample(dt::AbstractDataTable, sample) = findfirst(==(sample), dt.sample)
 findsample(dt::AbstractDataTable, sample::Symbol) = findfirst(==(sample), dt.samplename)
 
 """
@@ -101,11 +101,11 @@ function critical_point(cal::MultipleCalibration)
 end
 
 """
-    cal_range(cal::MultipleCalibration)
+    dynamic_range(cal::MultipleCalibration)
 
 Return calibration range as a `Tuple` (lloq, uloq).
 """
-cal_range(cal::MultipleCalibration) = (lloq(cal), uloq(cal))
+dynamic_range(cal::MultipleCalibration) = (lloq(cal), uloq(cal))
 """
     lloq(cal::MultipleCalibration)
 
@@ -206,9 +206,6 @@ If `digits` is `nothing`, the function uses `sigdigits` instead.
 format_number(x; digits = nothing, sigdigits = 4) = isnothing(digits) ? format_number2int(round(x; sigdigits)) : format_number2int(round(x; digits))
 format_number2int(x) = 
     x == round(x) ? round(Int, x) : x
-
-default_analyte_fn(x) = x
-default_analyte_fn(x::AbstractString) = String(x)
 
 vectorize(x) = [x]
 vectorize(x::AbstractVector) = x

@@ -15,8 +15,8 @@ This package provides two basic wrappers, `ColumnDataTable{A, T}` and `RowDataTa
 |`sample`|`Vector{String}`, strings transformed from column `samplecol`.|`Vector{String}`, the column names that are sample names..|
 |`table`|Tabular data of type `T`|same|
 
-`ColumnDataTable` can be created by `ColumnDataTable(table, samplecol; analyte_fn, analyte_name)`. By default, `analyte_name` includes all properties of `table` without `samplecol`. `RowDataTable` can be created by `RowDataTable(table, analytecol; analyte_fn, sample_name)`. By default, `sample_name` includes all properties of `table` without `analytecol`.
-To add new samples to `ColumnDataTable{A, T}`, user can directly modify `table`; for `RowDataTable{A, T}`, user have to modify `samplename` as well. To add new analytes, user can directly modify `table`, and modify `analyte`.
+`ColumnDataTable` can be created by `ColumnDataTable(table, samplecol; analytetype, analytename)`. By default, `analytename` includes all properties of `table` without `samplecol`. `RowDataTable` can be created by `RowDataTable(table, analytecol; analytetype, samplename)`. By default, `samplename` includes all properties of `table` without `analytecol`.
+To add new samples to `ColumnDataTable{A, T}`, user can directly modify `table`; for `RowDataTable{A, T}`, user have to modify `samplename` as well. To add new analytes, user can directly modify `table` for `RowDataTable{A, T}`, and additionally modify `analyte` for `ColumnDataTable{A, T}`.
 
 The package provides another two wrappers, `MethodTable{A, T}`, and `AnalysisTable{A, T} <: AbstractAnalysisTable{A, T}`.
 ### MethodTable
@@ -208,12 +208,12 @@ It can contain multiple `*.dt`. The file names must start from an integer, `_` a
 ### Reading and writing Batch
 To read a batch into julia, call `ChemistryQuantitativeAnalysis.read`.
 ```julia-repl
-julia> ChemistryQuantitativeAnalysis.read("batch_name.batch", T; table_type, analyte_fn)
+julia> ChemistryQuantitativeAnalysis.read("batch_name.batch", T; table_type, analytetype)
 ```
-`T` is the sink function for tabular data; it should create an object following `Tables.jl` interface. `table_type` is `T` parameter in the type signature of `Batch` which determines the underlying table type, and `analyte_fn` is responsible for converting `analyte` in string type into user defined type `A`.
+`T` is the sink function for tabular data; it should create an object following `Tables.jl` interface. `table_type` is `T` parameter in the type signature of `Batch` which determines the underlying table type, and `analytetype` is a concrete type for `analyte` which msut have a method for string input.
 
 To write project to disk, call `ChemistryQuantitativeAnalysis.write`. There is a keyword argument `delim` controling whether using "\t" or "," as delim for tables.
 ```julia-repl
 julia> ChemistryQuantitativeAnalysis.write("batch_name.pjc", batch; delim = "\t")
 ```
-A new folder `calibration` containing multiple `*.mcal` or `*.scal` folders. The former is for `MultipleCalibration` and the latter is for `SingleCalibration`.
+There will be a folder `calibration` containing multiple `*.mcal` or `*.scal` folders. The former is for `MultipleCalibration` and the latter is for `SingleCalibration`.
