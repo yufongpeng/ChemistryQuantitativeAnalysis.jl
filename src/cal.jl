@@ -145,15 +145,14 @@ function inv_predict!(cal::MultipleCalibration)
 end
 
 function fill_result!(dt::ColumnDataTable, result::Vector{Vector{Float64}})
-    for (a, c) in zip(dt.analytename, result)
-        getproperty(dt.table, a) .= c
+    for (a, c) in zip(eachanalyte(dt), result)
+        a .= c
     end
     dt
 end
 function fill_result!(dt::RowDataTable, result::Vector{Vector{Float64}})
-    for (i, p) in enumerate(dt.samplename)
-        id = findfirst(==(p), propertynames(dt.table))
-        getproperty(dt.table, propertynames(dt.table)[id]) .= getindex.(result, i)
+    for (i, p) in enumerate(eachsample(dt))
+        p .= getindex.(result, i)
     end
     dt
 end 

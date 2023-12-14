@@ -10,7 +10,7 @@ export MultipleCalibration, SingleCalibration,
     inv_predict, inv_predict!, inv_predict_accuracy!, set_inv_predict, set_inv_predict!, update_inv_predict!,
     relative_signal, set_relative_signal, set_relative_signal!, update_relative_signal!,
     quantification, quantification!, set_quantification, set_quantification!, update_quantification!,
-    findanalyte, getanalyte, findsample, getsample, set_isd!,
+    findanalyte, getanalyte, findsample, getsample, set_isd!, eachanalyte, eachsample,
     formula_repr, weight_repr, weight_value, formula_repr_utf8, weight_repr_utf8, format_number
 
 import Base: getproperty, show, write, eltype, length, iterate
@@ -45,10 +45,11 @@ end
     ColumnDataTable(samplecol::Symbol, table; analytename = setdiff(propertynames(table), [samplecol]), analytetype = String)
     ColumnDataTable(table, samplecol::Symbol; analytename = setdiff(propertynames(table), [samplecol]), analytetype = String)
 
-User-friendly contructors for `ColumnDataTable`.
+User-friendly contructors for `ColumnDataTable{A, T}`.
 
-* `analytename`
-* `samplecol`
+* `analytename`: `Vector{Symbol}`, the column names of `table` that are analyte names.
+* `samplecol`: `Symbol`, the column name that each element is sample name.
+* `analytetype`: either a constructor of `A` or a function returning analytes of type `A`.
 """
 ColumnDataTable(analytename::Vector{Symbol}, samplecol::Symbol, table; analytetype = String) = 
     ColumnDataTable(analytetype.(string.(analytename)), samplecol, table)
@@ -102,7 +103,11 @@ end
     RowDataTable(analytecol::Symbol, table; samplename = setdiff(propertynames(table), [analytecol]), analytetype = String)
     RowDataTable(table, analytecol::Symbol; samplename = setdiff(propertynames(table), [analytecol]), analytetype = String)
 
-User-friendly contructors for `RowDataTable`. See the documentation of the type for detail description.
+User-friendly contructors for `RowDataTable{A, T}`.
+
+* `analytecol`: `Symbol`, the column name that each element is analyte name.
+* `samplename`: `Vector{Symbol}`, the column names that are sample names..
+* `analytetype`: either a constructor of `A` or a function returning analytes of type `A`.
 """
 RowDataTable(analytecol::Symbol, samplename::Vector{Symbol}, table; analytetype = String) = 
     RowDataTable(analytetype.(string.(getproperty(table, analytecol))), analytecol, samplename, table)
@@ -111,7 +116,7 @@ RowDataTable(analytecol::Symbol, table; samplename = setdiff(propertynames(table
 RowDataTable(table, analytecol::Symbol; samplename = setdiff(propertynames(table), [analytecol]), analytetype = String) = 
     RowDataTable(analytecol, samplename, table; analytetype)
 
-function getproperty(tbl::RowDataTable{A}, property::Symbol) where A
+function getproperty(tbl::RowDataTable, property::Symbol)
     if property == :sample
         getfield(tbl, :samplename)
     elseif property == :analytename
