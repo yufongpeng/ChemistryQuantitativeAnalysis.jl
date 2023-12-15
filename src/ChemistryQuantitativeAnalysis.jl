@@ -5,14 +5,14 @@ import Tables: istable, rowaccess, rows, columnaccess, columns
 export MultipleCalibration, SingleCalibration, 
     ColumnDataTable, RowDataTable, AnalysisTable, MethodTable,
     Batch, calibration, update_calibration!,
-    dynamic_range, lloq, uloq, accuracy, accuracy!, set_accuracy, set_accuracy!, update_accuracy!,
+    dynamic_range, lloq, uloq, signal_range, signal_lloq, signal_uloq, accuracy, accuracy!, set_accuracy, set_accuracy!, update_accuracy!,
     inv_predict, inv_predict!, inv_predict_accuracy!, set_inv_predict, set_inv_predict!, update_inv_predict!,
     relative_signal, set_relative_signal, set_relative_signal!, update_relative_signal!,
     quantification, quantification!, set_quantification, set_quantification!, update_quantification!,
     findanalyte, getanalyte, findsample, getsample, set_isd!, eachanalyte, eachsample,
     formula_repr, weight_repr, weight_value, formula_repr_utf8, weight_repr_utf8, format_number
 
-import Base: getproperty, show, write, eltype, length, iterate, getindex, setindex!
+import Base: getproperty, propertynames, show, write, eltype, length, iterate, getindex, setindex!
     
 abstract type AbstractCalibration{A} end
 abstract type AbstractDataTable{A, T} end
@@ -64,13 +64,13 @@ function getproperty(tbl::ColumnDataTable, property::Symbol)
         Symbol.(getproperty(tbl.table, tbl.samplecol))
     elseif property == :analytename
         Symbol.(getfield(tbl, :analyte))
-    elseif !in(property, fieldnames(ColumnDataTable))
+    elseif !in(property, fieldnames(ColumnDataTable)) && in(property, propertynames(getfield(tbl, :table)))
         getproperty(getfield(tbl, :table), property)
     else
         getfield(tbl, property)
     end
 end
-
+propertynames(tbl::ColumnDataTable) = Tuple(unique((:analyte, :analytename, :sample, :samplename, :samplecol, :table, propertynames(getfield(tbl, :table))...)))
 """
     RowDataTable{A, T} <: AbstractDataTable{A, T}
 
@@ -120,13 +120,13 @@ function getproperty(tbl::RowDataTable, property::Symbol)
         getfield(tbl, :samplename)
     elseif property == :analytename
         Symbol.(getfield(tbl, :analyte))
-    elseif !in(property, fieldnames(RowDataTable))
+    elseif !in(property, fieldnames(RowDataTable)) && in(property, propertynames(getfield(tbl, :table)))
         getproperty(getfield(tbl, :table), property)
     else
         getfield(tbl, property)
     end
 end
-
+propertynames(tbl::RowDataTable) = Tuple(unique((:analyte, :analytename, :analytecol, :sample, :samplename, :table, propertynames(getfield(tbl, :table))...)))
 """
     AnalysisTable{A, T} <: AbstractAnalysisTable{A, T}
 
@@ -166,12 +166,13 @@ function AnalysisTable{T}(keys::Vector{Symbol}, tables::Vector{<: AbstractDataTa
 end
 
 function getproperty(tbl::AnalysisTable, p::Symbol)
-    if p in fieldnames(AnalysisTable)
-        getfield(tbl, p)
-    else
+    if !in(p, fieldnames(AnalysisTable)) && in(p, keys(getfield(tbl, :tables)))
         get(getfield(tbl, :tables), p, nothing)
+    else
+        getfield(tbl, p)
     end
 end
+propertynames(tbl::AnalysisTable) = Tuple(unique((:analyte, :sample, :tables, keys(getfield(tbl, :tables))...)))
 
 """
     MethodTable{A, T}
@@ -278,6 +279,7 @@ function getproperty(tbl::MethodTable, p::Symbol)
         getfield(tbl, p)
     end
 end
+propertynames(tbl::MethodTable) = (:analyte_map, :signal, :level_map, :conctable, :signaltable, :analyte, :isd, :nonisd, :point, :level)
 
 """
     MethodTable(conctable::AbstractDataTable, signaltable::Union{AbstractDataTable, Nothing}, signal, level_map = []; kwargs...)
@@ -442,6 +444,7 @@ function getproperty(batch::Batch, p::Symbol)
         getfield(batch, p)
     end
 end
+propertynames(batch::Batch) = (:method, :calibration, :data, :analyte, :isd, :nonisd, :point, :level)
 
 include("interface.jl")
 include("utils.jl")

@@ -85,7 +85,7 @@ end
         global rdata = AnalysisTable([:area], [
             RowDataTable(
                 DataFrame(
-                    "Analyte" => ["G1(drug_a)", "G2(drug_a)", "G1(drug_b)", "G2(drug_b)"], 
+                    "Analyte" => analyte_names, 
                     "S1" => Float64[6, 6, 200, 2],
                     "S2" => Float64[24, 6, 800, 2],
                     "S3" => Float64[54, 6, 9800, 2]
@@ -111,7 +111,7 @@ end
         global rdata = AnalysisTable([:area], [
             RowDataTable(
                 DataFrame(
-                    "Analyte" => ["G1(drug_a)", "G2(drug_a)", "G1(drug_b)", "G2(drug_b)"], 
+                    "Analyte" => analyte_names, 
                     "S1" => Float64[6, 6, 200, 2],
                     "S2" => Float64[24, 6, 800, 2],
                     "S3" => Float64[54, 6, 9800, 2]
@@ -127,6 +127,11 @@ end
         @test getanalyte(cdata.area, 1) == getanalyte(ColumnDataTable(rdata.area, :Sample), 1)
         @test getsample(cdata.area, 2) == getsample(rdata.area, 2)
         @test getsample(RowDataTable(cdata.area, :Analyte), 2) == getsample(rdata.area, 2)
+        @test propertynames(cbatch) == (:method, :calibration, :data, :analyte, :isd, :nonisd, :point, :level)
+        @test propertynames(cbatch.method) == (:analyte_map, :signal, :level_map, :conctable, :signaltable, :analyte, :isd, :nonisd, :point, :level)
+        @test propertynames(cdata) == (:analyte, :sample, :tables, :area)
+        @test propertynames(cdata.area) == (:analyte, :analytename, :sample, :samplename, :samplecol, :table, :Sample, Symbol.(analyte_names)...)
+        @test propertynames(rdata.area) == (:analyte, :analytename, :analytecol, :sample, :samplename, :table, :Analyte, Symbol.(["S1", "S2", "S3"])...)
     end
     @testset "Interface.jl" begin
         cdata2 = AnalysisTable([:area], [
@@ -178,6 +183,7 @@ end
         @test getsample(cdata.area, "S2") == getsample(cdata.area, Symbol("S2"))
         @test getsample(rdata.area, Symbol("S2")) == getproperty(rdata.area.table, Symbol("S2"))
         @test all(isapprox.(dynamic_range(cbatch.calibration[1]), (1, 100)))
+        @test signal_range(rbatch.calibration[2]) == (signal_lloq(rbatch.calibration[2]), signal_uloq(rbatch.calibration[2]))
         @test endswith(formula_repr_utf8(cbatch.calibration[2]), "x^2")
         @test weight_repr_utf8(cbatch.calibration[1]) == "none"
         @test weight_value("1/x^3") == -3

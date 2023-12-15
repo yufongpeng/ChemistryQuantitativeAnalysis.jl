@@ -103,9 +103,16 @@ end
 """
     dynamic_range(cal::MultipleCalibration)
 
-Return calibration range as a `Tuple` (lloq, uloq).
+Return dynamic range as a `Tuple` (lloq, uloq).
 """
 dynamic_range(cal::MultipleCalibration) = (lloq(cal), uloq(cal))
+"""
+    signal_range(cal::MultipleCalibration)
+
+Return theoretical signal of dynamic range as a `Tuple` (lloq, uloq).
+"""
+signal_range(cal::MultipleCalibration) = Tuple(predict(cal.model, Table(; x = collect(dynamic_range(cal)))))
+
 """
     lloq(cal::MultipleCalibration)
 
@@ -118,6 +125,18 @@ lloq(cal::MultipleCalibration) = (cal.type || last(cal.model.model.pp.beta0) < 0
 Return upper limit of quantification.
 """
 uloq(cal::MultipleCalibration) = (cal.type || last(cal.model.model.pp.beta0) > 0) ? cal.table.x[findlast(cal.table.include)] : min(cal.table.x[findlast(cal.table.include)], critical_point(cal))
+"""
+    signal_lloq(cal::MultipleCalibration)
+
+Return theoretical signal of lower limit of quantification.
+"""
+signal_lloq(cal::MultipleCalibration) = only(predict(cal.model, Table(; x = [lloq(cal)])))
+"""
+    uloq(cal::MultipleCalibration)
+
+Return theoretical signal of upper limit of quantification.
+"""
+signal_uloq(cal::MultipleCalibration) = only(predict(cal.model, Table(; x = [uloq(cal)])))
 
 """
     weight_repr(cal::MultipleCalibration)
