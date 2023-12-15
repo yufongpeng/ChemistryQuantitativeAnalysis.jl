@@ -285,14 +285,14 @@ end
 
 User-friendly contructors for `MethodTable`. `kwargs` will be columns in `analyte_map`; when `analyte`, `isd` and `calibration` are not provided, it will use analyte in `conctable`.
 """
-MethodTable(conctable::AbstractDataTable{T}, 
-            signaltable::AbstractDataTable{S},
+MethodTable(conctable::AbstractDataTable{A, T}, 
+            signaltable::AbstractDataTable{B, S},
             signal::Symbol,
-            level_map::Vector{Int}; kwargs...) where {T, S} = MethodTable{promote_type(T, S)}(conctable, signaltable, signal, level_map; kwargs...)
-MethodTable(conctable::AbstractDataTable{T}, 
+            level_map::Vector{Int}; kwargs...) where {A, B, T, S} = MethodTable{promote_type(T, S)}(conctable, signaltable, signal, level_map; kwargs...)
+MethodTable(conctable::AbstractDataTable{A, T}, 
             signaltable::Nothing,
             signal::Symbol,
-            level_map::Vector{Int} = Int[]; kwargs...) where T = MethodTable{T}(conctable, signaltable, signal, level_map; kwargs...)
+            level_map::Vector{Int} = Int[]; kwargs...) where {A, T} = MethodTable{A, T}(conctable, signaltable, signal, level_map; kwargs...)
 function MethodTable{T}(conctable::AbstractDataTable, 
                     signaltable::Union{AbstractDataTable, Nothing},
                     signal::Symbol,

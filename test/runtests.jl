@@ -81,7 +81,7 @@ end
             :point; 
             analytetype = AnalyteTest
         )
-        global method = MethodTable(Table(; analyte = AnalyteTest.(analyte_names), isd = [2, -1, 4, -1], calibration = [1, -1, 3, -1]), :area, repeat(1:7, 3), conctable, signaltable)
+        global method = MethodTable(conctable, signaltable, :area, repeat(1:7, 3); analyte = AnalyteTest.(analyte_names), isd = [2, -1, 4, -1], calibration = [1, -1, 3, -1])
         global rdata = AnalysisTable([:area], [
             RowDataTable(
                 DataFrame(
