@@ -12,7 +12,7 @@ This package provides two basic wrappers, `ColumnDataTable{A, T}` and `RowDataTa
 |`analytename`|`Vector{Symbol}`, the column names that are analytes names|`Vector{Symbol}`, symbols transformed from column `analytecol`.|
 |`samplename`|`Vector{Symbol}`, symbols transformed from column `samplecol`.|`Vector{Symbol}`, the column names that are sample names.|
 |`analyte`|`Vector{A}` stored in field `config`, analytes in user-defined types.|`Vector{A}`, analytes in user-defined types.|
-|`sample`|`Vector{String}`, strings transformed from column `samplecol`.|`Vector{String}`, the column names that are sample names..|
+|`sample`|`Vector`, the column `samplecol`.|`Vector{Symbol}`, the column names that are sample names..|
 |`table`|Tabular data of type `T`|same|
 
 `ColumnDataTable` can be created by `ColumnDataTable(table, samplecol; analytetype, analytename)`. By default, `analytename` includes all properties of `table` without `samplecol`. `RowDataTable` can be created by `RowDataTable(table, analytecol; analytetype, samplename)`. By default, `samplename` includes all properties of `table` without `analytecol`.
@@ -31,15 +31,15 @@ This type is used for storing method, containing all analytes, their internal st
 |`analyte`|`Vector{A}`, analytes in user-defined types.|
 |`isd`|`Vector{A}` that each analytes are internal standards.|
 |`nonisd`|`Vector{A}` that each analytes are not internal standards.|same|
-|`point`|`Vector{Symbol}`, calibration points, identical to `signaltable.samples`.|
-|`level`|`Vector{Symbol}`, calibration levels, identical to `conctable.samples`.|
+|`point`|`Vector`, calibration points, identical to `signaltable.samples`.|
+|`level`|`Vector`, calibration levels, identical to `conctable.samples`.|
 
 ### AnalysisTable
 `AnalysisTable{A, T}` is basically a `Dictionary{Symbol, <: AbstractDataTable{A, <: T}}` which data can be extracted using proeperty syntax. For example, `at.tables[:area] === at.area`.
 |Property|Description|
 |----------|---------|
 |`analyte`|`Vector{A}`, analytes in user-defined types.|
-|`sample`|`Vector{Symbol}`, sample names.|
+|`sample`|`Vector`, sample names.|
 |`tables`|`Dictionary{Symbol, <: AbstractDataTable{A, <: T}}`, a dictionary mapping data type to datatable.|
 |Other|All keys of `tables`|
 
@@ -49,7 +49,7 @@ The key for signal data is determined by `method.signal`. Default names for rela
 This package provides two calibration types, `MultipleCalibration{A}` and `SingleCalibration{A}` which are subtypes of `AbstractCalibration{A}`.
 
 ### MultipleCalibration
-This type fits and stores calibration curve. It can be created from a `MethodTable{A, T}` containing calibration data, an analyte `A`.
+This type fits and stores calibration curve. It can be created from a `MethodTable{A, T}` containing calibration data, an analyte `A` using function `calibration`.
 |Field|Description|
 |----------|-----------|
 |`analyte`|`Tuple{A, Any}`. First element is the analyte being quantified, and the second element is its internal standard for which `nothing` indicates no internal standard.|
@@ -71,7 +71,7 @@ The columns in `table`:
 |`accuracy`|Accuracy, i.e. `x̂/x`.|
 |`include`|Whether this point is included or not|
 
-To fit a new model, call `calfit` or `calfit!` for inplace substitution of `model`. To predict concentration, call `inv_predict` or `inv_predict!` for inplace replacement of `table.x̂`. To calculate accuracy, call `accuracy` or `acccuracy!` for inplace replacement of `table.accuracy`. `inv_predict_accuracy!` calls `inv_predict!` and `acccuracy!` subsequently. `type`, `zero`, and `weigtht` can be modified directly. To change internal standard, modify `analyte` and call `update_calibration!` with method (It is not recommended to change internal standard in this way, see `set_isd!` in [`Batch`](#batch) section). 
+To predict concentration, call `inv_predict` or `inv_predict!` for inplace replacement of `table.x̂`. To calculate accuracy, call `accuracy` or `acccuracy!` for inplace replacement of `table.accuracy`. `inv_predict_accuracy!` calls `inv_predict!` and `acccuracy!` subsequently. `type`, `zero`, and `weigtht` can be modified directly. To change internal standard, modify `analyte`. After any modification, call `update_calibration!` with method to update the `model`.
 
 ### SingleCalibration
 This type contains data for single pont calibration. 
@@ -95,7 +95,7 @@ This type contains data for single pont calibration.
 
 It can be created with only `method` and optionally `data`.
 
-To fit new models for all `calibration`, call `calfit!`. To predict concentration and calculate accuracy for calibration points, call `inv_predict!` and `acccuracy!`, respectively. To calculate relative signal, concentration or accuracy and save the result, call `update_relative_signal!`, `update_inv_predict!` (in combination, `update_quantification!`) and `update_accuracy!`, respectively. `inv_predict_accuracy!` calls `inv_predict_cal!` and `acccuracy!` subsequently. To change internal standard, call `set_isd!` with object `analyte` and `isd`.
+To predict concentration and calculate accuracy for calibration points, call `inv_predict!` and `acccuracy!`, respectively. To calculate relative signal, concentration or accuracy and save the result, call `update_relative_signal!`, `update_inv_predict!` (in combination, `update_quantification!`) and `update_accuracy!`, respectively. `inv_predict_accuracy!` calls `inv_predict_cal!` and `acccuracy!` subsequently. To change internal standard, call `set_isd!` with object `analyte` and `isd`.
 
 ## Reading and writting data to disk
 To use data on disk, user should create a directory in the following structure:

@@ -5,7 +5,6 @@ import Tables: istable, rowaccess, rows, columnaccess, columns
 export MultipleCalibration, SingleCalibration, 
     ColumnDataTable, RowDataTable, AnalysisTable, MethodTable,
     Batch, calibration, update_calibration!,
-    read_calibration, read_datatable, read_analysistable, read_methodtable, read_batch,
     dynamic_range, lloq, uloq, accuracy, accuracy!, set_accuracy, set_accuracy!, update_accuracy!,
     inv_predict, inv_predict!, inv_predict_accuracy!, set_inv_predict, set_inv_predict!, update_inv_predict!,
     relative_signal, set_relative_signal, set_relative_signal!, update_relative_signal!,
@@ -13,7 +12,7 @@ export MultipleCalibration, SingleCalibration,
     findanalyte, getanalyte, findsample, getsample, set_isd!, eachanalyte, eachsample,
     formula_repr, weight_repr, weight_value, formula_repr_utf8, weight_repr_utf8, format_number
 
-import Base: getproperty, show, write, eltype, length, iterate
+import Base: getproperty, show, write, eltype, length, iterate, getindex, setindex!
     
 abstract type AbstractCalibration{A} end
 abstract type AbstractDataTable{A, T} end
@@ -444,29 +443,25 @@ function getproperty(batch::Batch, p::Symbol)
     end
 end
 
-include("tables.jl")
+include("interface.jl")
 include("utils.jl")
 include("cal.jl")
 include("io.jl")
 
 """
-    ColumnDataTable(tbl::RowDataTable{A, T}, samplecol::Symbol) where {A, T}
-    ColumnDataTable{S}(tbl::RowDataTable{A, T}, samplecol::Symbol) where {A, S, T}
+    ColumnDataTable(tbl::RowDataTable{A, T}, samplecol::Symbol, tablesink = T; sampletype = String)
 
-Convert `RowDataTable` to `ColumnDataTable` with `samplecol` as the column name of sample. `S` must be provided if `T` is not a valid constructor.
+Convert `RowDataTable` to `ColumnDataTable` with `samplecol` as the column name of sample. `sampletype` is either a constructor or a function taking `Symbol` as input.
 """
-ColumnDataTable(tbl::RowDataTable{A, T}, samplecol::Symbol) where {A, T} = ColumnDataTable{T}(tbl, samplecol)
-ColumnDataTable{T}(tbl::RowDataTable{A}, samplecol::Symbol) where {A, T} = 
-    ColumnDataTable{T}(tbl.analyte, samplecol, T((; (samplecol => tbl.sample, (tbl.analytename .=> getanalyte.(Ref(tbl), tbl.analytename))...)...)))
+ColumnDataTable(tbl::RowDataTable{A, T}, samplecol::Symbol, tablesink = T; sampletype = String) where {A, T} = 
+    ColumnDataTable(tbl.analyte, samplecol, tablesink((; (samplecol => sampletype.(tbl.sample), (tbl.analytename .=> eachanalyte(tbl))...)...)))
 
 """
-    RowDataTable(tbl::RowDataTable{A, T}, analytecol::Symbol) where {A, T}
-    RowDataTable{S}(tbl::RowDataTable{A, T}, analytecol::Symbol) where {A, S, T}
+    RowDataTable(tbl::ColumnDataTable{A, T}, analytecol::Symbol, tablesink = T)
 
-Convert `RowDataTable` to `ColumnDataTable` with `analytecol` as the column name of sample. `S` must be provided if `T` is not a valid constructor.
+Convert `RowDataTable` to `ColumnDataTable` with `analytecol` as the column name of sample.
 """
-RowDataTable(tbl::ColumnDataTable{A, T}, analytecol::Symbol) where {A, T} = RowDataTable{T}(tbl, analytecol)
-RowDataTable{T}(tbl::ColumnDataTable{A}, analytecol::Symbol) where {A, T} = 
-    RowDataTable{T}(tbl.analyte, tbl.samplename, T((; (analytecol => tbl.analyte, (tbl.samplename .=> getsample.(Ref(tbl), tbl.samplename))...)...)))
+RowDataTable(tbl::ColumnDataTable{A, T}, analytecol::Symbol, tablesink = T) where {A, T} = 
+    RowDataTable(tbl.analyte, analytecol, tbl.samplename, tablesink((; (analytecol => tbl.analyte, (tbl.samplename .=> eachsample(tbl))...)...)))
 
 end

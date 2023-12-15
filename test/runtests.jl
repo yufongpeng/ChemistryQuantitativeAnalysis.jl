@@ -100,7 +100,7 @@ end
                 DataFrame(
                     "Sample" => ["S1", "S2", "S3"], 
                     "G1(drug_a)" => Float64[6, 24, 54],
-                    "G2(drug_a)" => Float64[6, 6, 6],
+                    "G2(drug_a)" => Float64[5, 6, 6],
                     "G1(drug_b)" => Float64[200, 800, 9800],
                     "G2(drug_b)" => Float64[2, 2, 2]), 
                 :Sample; 
@@ -124,9 +124,11 @@ end
         global cbatch = Batch(method, cdata)
         global rbatch = Batch(method, rdata)
         @test getanalyte(cdata.area, 1) == getanalyte(rdata.area, 1)
+        @test getanalyte(cdata.area, 1) == getanalyte(ColumnDataTable(rdata.area, :Sample), 1)
         @test getsample(cdata.area, 2) == getsample(rdata.area, 2)
+        @test getsample(RowDataTable(cdata.area, :Analyte), 2) == getsample(rdata.area, 2)
     end
-    @testset "Tables.jl" begin
+    @testset "Interface.jl" begin
         cdata2 = AnalysisTable([:area], [
             ColumnDataTable(
                 Table(cdata.area.table), 
@@ -143,12 +145,16 @@ end
                 )
             ]
         )
-        @test [i for i in cdata2.area] == [i for i in cdata2.area.table]
-        @test [i for i in rdata2.area] == [i for i in rdata2.area.table]
+        cdata.area[1, "G2(drug_a)"] = 6
+        @test cdata.area[1, "G1(drug_a)"] == 6
+        @test collect(cdata2.area) == collect(cdata2.area.table)
+        @test collect(rdata2.area) == collect(rdata2.area.table)
         @test columns(cdata2.area) == columns(cdata2.area.table)
         @test columns(rdata2.area) == columns(rdata2.area.table)
         @test rows(cdata2.area) == rows(cdata2.area.table)
         @test rows(rdata2.area) == rows(rdata2.area.table)
+        @test collect(eachanalyte(cdata.area)) == collect(eachanalyte(rdata.area))
+        @test collect(eachsample(cdata.area)) == collect(eachsample(rdata.area))
     end
     @testset "Calibration" begin
         cbatch.calibration[2].type = false
