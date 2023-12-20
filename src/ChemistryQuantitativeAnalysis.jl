@@ -197,8 +197,8 @@ Tabular data wrapper for calibration method. `A` determines analyte type, and `T
 * `level`: `Vector{Symbol}`, calibration levels, identical to `conctable.sample`.
 
 # Constructors
-* `MethodTable(signal, analyte_map, level_map, conctable, signaltable = nothing)`
-* `MethodTable{T}(signal, analyte_map, level_map, conctable, signaltable = nothing)`
+* `MethodTable(analyte_map, signal, level_map, conctable, signaltable = nothing)`
+* `MethodTable{T}(analyte_map, signal, level_map, conctable, signaltable = nothing)`
 """
 struct MethodTable{A, T} <: AbstractAnalysisTable{A, T}
     analyte_map::Table

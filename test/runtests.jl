@@ -82,19 +82,6 @@ end
             analytetype = AnalyteTest
         )
         global method = MethodTable(conctable, signaltable, :area, repeat(1:7, 3); analyte = AnalyteTest.(analyte_names), isd = [2, -1, 4, -1], calibration = [1, -1, 3, -1])
-        global rdata = AnalysisTable([:area], [
-            RowDataTable(
-                DataFrame(
-                    "Analyte" => analyte_names, 
-                    "S1" => Float64[6, 6, 200, 2],
-                    "S2" => Float64[24, 6, 800, 2],
-                    "S3" => Float64[54, 6, 9800, 2]
-                    ), 
-                :Analyte; 
-                analytetype = AnalyteTest
-                )
-            ]
-        )
         global cdata = AnalysisTable([:area], [
             ColumnDataTable(
                 DataFrame(

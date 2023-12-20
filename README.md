@@ -43,7 +43,7 @@ This type is used for storing method, containing all analytes, their internal st
 |`tables`|`Dictionary{Symbol, <: AbstractDataTable{A, <: T}}`, a dictionary mapping data type to datatable.|
 |Other|All keys of `tables`|
 
-The key for signal data is determined by `method.signal`. Default names for relative signal, true concentration, estimated concentration and accuracy are `relative_signal`, `true_concentration`, `estimated_concentration` and `accuracty`.
+The key for signal data is determined by `method.signal`. Default names for relative signal, true concentration, estimated concentration and accuracy are `relative_signal`, `true_concentration`, `estimated_concentration` and `accuracy`.
 
 ## Calibration
 This package provides two calibration types, `MultipleCalibration{A}` and `SingleCalibration{A}` which are subtypes of `AbstractCalibration{A}`.
@@ -187,9 +187,9 @@ level_for_2nd_point
 .
 .
 ```
-`signal` specify `.dt` file serving as signal data. For the above file, `method.mt/area.dt` will be `method.signaltable`.
+`signal` specify which `.dt` file serving as signal data. For the above file, `method.mt/area.dt` will be `method.signaltable`.
 
-`level_map` maps each point to level which should be integera as well.
+`level_map` maps each point to level which should be integers as well.
 
 `analyte_map.txt` contains analyte names, index of their internal standards, and index of of other analytes whose calibration curve is used. 
 ```
@@ -208,12 +208,119 @@ It can contain multiple `*.dt`. The file names must start from an integer, `_` a
 ### Reading and writing Batch
 To read a batch into julia, call `ChemistryQuantitativeAnalysis.read`.
 ```julia-repl
-julia> ChemistryQuantitativeAnalysis.read("batch_name.batch", T; table_type, analytetype)
+julia> batch = ChemistryQuantitativeAnalysis.read("batch_name.batch", T; table_type, analytetype)
 ```
 `T` is the sink function for tabular data; it should create an object following `Tables.jl` interface. `table_type` is `T` parameter in the type signature of `Batch` which determines the underlying table type, and `analytetype` is a concrete type for `analyte` which msut have a method for string input.
 
 To write project to disk, call `ChemistryQuantitativeAnalysis.write`. There is a keyword argument `delim` controling whether using "\t" or "," as delim for tables.
 ```julia-repl
-julia> ChemistryQuantitativeAnalysis.write("batch_name.pjc", batch; delim = "\t")
+julia> ChemistryQuantitativeAnalysis.write("batch_name.batch", batch; delim = "\t")
 ```
 There will be a folder `calibration` containing multiple `*.mcal` or `*.scal` folders. The former is for `MultipleCalibration` and the latter is for `SingleCalibration`.
+
+## Examples
+```julia
+using ChemistryQuantitativeAnalysis, TypedTables, DataFrames
+import Base: show
+
+# Custom Analyte type
+struct AnalyteG1
+    name::String
+end
+struct AnalyteG2
+    name::String
+end
+struct AnalyteOther
+    name::String
+end
+const AnalyteTest = Union{AnalyteG1, AnalyteG2, AnalyteOther}
+show(io::IO, analyte::AnalyteTest) = print(io, analyte.name)
+
+# Analyte parser
+function Union{AnalyteG1, AnalyteG2, AnalyteOther}(name::String)
+    g = match(r"^G(\d)\(.*\)$", name)
+    isnothing(g) && return AnalyteOther(name)
+    g = parse(Int, first(g))
+    g == 1 ? AnalyteG1(name) : g == 2 ? AnalyteG2(name) : AnalyteOther(name)
+end
+
+# Generate data
+analyte_names = ["G1(drug_a)", "G2(drug_a)", "G1(drug_b)", "G2(drug_b)"]
+conc = Float64[1, 2, 5, 10, 20, 50, 100]
+signal1 = vcat(Float64[1, 2, 5, 10, 20, 50, 100], [1, 2, 5, 10, 20, 50, 100] .+ 0.1, [1, 2, 5, 10, 20, 50, 100] .- 0.1)
+signal2 = vcat(Float64[1, 2, 5, 10, 20, 50, 100] .^ 2, [1, 2, 5, 10, 20, 50, 100] .^ 2 .+ 0.1, [1, 2, 5, 10, 20, 50, 100] .^ 2 .- 0.1)
+
+# Create method
+conctable = ColumnDataTable(
+   DataFrame(
+         "level" => collect(1:7), 
+         "G1(drug_a)" => conc,
+         "G1(drug_b)" => conc .* 10), 
+   :level; 
+   analytetype = AnalyteTest
+)
+signaltable = ColumnDataTable(
+   DataFrame(
+         "point" => repeat(1:7, 3), 
+         "G1(drug_a)" => signal1,
+         "G2(drug_a)" => repeat([5.0], 21),
+         "G1(drug_b)" => signal2,
+         "G2(drug_b)" => repeat([2.0], 21)), 
+   :point; 
+   analytetype = AnalyteTest
+)
+method = MethodTable(conctable, signaltable, :area, repeat(1:7, 3); analyte = AnalyteTest.(analyte_names), isd = [2, -1, 4, -1], calibration = [1, -1, 3, -1])
+
+# Create sample data
+rdata = AnalysisTable([:area], [
+   RowDataTable(
+         DataFrame(
+            "Analyte" => analyte_names, 
+            "S1" => Float64[6, 6, 200, 2],
+            "S2" => Float64[24, 6, 800, 2],
+            "S3" => Float64[54, 6, 9800, 2]
+            ), 
+         :Analyte; 
+         analytetype = AnalyteTest
+         )
+   ]
+)
+cdata = AnalysisTable([:area], [
+   ColumnDataTable(
+         DataFrame(
+            "Sample" => ["S1", "S2", "S3"], 
+            "G1(drug_a)" => Float64[6, 24, 54],
+            "G2(drug_a)" => Float64[5, 6, 6],
+            "G1(drug_b)" => Float64[200, 800, 9800],
+            "G2(drug_b)" => Float64[2, 2, 2]), 
+         :Sample; 
+         analytetype = AnalyteTest
+         )
+   ]
+)
+
+# Create batch
+cbatch = Batch(method, cdata)
+rbatch = Batch(method, rdata)
+
+# Calibration
+cbatch.calibration # a vector of `MultipleCalibration`
+cbatch.calibration[2].type = false # Use quadratic regression for the second analyte
+update_calibration!(cbatch, 2)
+
+# Quantification
+update_relative_signal!(cbatch) # A new data `cbatch.data.relative_signal` is created.
+update_inv_predict!(cbatch) # Fit `cbatch.data.relative_signal` into calibration curve to create `cbatch.data.estimated_concentration`.
+update_quantification!(cbatch) # equivalent to `update_inv_predict!(update_relative_signal!(cbatch))`
+
+# Utils
+cdata.area[1, "G2(drug_a)"] = 6
+cdata.area[1, "G1(drug_a)"] == 6
+collect(eachanalyte(cdata.area))
+collect(eachsample(cdata.area))
+getanalyte(cdata.area, AnalyteG1("G1(drug_b)"))
+getsample(cdata.area, "S2")
+dynamic_range(cbatch.calibration[1])
+signal_range(rbatch.calibration[2])
+formula_repr(cbatch.calibration[2])
+```
