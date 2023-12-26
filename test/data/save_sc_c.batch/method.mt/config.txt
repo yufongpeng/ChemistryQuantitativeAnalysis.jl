@@ -1,5 +1,5 @@
 [signal]
 area
 
-[level_map]
+[pointlevel]
 1

@@ -10,6 +10,12 @@ Base.iterate(tbl::ColumnDataTable, st = 1) = st > length(tbl) ? nothing : (first
 Base.iterate(tbl::RowDataTable, st = 1) = st > length(tbl) ? nothing : (first(Base.iterate(tbl.table, st)), st + 1)
 Base.getindex(tbl::AbstractDataTable, x...) = Base.getindex(tbl.table, x...)
 Base.setindex!(tbl::AbstractDataTable, value, keys...) = Base.setindex!(tbl.table, value, keys...)
+function Base.getindex(calibration::Vector{<: AbstractCalibration{A}}, analyte::B) where {A, B <: A}
+    id = findfirst(x -> first(x.analyte) == analyte, calibration)
+    isnothing(id) && throw(ArgumentError("Analyte $analyte does not have a calibration curve."))
+    calibration[id]
+end
+Dictionaries.set!(at::AnalysisTable, i, v) = set!(at.tables, i, v)
 
 struct EachAnalyte{T}
     table::T

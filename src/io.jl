@@ -103,31 +103,31 @@ function read_methodtable(file::String, T; tabletype = T, analytetype = String, 
     endswith(file, ".mt") || throw(ArgumentError("The file is not a valid table directory"))
     config = read_config(joinpath(file, "config.txt"))
     signal = Symbol(get(config, :signal, :area))
-    analyte_map = CSV.read(joinpath(file, "analyte_map.txt"), Table)
-    analyte = analytetype.(analyte_map.analyte)
-    isd = replace(analyte_map.isd, missing => 0)
+    analytetable = CSV.read(joinpath(file, "analytetable.txt"), Table)
+    analyte = analytetype.(analytetable.analyte)
+    isd = replace(analytetable.isd, missing => 0)
     conctable = read_datatable(joinpath(file, "true_concentration.dt"), T; analytetype, delim)
     if length(conctable.sample) > 1
         signaltable = read_datatable(joinpath(file, "$signal.dt"), T; analytetype, delim)
-        if haskey(config, :level_map)
-            level_map = parse.(Int, config[:level_map])
+        if haskey(config, :pointlevel)
+            pointlevel = parse.(Int, config[:pointlevel])
         else
             nl = length(conctable.sample)
             ns = length(signal.sample)
             nr = ns ÷ nl
             rr = ns - nl * nr
-            level_map = vcat(repeat([1], rr), repeat(1:nl, nr))
+            pointlevel = vcat(repeat([1], rr), repeat(1:nl, nr))
         end
-        calibration = map(enumerate(analyte_map.calibration)) do (i, c)
+        calibration = map(enumerate(analytetable.calibration)) do (i, c)
             ismissing(c) ? i : c
         end
     else
         signaltable = nothing
-        level_map = [1]
+        pointlevel = [1]
         calibration = isd
     end
     Cons = isnothing(tabletype) ? MethodTable : MethodTable{tabletype}
-    Cons(Table(; analyte, isd, calibration), signal, level_map, conctable, signaltable)
+    Cons(Table(; analyte, isd, calibration), signal, pointlevel, conctable, signaltable)
 end
 """
     read_batch(file::String, T; tabletype = T, analytetype = String) -> Batch{A, tabletype}
@@ -186,13 +186,13 @@ function show(io::IO, ::MIME"text/plain", cal::SingleCalibration)
 end
 
 function show(io::IO, batch::Batch{A, T}) where {A, T}
-    print(io, string("Batch{$A, $(shorten_type_repr(T))} with $(length(batch.method.analyte_map.isd .< 0)) internal standards out of $(length(batch.method.analyte_map.analyte)) analytes"))
+    print(io, string("Batch{$A, $(shorten_type_repr(T))} with $(length(batch.method.analytetable.isd .< 0)) internal standards out of $(length(batch.method.analytetable.analyte)) analytes"))
 end
 
 function show(io::IO, ::MIME"text/plain", batch::Batch)
     print(io, batch, ":\n")
     print(io, "∘ Analytes:\n")
-    show(io, MIME"text/plain"(), batch.method.analyte_map)
+    show(io, MIME"text/plain"(), batch.method.analytetable)
     print(io, "\n\n∘ Calibration:\n")
     show(io, MIME"text/plain"(), batch.calibration)
     print(io, "\n\n∘ Data:\n")
@@ -235,15 +235,15 @@ function show(io::IO, ::MIME"text/plain", tbl::AnalysisTable)
 end
 
 function show(io::IO, tbl::MethodTable{A, T}) where {A, T}
-    isnothing(tbl.signaltable) && return print(io, string("MethodTable{$A, $(shorten_type_repr(T))} with $(length(tbl.analyte_map.analyte)) analytes"))
-    print(io, string("MethodTable{$A, $(shorten_type_repr(T))} with $(length(tbl.analyte_map.analyte)) analytes, $(length(tbl.conctable.sample)) levels and $(length(tbl.signaltable.sample)) points."))
+    isnothing(tbl.signaltable) && return print(io, string("MethodTable{$A, $(shorten_type_repr(T))} with $(length(tbl.analytetable.analyte)) analytes"))
+    print(io, string("MethodTable{$A, $(shorten_type_repr(T))} with $(length(tbl.analytetable.analyte)) analytes, $(length(tbl.conctable.sample)) levels and $(length(tbl.signaltable.sample)) points."))
 end
 
 function show(io::IO, ::MIME"text/plain", tbl::MethodTable)
     print(io, tbl, ":\n")
     print(io, "∘ Analytes:\n")
-    show(io, MIME"text/plain"(), tbl.analyte_map)
-    print(io, "\n∘ Level: ", join(tbl.level_map, ", "), "\n")
+    show(io, MIME"text/plain"(), tbl.analytetable)
+    print(io, "\n∘ Level: ", join(tbl.pointlevel, ", "), "\n")
     print(io, "∘ Concentration: \n")
     show(io, MIME"text/plain"(), tbl.conctable.table)
     print(io, "\n∘ Signal: \n")
@@ -279,9 +279,9 @@ function write(file::String, tbl::MethodTable; delim = "\t")
     write(joinpath(file, "true_concentration.dt"), tbl.conctable; delim)
     isnothing(tbl.signaltable) || write(joinpath(file, "$(tbl.signal).dt"), tbl.signaltable; delim)
     open(joinpath(file, "config.txt"), "w+") do config
-        Base.write(config, "[signal]\n", tbl.signal, "\n\n[level_map]\n", join(tbl.level_map, "\n"))
+        Base.write(config, "[signal]\n", tbl.signal, "\n\n[pointlevel]\n", join(tbl.pointlevel, "\n"))
     end
-    CSV.write(joinpath(file, "analyte_map.txt"), tbl.analyte_map; delim)
+    CSV.write(joinpath(file, "analytetable.txt"), tbl.analytetable; delim)
 end
 
 function write(file::String, cal::MultipleCalibration; delim = "\t")

@@ -19,10 +19,10 @@ end
 Return internal standard of `analyte` based on `method`.
 """
 function isd_of(method::MethodTable{A}, analyte::B) where {A, B <: A}
-    aid = findfirst(==(analyte), method.analyte_map.analyte)
+    aid = findfirst(==(analyte), method.analytetable.analyte)
     isnothing(aid) && throw(ArgumentError("Analyte $analyte is not in the method"))
-    iid = method.analyte_map.isd[aid]
-    iid > 0 ? method.analyte_map.analyte[iid] : nothing
+    iid = method.analytetable.isd[aid]
+    iid > 0 ? method.analytetable.analyte[iid] : nothing
 end
 """
     isisd(method::MethodTable{A}, analyte::B) where {A, B <: A}
@@ -30,9 +30,9 @@ end
 Return if `analyte` is a internal standard based on `method`.
 """
 function isisd(method::MethodTable{A}, analyte::B) where {A, B <: A}
-    aid = findfirst(==(analyte), method.analyte_map.analyte)
+    aid = findfirst(==(analyte), method.analytetable.analyte)
     isnothing(aid) && throw(ArgumentError("Analyte $analyte is not in the method"))
-    method.analyte_map.isd[aid] < 0
+    method.analytetable.isd[aid] < 0
 end
 """
     findanalyte(dt::AbstractDataTable{A}, analyte::B) where {A, B <: A}

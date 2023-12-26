@@ -3,7 +3,7 @@ module ChemistryQuantitativeAnalysis
 using GLM, CSV, TypedTables, LinearAlgebra, Dictionaries, ThreadsX, Tables
 import Tables: istable, rowaccess, rows, columnaccess, columns
 export MultipleCalibration, SingleCalibration, 
-    ColumnDataTable, RowDataTable, AnalysisTable, MethodTable,
+    ColumnDataTable, RowDataTable, AnalysisTable, MethodTable, set!,
     Batch, calibration, update_calibration!,
     dynamic_range, lloq, uloq, signal_range, signal_lloq, signal_uloq, accuracy, accuracy!, set_accuracy, set_accuracy!, update_accuracy!,
     inv_predict, inv_predict!, inv_predict_accuracy!, set_inv_predict, set_inv_predict!, update_inv_predict!,
@@ -13,6 +13,7 @@ export MultipleCalibration, SingleCalibration,
     formula_repr, weight_repr, weight_value, formula_repr_utf8, weight_repr_utf8, format_number
 
 import Base: getproperty, propertynames, show, write, eltype, length, iterate, getindex, setindex!
+import Dictionaries: set!
     
 abstract type AbstractCalibration{A} end
 abstract type AbstractDataTable{A, T} end
@@ -180,96 +181,96 @@ propertynames(tbl::AnalysisTable) = Tuple(unique((:analyte, :sample, :tables, ke
 Tabular data wrapper for calibration method. `A` determines analyte type, and `T` determines table type.
 
 # Fields
-* `analyte_map`: `Table` contaning three columns.
+* `analytetable`: `Table` contaning three columns.
     * `analyte`: `Vector{A}`, analytes in user-defined types.
     * `isd`: `Vector{Int}`, index of internal standard. `0` means no internal standard, and `-1` means the analyte itself is a internal standard.
     * `calibration`: index of analyte for calibration curve. `-1` means the analyte itself is a internal standard, so it will not be put into any calibration curve.
 * `signal`: `Symbol`, data type for quantification, e.g. `:area`.
-* `level_map`: `Vector{Int}` matching each point to level. It can be empty if there is only one level in `conctable`.
+* `pointlevel`: `Vector{Int}` matching each point to level. It can be empty if there is only one level in `conctable`.
 * `conctable`: `AbstractDataTable{A, <: T}` containing concentration data for each level. Sample names must be symbol or string of integers for multiple levels. One level indicates using `SingleCalibration`.
 * `signaltable`: `AbstractDataTable{A, <: T}` containig signal for each point. It can be `nothing` if signal data is unecessary.
 
 # Properties
-* `analyte`: `Vector{A}`, analytes in user-defined types, identical to `analyte_map.analyte`.
+* `analyte`: `Vector{A}`, analytes in user-defined types, identical to `analytetable.analyte`.
 * `isd`: `Vector{A}`, analytes which are internal standards.
 * `nonisd`: `Vector{A}`, analytes which are not internal standards.
 * `point`: `Vector{Symbol}`, calibration points, identical to `signaltable.sample`.
 * `level`: `Vector{Symbol}`, calibration levels, identical to `conctable.sample`.
 
 # Constructors
-* `MethodTable(analyte_map, signal, level_map, conctable, signaltable = nothing)`
-* `MethodTable{T}(analyte_map, signal, level_map, conctable, signaltable = nothing)`
+* `MethodTable(analytetable, signal, pointlevel, conctable, signaltable = nothing)`
+* `MethodTable{T}(analytetable, signal, pointlevel, conctable, signaltable = nothing)`
 """
 struct MethodTable{A, T} <: AbstractAnalysisTable{A, T}
-    analyte_map::Table
+    analytetable::Table
     signal::Symbol
-    level_map::Vector{Int}
+    pointlevel::Vector{Int}
     conctable::AbstractDataTable
     signaltable::Union{AbstractDataTable, Nothing}
     function MethodTable{T}(
-                        analyte_map::Table,
+                        analytetable::Table,
                         signal::Symbol,
-                        level_map::Vector{Int}, 
+                        pointlevel::Vector{Int}, 
                         conctable::AbstractDataTable{B, <: T}, 
                         signaltable::AbstractDataTable{C, <: T}) where {B, C, T}
-        cp = propertynames(analyte_map)
-        :analyte in cp || throw(ArgumentError("Column `:analyte` is required in `analyte_map"))
-        :isd in cp || throw(ArgumentError("Column `:isd` is required in `analyte_map"))
-        :calibration in cp || throw(ArgumentError("Column `:calibration` is required in `analyte_map"))
-        A = eltype(analyte_map.analyte)
+        cp = propertynames(analytetable)
+        :analyte in cp || throw(ArgumentError("Column `:analyte` is required in `analytetable"))
+        :isd in cp || throw(ArgumentError("Column `:isd` is required in `analytetable"))
+        :calibration in cp || throw(ArgumentError("Column `:calibration` is required in `analytetable"))
+        A = eltype(analytetable.analyte)
         B <: A || throw(ArgumentError("Analyte type of conctable should be a subtype of $A"))
         C <: A || throw(ArgumentError("Analyte type of signaltable should be a subtype of $A"))
         for a in conctable.analyte
-            a in analyte_map.analyte || throw(ArgumentError("Analyte `$a` is not in the `analyte_map`."))
+            a in analytetable.analyte || throw(ArgumentError("Analyte `$a` is not in the `analytetable`."))
         end
         if length(conctable.sample) > 1
-            length(level_map) == length(signaltable.sample) || throw(ArgumentError("The length of `level_map` is different from that of `table.sample`."))
+            length(pointlevel) == length(signaltable.sample) || throw(ArgumentError("The length of `pointlevel` is different from that of `table.sample`."))
             for a in conctable.analyte
                 a in signaltable.analyte || throw(ArgumentError("Analyte `$a` is not in the `signatable`."))
             end
         end
-        new{A, T}(analyte_map, signal, level_map, conctable, signaltable)
+        new{A, T}(analytetable, signal, pointlevel, conctable, signaltable)
     end
     function MethodTable{T}(
-                        analyte_map::Table,
+                        analytetable::Table,
                         signal::Symbol,
-                        level_map::Vector{Int}, 
+                        pointlevel::Vector{Int}, 
                         conctable::AbstractDataTable{B, <: T}, 
                         signaltable::Nothing) where {B, T}
-        cp = propertynames(analyte_map)
-        :analyte in cp || throw(ArgumentError("Column `:analyte` is required in `analyte_map"))
-        :isd in cp || throw(ArgumentError("Column `:isd` is required in `analyte_map"))
-        :calibration in cp || throw(ArgumentError("Column `:calibration` is required in `analyte_map"))
-        A = eltype(analyte_map.analyte)
+        cp = propertynames(analytetable)
+        :analyte in cp || throw(ArgumentError("Column `:analyte` is required in `analytetable"))
+        :isd in cp || throw(ArgumentError("Column `:isd` is required in `analytetable"))
+        :calibration in cp || throw(ArgumentError("Column `:calibration` is required in `analytetable"))
+        A = eltype(analytetable.analyte)
         B <: A || throw(ArgumentError("Analyte type of conctable should be a subtype of $A"))
         for a in conctable.analyte
-            a in analyte_map.analyte || throw(ArgumentError("Analyte `$a` is not in the `analyte_map`."))
+            a in analytetable.analyte || throw(ArgumentError("Analyte `$a` is not in the `analytetable`."))
         end
-        new{A, T}(analyte_map, signal, level_map, conctable, signaltable)
+        new{A, T}(analytetable, signal, pointlevel, conctable, signaltable)
     end
 end
 
 MethodTable(
-            analyte_map::Table,
+            analytetable::Table,
             signal::Symbol,
-            level_map::Vector{Int}, 
+            pointlevel::Vector{Int}, 
             conctable::AbstractDataTable{B, T}, 
-            signaltable::Nothing) where {B, T} = MethodTable{T}(analyte_map, signal, level_map, conctable, signaltable)
+            signaltable::Nothing) where {B, T} = MethodTable{T}(analytetable, signal, pointlevel, conctable, signaltable)
 
 MethodTable(
-            analyte_map::Table,
+            analytetable::Table,
             signal::Symbol,
-            level_map::Vector{Int}, 
+            pointlevel::Vector{Int}, 
             conctable::AbstractDataTable{B, T}, 
-            signaltable::AbstractDataTable{C, S}) where {B, C, T, S} = MethodTable{promote_type(T, S)}(analyte_map, signal, level_map, conctable, signaltable)
+            signaltable::AbstractDataTable{C, S}) where {B, C, T, S} = MethodTable{promote_type(T, S)}(analytetable, signal, pointlevel, conctable, signaltable)
 
 function getproperty(tbl::MethodTable, p::Symbol)
     if p == :analyte
-        getfield(tbl, :analyte_map).analyte
+        getfield(tbl, :analytetable).analyte
     elseif p == :isd
-        getfield(tbl, :analyte_map).analyte[getfield(tbl, :analyte_map).isd .< 0]
+        getfield(tbl, :analytetable).analyte[getfield(tbl, :analytetable).isd .< 0]
     elseif p == :nonisd
-        getfield(tbl, :analyte_map).analyte[getfield(tbl, :analyte_map).isd .>= 0]
+        getfield(tbl, :analytetable).analyte[getfield(tbl, :analytetable).isd .>= 0]
     elseif p == :point
         s = getfield(tbl, :signaltable)
         isnothing(s) ? s : s.sample
@@ -279,43 +280,43 @@ function getproperty(tbl::MethodTable, p::Symbol)
         getfield(tbl, p)
     end
 end
-propertynames(tbl::MethodTable) = (:analyte_map, :signal, :level_map, :conctable, :signaltable, :analyte, :isd, :nonisd, :point, :level)
+propertynames(tbl::MethodTable) = (:analytetable, :signal, :pointlevel, :conctable, :signaltable, :analyte, :isd, :nonisd, :point, :level)
 
 """
-    MethodTable(conctable::AbstractDataTable, signaltable::Union{AbstractDataTable, Nothing}, signal, level_map = []; kwargs...)
-    MethodTable{T}(conctable::AbstractDataTable, signaltable::Union{AbstractDataTable, Nothing}, signal, level_map = []; kwargs...)
+    MethodTable(conctable::AbstractDataTable, signaltable::Union{AbstractDataTable, Nothing}, signal, pointlevel = []; kwargs...)
+    MethodTable{T}(conctable::AbstractDataTable, signaltable::Union{AbstractDataTable, Nothing}, signal, pointlevel = []; kwargs...)
 
-User-friendly contructors for `MethodTable`. `kwargs` will be columns in `analyte_map`; when `analyte`, `isd` and `calibration` are not provided, it will use analyte in `conctable`.
+User-friendly contructors for `MethodTable`. `kwargs` will be columns in `analytetable`; when `analyte`, `isd` and `calibration` are not provided, it will use analyte in `conctable`.
 """
 MethodTable(conctable::AbstractDataTable{A, T}, 
             signaltable::AbstractDataTable{B, S},
             signal::Symbol,
-            level_map::Vector{Int}; kwargs...) where {A, B, T, S} = MethodTable{promote_type(T, S)}(conctable, signaltable, signal, level_map; kwargs...)
+            pointlevel::Vector{Int}; kwargs...) where {A, B, T, S} = MethodTable{promote_type(T, S)}(conctable, signaltable, signal, pointlevel; kwargs...)
 MethodTable(conctable::AbstractDataTable{A, T}, 
             signaltable::Nothing,
             signal::Symbol,
-            level_map::Vector{Int} = Int[]; kwargs...) where {A, T} = MethodTable{A, T}(conctable, signaltable, signal, level_map; kwargs...)
+            pointlevel::Vector{Int} = Int[]; kwargs...) where {A, T} = MethodTable{A, T}(conctable, signaltable, signal, pointlevel; kwargs...)
 function MethodTable{T}(conctable::AbstractDataTable, 
                     signaltable::Union{AbstractDataTable, Nothing},
                     signal::Symbol,
-                    level_map::Vector{Int}; kwargs...
+                    pointlevel::Vector{Int}; kwargs...
             ) where T
-    analyte_map = if isempty(kwargs)
+    analytetable = if isempty(kwargs)
         Table(; analyte = conctable.analyte)
     else
         Table(; kwargs...)
     end
-    if !in(:analyte, propertynames(analyte_map))
-        analyte_map = Table(analyte_map; analyte = conctable.analyte)
+    if !in(:analyte, propertynames(analytetable))
+        analytetable = Table(analytetable; analyte = conctable.analyte)
     end       
-    if !in(:isd, propertynames(analyte_map))
-        analyte_map = Table(analyte_map; isd = zeros(Int, length(conctable.analyte)))
+    if !in(:isd, propertynames(analytetable))
+        analytetable = Table(analytetable; isd = zeros(Int, length(conctable.analyte)))
     end
-    if !in(:calibration, propertynames(analyte_map))
-        analyte_map = Table(analyte_map; calibration = collect(eachindex(conctable.analyte)))
+    if !in(:calibration, propertynames(analytetable))
+        analytetable = Table(analytetable; calibration = collect(eachindex(conctable.analyte)))
     end
-    analyte_map = Table((; analyte = analyte_map.analyte, isd = analyte_map.isd, calibration = analyte_map.calibration), analyte_map)    
-    MethodTable{T}(analyte_map, signal, level_map, conctable, signaltable)
+    analytetable = Table((; analyte = analytetable.analyte, isd = analytetable.isd, calibration = analytetable.calibration), analytetable)    
+    MethodTable{T}(analytetable, signal, pointlevel, conctable, signaltable)
 end
       
 """
@@ -374,7 +375,7 @@ A type represents a batch for quantitative analysis. `A` determines analyte type
 * `data`: Data for analysis, `AnalysisTable{A, <: T}` or `Nothing`.
 
 # Properties
-* `analyte`: `Vector{A}`, analytes in user-defined types, identical to `method.analyte_map.analyte`.
+* `analyte`: `Vector{A}`, analytes in user-defined types, identical to `method.analytetable.analyte`.
 * `isd`: `Vector{<: A}`, analytes which are internal standards.
 * `nonisd`: `Vector{<: A}`, analytes which are not internal standards.
 * `point`: `Vector{Symbol}`, calibration points, identical to `method.signaltable.sample`.

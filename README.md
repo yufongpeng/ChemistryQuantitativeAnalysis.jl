@@ -23,9 +23,9 @@ The package provides another two wrappers, `MethodTable{A, T}`, and `AnalysisTab
 This type is used for storing method, containing all analytes, their internal standards and calibration curve setting, and data for fitting calibration curve.
 |Property|Description|
 |----------|---------|
-|`analyte_map`|`Table` with 3 columns, `analytes` identical to property `analytes`, `isd`, matching each analyte to index of its internal standard, and `calibration` matching each analyte to index of other analyte for fitting its calibration curve. `-1` indicates the analyte itself is internal standard, and `0` indicates no internal standard. For example, a row `(analytes = AnalyteX, isd = 2, calibration = 3)` means that internal standard of `AnalyteX` is the second analyte, and it will be quantified using calibration curve of the third analyte.|
+|`analytetable`|`Table` with 3 columns, `analytes` identical to property `analytes`, `isd`, matching each analyte to index of its internal standard, and `calibration` matching each analyte to index of other analyte for fitting its calibration curve. `-1` indicates the analyte itself is internal standard, and `0` indicates no internal standard. For example, a row `(analytes = AnalyteX, isd = 2, calibration = 3)` means that internal standard of `AnalyteX` is the second analyte, and it will be quantified using calibration curve of the third analyte.|
 |`signal`|`Symbol`, propertyname for extracting signal data from an `AnalysisTable`|
-|`level_map`|`Vector{Int}` matching each point to level. It can be empty if there is only one level in `conctable`.|
+|`pointlevel`|`Vector{Int}` matching each point to level. It can be empty if there is only one level in `conctable`.|
 |`conctable`|`AbstractDataTable{A, <: T}` containing concentration data for each level. Sample names must be symbol or string of integers for multiple levels. One level indicates using `SingleCalibration`.|
 |`signaltable`|`AbstractDataTable{A, <: T}` containig signal for each point. It can be `nothing` if signal data is unecessary.|
 |`analyte`|`Vector{A}`, analytes in user-defined types.|
@@ -87,7 +87,7 @@ This type contains data for single pont calibration.
 |`method`|`MethodTable{A, <: T}`, method.|
 |`calibration`|`Vector{MultipleCalibration{<: A}}` or `Vector{SingleCalibration{<: A}}`|
 |`data`|Data for analysis, `AnalysisTable{A, <: T}` or `Nothing`.|
-|`analyte`|`Vector{A}`, analytes in user-defined types, identical to `method.analyte_map.analyte`.|
+|`analyte`|`Vector{A}`, analytes in user-defined types, identical to `method.analytetable.analyte`.|
 |`isd`|`Vector{<: A}`, analytes which are internal standards.|
 |`nonisd`|`Vector{A}` that each analytes are not internal standards.|same|
 |`point`|`Vector{Symbol}`, calibration points, identical to `method.signaltable.samples`.|
@@ -109,7 +109,7 @@ batch_name.batch
 │  ├──area.dt
 │  │  ├──config.txt
 │  │  └──table.txt
-│  ├──analyte_map.txt
+│  ├──analytetable.txt
 │  └──config.txt
 ├──calibration
 │  ├──1.mcal
@@ -175,12 +175,12 @@ User can also provide `delim` to overwrite the default one defined in `batch_nam
 It must contain two `*dt` files. `true_concentrstion.dt` contains true concentration for each analyte and level. The sample names must be integers.
 Another `*.dt` file is signal data for each analyte and calibration point. The file name is determined by `config.txt`.
 
-Config file for `method.mt` needs two properties, `signal` and `level_map`.
+Config file for `method.mt` needs two properties, `signal` and `pointlevel`.
 ```
 [signal]
 area
 
-[level_map]
+[pointlevel]
 level_for_1st_point
 level_for_2nd_point
 .
@@ -189,9 +189,9 @@ level_for_2nd_point
 ```
 `signal` specify which `.dt` file serving as signal data. For the above file, `method.mt/area.dt` will be `method.signaltable`.
 
-`level_map` maps each point to level which should be integers as well.
+`pointlevel` maps each point to level which should be integers as well.
 
-`analyte_map.txt` contains analyte names, index of their internal standards, and index of of other analytes whose calibration curve is used. 
+`analytetable.txt` contains analyte names, index of their internal standards, and index of of other analytes whose calibration curve is used. 
 ```
 analytes isd   calibration
 analyte1 isd1  calibration_analyte_id1
@@ -306,7 +306,9 @@ rbatch = Batch(method, rdata)
 # Calibration
 cbatch.calibration # a vector of `MultipleCalibration`
 cbatch.calibration[2].type = false # Use quadratic regression for the second analyte
+rbatch.calibration[AnalyteG1("G1(drug_b)")].type = false # Use quadratic regression for AnalyteG1("G1(drug_b)")
 update_calibration!(cbatch, 2)
+update_calibration!(rbatch, AnalyteG1("G1(drug_b)"))
 
 # Quantification
 update_relative_signal!(cbatch) # A new data `cbatch.data.relative_signal` is created.

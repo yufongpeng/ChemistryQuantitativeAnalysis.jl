@@ -9,12 +9,12 @@ Calculate relative signal, and return the result as `AbstractDataTable` using `g
 relative_signal(method::MethodTable, at::AnalysisTable; signal = method.signal) = relative_signal(method, getproperty(at, signal))
 relative_signal(batch::Batch, at::AnalysisTable; signal = batch.method.signal) = relative_signal(batch.method, at; signal)
 function relative_signal(method::MethodTable, dt::AbstractDataTable)
-    analyte_map = method.analyte_map
-    aid = [findfirst(==(analyte), analyte_map.analyte) for analyte in dt.analyte]
+    analytetable = method.analytetable
+    aid = [findfirst(==(analyte), analytetable.analyte) for analyte in dt.analyte]
     cs = ThreadsX.map(eachindex(aid)) do i
-        analyte_map.isd[aid[i]] < 0 ? repeat([NaN], length(dt.sample)) :
-                analyte_map.isd[aid[i]] == 0 ? getanalyte(dt, dt.analyte[i]) :
-                getanalyte(dt, dt.analyte[i]) ./ getanalyte(dt, analyte_map.analyte[analyte_map.isd[aid[i]]])
+        analytetable.isd[aid[i]] < 0 ? repeat([NaN], length(dt.sample)) :
+                analytetable.isd[aid[i]] == 0 ? getanalyte(dt, dt.analyte[i]) :
+                getanalyte(dt, dt.analyte[i]) ./ getanalyte(dt, analytetable.analyte[analytetable.isd[aid[i]]])
     end
     fill_result!(deepcopy(dt), cs)
 end
@@ -31,7 +31,7 @@ Calculate relative signal, update or insert the value into `at` or a copy of `at
 set_relative_signal(at::AnalysisTable, batch::Batch; signal = batch.method.signal, relsig = :relative_signal) = 
     set_relative_signal(at, batch.method; signal, relsig)
 function set_relative_signal(at::AnalysisTable, method::MethodTable; signal = method.signal, relsig = :relative_signal)
-    result = relative_signal(method, getproperty(at, signal))
+    result = relative_signal(method, at; signal)
     new = AnalysisTable(at.analyte, at.sample, Dictionary(at.tables))
     set!(new.tables, relsig, result)
     new
@@ -39,7 +39,7 @@ end
 set_relative_signal!(at::AnalysisTable, batch::Batch; signal = batch.method.signal, relsig = :relative_signal) = 
     set_relative_signal!(at, batch.method; signal, relsig)
 function set_relative_signal!(at::AnalysisTable, method::MethodTable; signal = method.signal, relsig = :relative_signal)
-    result = relative_signal(method, getproperty(at, signal))
+    result = relative_signal(method, at; signal)
     set!(at.tables, relsig, result)
     at
 end
@@ -65,9 +65,9 @@ inv_predict(batch::Batch, at::AnalysisTable; relsig = :relative_signal) =
     inv_predict(batch, getproperty(at, relsig))
 
 function inv_predict(batch::Batch, dt::AbstractDataTable)
-    analyte_map = batch.method.analyte_map
-    cid = [analyte_map.calibration[findfirst(==(analyte), analyte_map.analyte)] for analyte in dt.analyte]
-    cal_id = [id > 0 ? findfirst(cal -> first(cal.analyte) == analyte_map.analyte[id], batch.calibration) : nothing for id in cid]
+    analytetable = batch.method.analytetable
+    cid = [analytetable.calibration[findfirst(==(analyte), analytetable.analyte)] for analyte in dt.analyte]
+    cal_id = [id > 0 ? findfirst(cal -> first(cal.analyte) == analytetable.analyte[id], batch.calibration) : nothing for id in cid]
     cs = ThreadsX.map(eachindex(cal_id)) do i
         isnothing(cal_id[i]) ? repeat([NaN], length(dt.sample)) : 
             inv_predict(batch.calibration[cal_id[i]], getanalyte(dt, dt.analyte[i]))
@@ -108,13 +108,13 @@ inv_predict(cal::SingleCalibration, y::AbstractArray) = y .* cal.conc
 Inversely predict concantration, update or insert the value into `at` or a copy of `at` at index `estimated_concentration`, and return the object using `getproperty(at, relsig)` as relstive signal data.
 """
 function set_inv_predict(at::AnalysisTable, batch::Batch; relsig = :relative_signal, estimated_concentration = :estimated_concentration)
-    result = inv_predict(batch, getproperty(at, relsig))
+    result = inv_predict(batch, at; relsig)
     new = AnalysisTable(at.analyte, at.sample, Dictionary(at.tables))
     set!(new.tables, estimated_concentration, result)
     new
 end
 function set_inv_predict!(at::AnalysisTable, batch::Batch; relsig = :relative_signal, estimated_concentration = :estimated_concentration)
-    set!(at.tables, estimated_concentration, inv_predict(batch, getproperty(at, relsig)))
+    set!(at.tables, estimated_concentration, inv_predict(batch, at; relsig))
     at
 end
 
@@ -126,7 +126,7 @@ This function assigns `at` to `batch.data` and returns the updated `batch`.
 """
 function update_inv_predict!(batch::Batch, at::AnalysisTable = batch.data; relsig = :relative_signal, estimated_concentration = :estimated_concentration)
     batch.data = at
-    set!(at.tables, estimated_concentration, inv_predict(batch, getproperty(at, relsig)))
+    set!(at.tables, estimated_concentration, inv_predict(batch, at; relsig))
     batch
 end
 
@@ -165,9 +165,9 @@ Quantify all analyes based on relative signal data, and return the result as `Ab
 """
 quantification(batch::Batch, at::AnalysisTable; signal = batch.method.signal) = quantification(batch, getproperty(at, signal))
 function quantification(batch::Batch, dt::AbstractDataTable)
-    analyte_map = batch.method.analyte_map
-    cid = [analyte_map.calibration[findfirst(==(analyte), analyte_map.analyte)] for analyte in dt.analyte]
-    cal_id = [id > 0 ? findfirst(cal -> first(cal.analyte) == analyte_map.analyte[id], batch.calibration) : nothing for id in cid]
+    analytetable = batch.method.analytetable
+    cid = [analytetable.calibration[findfirst(==(analyte), analytetable.analyte)] for analyte in dt.analyte]
+    cal_id = [id > 0 ? findfirst(cal -> first(cal.analyte) == analytetable.analyte[id], batch.calibration) : nothing for id in cid]
     cs = ThreadsX.map(eachindex(cal_id)) do i
         isnothing(cal_id[i]) && return repeat([NaN], length(dt.sample))
         cal = batch.calibration[cal_id[i]]
@@ -196,7 +196,7 @@ Quantify all analytes, update or insert the values into `at` or a copy of `at` a
 """
 function set_quantification(at::AnalysisTable, batch::Batch; signal = batch.method.signal, relsig = :relative_signal, estimated_concentration = :estimated_concentration)
     new = set_relative_signal(at, batch; signal, relsig)
-    result = inv_predict(batch, getproperty(new, relsig))
+    result = inv_predict(batch, new,; relsig)
     set!(new.tables, estimated_concentration, result)
     new
 end
@@ -340,8 +340,8 @@ function calibration(method::MethodTable{A}, analyte::B;
                     weight = 0
                     ) where {A, B <: A}
 
-    ord = sortperm(method.level_map)
-    level = method.level_map[ord]
+    ord = sortperm(method.pointlevel)
+    level = method.pointlevel[ord]
     conc = getanalyte(method.conctable, analyte)
     table = Table(; 
                     id = id[ord], 
@@ -420,7 +420,7 @@ update_calibration!(batch::Batch, cal_id::Int) = update_calibration!(batch.calib
 function update_calibration!(cal::MultipleCalibration, method::MethodTable)
     isd = isd_of(method, first(cal.analyte))
     cal.analyte = (first(cal.analyte), isd)
-    ord = sortperm(method.level_map)
+    ord = sortperm(method.pointlevel)
     cal.table.y .= isnothing(isd) ? getanalyte(method.signaltable, first(cal.analyte))[ord] : (getanalyte(method.signaltable, first(cal.analyte)) ./ getanalyte(method.signaltable, isd))[ord]
     cal.table.include .= true
     cal.formula = getformula(cal)
@@ -451,9 +451,9 @@ end
 function set_isd!(method::MethodTable{A}, analyte::B, isd::Union{C, Nothing} = nothing) where {A, B <: A, C <: A}
     aid = findfirst(==(analyte), method.analytemap.analyte)
     isnothing(aid) && throw(ArgumentError("Analyte $analyte is not in the method"))
-    isnothing(isd) && (method.analyte_map.isd[aid] = 0; return method)
+    isnothing(isd) && (method.analytetable.isd[aid] = 0; return method)
     iid = findfirst(==(isd), method.analytemap.analyte)
     isnothing(iid) && throw(ArgumentError("Analyte $isd is not in the method"))
-    method.analyte_map.isd[aid] = iid
+    method.analytetable.isd[aid] = iid
     method
 end
