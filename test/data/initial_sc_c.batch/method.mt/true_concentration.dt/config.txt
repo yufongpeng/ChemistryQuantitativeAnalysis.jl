@@ -1,6 +1,9 @@
 ﻿[Type]
 C
 
+[delim]
+\t
+
 [Analyte]
 Analyte2
 Analyte4

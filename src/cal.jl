@@ -13,8 +13,8 @@ function relative_signal(method::MethodTable, dt::AbstractDataTable)
     aid = [findfirst(==(analyte), analytetable.analyte) for analyte in dt.analyte]
     cs = ThreadsX.map(eachindex(aid)) do i
         analytetable.isd[aid[i]] < 0 ? repeat([NaN], length(dt.sample)) :
-                analytetable.isd[aid[i]] == 0 ? getanalyte(dt, dt.analyte[i]) :
-                getanalyte(dt, dt.analyte[i]) ./ getanalyte(dt, analytetable.analyte[analytetable.isd[aid[i]]])
+                analytetable.isd[aid[i]] == 0 ? getanalyte(dt, i) :
+                getanalyte(dt, i) ./ getanalyte(dt, analytetable.analyte[analytetable.isd[aid[i]]])
     end
     fill_result!(deepcopy(dt), cs)
 end
@@ -70,7 +70,7 @@ function inv_predict(batch::Batch, dt::AbstractDataTable)
     cal_id = [id > 0 ? findfirst(cal -> first(cal.analyte) == analytetable.analyte[id], batch.calibration) : nothing for id in cid]
     cs = ThreadsX.map(eachindex(cal_id)) do i
         isnothing(cal_id[i]) ? repeat([NaN], length(dt.sample)) : 
-            inv_predict(batch.calibration[cal_id[i]], getanalyte(dt, dt.analyte[i]))
+            inv_predict(batch.calibration[cal_id[i]], getanalyte(dt, i))
     end
     fill_result!(deepcopy(dt), cs)
 end
@@ -171,7 +171,7 @@ function quantification(batch::Batch, dt::AbstractDataTable)
     cs = ThreadsX.map(eachindex(cal_id)) do i
         isnothing(cal_id[i]) && return repeat([NaN], length(dt.sample))
         cal = batch.calibration[cal_id[i]]
-        quantification(cal, dt; analyte = (dt.analyte[i], last(cal.analyte)))
+        quantification(cal, dt, i, last(cal.analyte))
     end
     fill_result!(deepcopy(dt), cs)
 end
@@ -186,6 +186,11 @@ quantification(cal::MultipleCalibration) = inv_predict(cal, cal.table.y)
 function quantification(cal::AbstractCalibration, dt::AbstractDataTable; analyte = cal.analyte)
     isnothing(last(analyte)) && return inv_predict(cal, getanalyte(dt, first(analyte)))
     inv_predict(cal, getanalyte(dt, first(analyte)) ./ getanalyte(dt, last(analyte)))
+end
+
+function quantification(cal::AbstractCalibration, dt::AbstractDataTable, analyte, isd)
+    isnothing(isd) && return inv_predict(cal, getanalyte(dt, analyte))
+    inv_predict(cal, getanalyte(dt, analyte) ./ getanalyte(dt, isd))
 end
 
 """
@@ -230,7 +235,9 @@ accuracy(at::AnalysisTable; true_concentration = :true_concentration, estimated_
     accuracy(getproperty(at, estimated_concentration), getproperty(at, true_concentration))
 
 function accuracy(dtp::AbstractDataTable, dtt::AbstractDataTable)
-    cs = ThreadsX.map(dtp.analyte) do analyte
+    cs = dtp.analyte == dtt.analyte ? ThreadsX.map(eachindex(dtp.analyte)) do i
+        accuracy(getanalyte(dtp, i), getanalyte(dtt, i))
+    end : ThreadsX.map(dtp.analyte) do analyte
         accuracy(getanalyte(dtp, analyte), getanalyte(dtt, analyte))
     end
     fill_result!(deepcopy(dtp), cs)
@@ -331,7 +338,7 @@ calibration(batch::Batch{A}, analyte::B;
                     type = true, 
                     zero = false, 
                     weight = 0
-                    ) where {A, B <: A} = calibration(batch.method, analyte; id, isd, type, zero, weight)
+                    ) where {A, B} = calibration(batch.method, analyte; id, isd, type, zero, weight)
 function calibration(method::MethodTable{A}, analyte::B; 
                     id = method.signaltable.sample,
                     isd = isd_of(method, analyte),
@@ -356,6 +363,31 @@ function calibration(method::MethodTable{A}, analyte::B;
     f = getformula(type, zero)
     model = calfit(table, f, type, zero, weight)
     inv_predict_accuracy!(MultipleCalibration((analyte, isd), type, zero, Float64(weight), f, table, model))
+end
+function calibration(method::MethodTable{A}, i::Int; 
+                    id = method.signaltable.sample,
+                    isd = isd_of(method, method.conctable.analyte[i]),
+                    type = true, 
+                    zero = false, 
+                    weight = 0
+                    ) where A
+
+    ord = sortperm(method.pointlevel)
+    level = method.pointlevel[ord]
+    conc = getanalyte(method.conctable, i)
+    table = Table(; 
+                    id = id[ord], 
+                    level = level, 
+                    x = map(level) do l
+                        conc[findsample(method.conctable, Symbol(l))]
+                    end, 
+                    y = isnothing(isd) ? getanalyte(method.signaltable, i)[ord] : (getanalyte(method.signaltable, i) ./ getanalyte(method.signaltable, isd))[ord], 
+                    x̂ = zeros(Float64, length(id)), 
+                    accuracy = zeros(Float64, length(id)),
+                    include = trues(length(id)))
+    f = getformula(type, zero)
+    model = calfit(table, f, type, zero, weight)
+    inv_predict_accuracy!(MultipleCalibration((method.conctable.analyte[i], isd), type, zero, Float64(weight), f, table, model))
 end
 
 """

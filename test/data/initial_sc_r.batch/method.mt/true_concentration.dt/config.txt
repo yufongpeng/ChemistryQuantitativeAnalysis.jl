@@ -1,6 +1,9 @@
 ﻿[Type]
 R
 
+[delim]
+\t
+
 [Analyte]
 Analyte
 

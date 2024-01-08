@@ -12,3 +12,6 @@ false
 
 [weight]
 0.0
+
+[delim]
+\t

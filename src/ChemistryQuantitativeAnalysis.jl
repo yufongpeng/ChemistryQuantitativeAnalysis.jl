@@ -420,10 +420,16 @@ function Batch{T}(method::MethodTable{A, <: T}, data = nothing;
                 ) where {A, T}
     Batch{T}(
         method,
-        length(method.conctable.sample) > 1 ? map(method.conctable.analyte) do analyte
-            calibration(method, analyte; type, zero, weight)
-        end : map(method.conctable.analyte) do analyte
-            SingleCalibration((analyte, ), first(getanalyte(method.conctable, analyte)))
+        if length(method.conctable.sample) > 1 
+            method.conctable.analyte == method.signaltable.analyte ? map(eachindex(method.conctable.analyte)) do i
+                calibration(method, i; type, zero, weight)
+            end : map(method.conctable.analyte) do analyte
+                calibration(method, analyte; type, zero, weight)
+            end
+        else
+            map(method.conctable.analyte) do analyte
+                SingleCalibration((analyte, ), first(getanalyte(method.conctable, analyte)))
+            end
         end
         ,
         data
