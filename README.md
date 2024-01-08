@@ -132,7 +132,7 @@ value3
 .
 .
 ```
-The config file in `batch_name.batch` must contain property `delim` which determines the default delimiter for all `table.txt` in this directory and subdirectories.
+The property `delim` determines the default delimiter for `table.txt` in this directory and subdirectories.
 
 `data.at` and `calibration` is not necessary for initializing a batch. The former can be added to the batch directly in julia, and the latter will be generated after calibration.
 
@@ -143,6 +143,9 @@ Config file for `ColumnDataTable` needs at least the following two properties.
 ```
 [Type]
 C
+
+[delim]
+\t
 
 [Sample]
 sample_col_name
@@ -159,6 +162,9 @@ Config file for `RowDataTable` needs at least the following two properties.
 [Type]
 R
 
+[delim]
+\t
+
 [Analyte]
 analyte_col_name
 
@@ -169,7 +175,6 @@ sample_col_name_2
 .
 .
 ``` 
-User can also provide `delim` to overwrite the default one defined in `batch_name.batch/config.txt`.
 
 ### *.mt
 It must contain two `*dt` files. `true_concentrstion.dt` contains true concentration for each analyte and level. The sample names must be integers.
@@ -179,6 +184,9 @@ Config file for `method.mt` needs two properties, `signal` and `pointlevel`.
 ```
 [signal]
 area
+
+[delim]
+\t
 
 [pointlevel]
 level_for_1st_point
@@ -208,13 +216,13 @@ It can contain multiple `*.dt`. The file names must start from an integer, `_` a
 ### Reading and writing Batch
 To read a batch into julia, call `ChemistryQuantitativeAnalysis.read`.
 ```julia-repl
-julia> batch = ChemistryQuantitativeAnalysis.read("batch_name.batch", T; table_type, analytetype)
+julia> batch = ChemistryQuantitativeAnalysis.read("batch_name.batch", T; table_type, analytetype, delim)
 ```
-`T` is the sink function for tabular data; it should create an object following `Tables.jl` interface. `table_type` is `T` parameter in the type signature of `Batch` which determines the underlying table type, and `analytetype` is a concrete type for `analyte` which msut have a method for string input.
+`T` is the sink function for tabular data; it should create an object following `Tables.jl` interface. `table_type` is `T` parameter in the type signature of `Batch` which determines the underlying table type, `analytetype` is a concrete type for `analyte` which msut have a method for string input, and `delim` specifies delimiter for tabular data if `config[:delim]` does not exist.
 
-To write project to disk, call `ChemistryQuantitativeAnalysis.write`. There is a keyword argument `delim` controling whether using "\t" or "," as delim for tables.
+To write batch to disk, call `ChemistryQuantitativeAnalysis.write`. There is a keyword argument `delim` controling delimiter of tables.
 ```julia-repl
-julia> ChemistryQuantitativeAnalysis.write("batch_name.batch", batch; delim = "\t")
+julia> ChemistryQuantitativeAnalysis.write("batch_name.batch", batch; delim = '\t')
 ```
 There will be a folder `calibration` containing multiple `*.mcal` or `*.scal` folders. The former is for `MultipleCalibration` and the latter is for `SingleCalibration`.
 

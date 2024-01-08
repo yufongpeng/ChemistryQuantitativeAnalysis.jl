@@ -160,14 +160,18 @@ end
         @test all(isapprox.(cbatch.calibration[2].table.accuracy[1:3], [1, sqrt(1.1), sqrt(0.9)]))
         @test all(isapprox.(rbatch.calibration[1].table.accuracy[1:3], [1, 1.1, 0.9]))
         @test all(isapprox.(rbatch.calibration[2].table.accuracy[1:3], [1, sqrt(1.1), sqrt(0.9)]))
+        @test isapprox(update_calibration!(SingleCalibration((method.conctable.analyte[2], ), 100.0), method).conc, first(getanalyte(method.conctable, 2)))
     end
     @testset "Quantification" begin
         @test all(isapprox_nan.(set_quantification!(rbatch.data, rbatch).estimated_concentration.S1, update_inv_predict!(rbatch, set_relative_signal(rbatch.data, rbatch)).data.estimated_concentration.S1))
         @test all(isapprox.(quantification(cbatch, cbatch.data).var"G1(drug_a)", inv_predict(cbatch.calibration[1], relative_signal(cbatch, cbatch.data))))
         @test all(isapprox_nan.(quantification(rbatch, rbatch.data).S2, update_quantification!(rbatch, rbatch.data).data.estimated_concentration.S2))
         @test all(isapprox.(update_inv_predict!(update_relative_signal!(cbatch)).data.estimated_concentration.var"G1(drug_b)", set_quantification(cbatch.data, cbatch).estimated_concentration.var"G1(drug_b)"))
+        @test all(isapprox.(set_inv_predict(cbatch.data, cbatch).estimated_concentration.var"G1(drug_b)", cbatch.data.estimated_concentration.var"G1(drug_b)"))
         set!(cbatch.data, :true_concentration, deepcopy(cbatch.data.estimated_concentration))
         @test all(isapprox.(update_accuracy!(cbatch).data.accuracy.var"G1(drug_b)", [1.0, 1.0, 1.0]))
+        @test all(isapprox.(set_accuracy!(cbatch.data).accuracy.var"G1(drug_b)", [1.0, 1.0, 1.0]))
+        @test all(isapprox.(quantification(cbatch.calibration[1], cbatch.data.area), quantification(cbatch.calibration[1], cbatch.data.area, cbatch.calibration[1].analyte...)))
     end
     @testset "Utils" begin
         @test getanalyte(cdata.area, AnalyteG1("G1(drug_b)")) == getanalyte(cdata.area, Symbol("G1(drug_b)"))
