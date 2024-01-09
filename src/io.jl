@@ -132,7 +132,7 @@ function read_methodtable(file::String, T; tabletype = T, analytetype = String, 
         calibration = isd
     end
     Cons = isnothing(tabletype) ? MethodTable : MethodTable{tabletype}
-    Cons(Table(; analyte, isd, calibration), signal, pointlevel, conctable, signaltable)
+    Cons(Table(analytetable; analyte, isd, calibration), signal, pointlevel, conctable, signaltable)
 end
 """
     read_batch(file::String, T; tabletype = T, analytetype = String, delim = '\\t') -> Batch{A, tabletype}
