@@ -11,7 +11,7 @@ This package provides two basic wrappers, `ColumnDataTable{A, T}` and `RowDataTa
 |----------|---------------------|------------------|
 |`analytename`|`Vector{Symbol}`, the column names that are analytes names|`Vector{Symbol}`, symbols transformed from column `analytecol`.|
 |`samplename`|`Vector{Symbol}`, symbols transformed from column `samplecol`.|`Vector{Symbol}`, the column names that are sample names.|
-|`analyte`|`Vector{A}` stored in field `config`, analytes in user-defined types.|`Vector{A}`, analytes in user-defined types.|
+|`analyte`|`Vector{A}`, analytes in user-defined types.|same|
 |`sample`|`Vector`, the column `samplecol`.|`Vector{Symbol}`, the column names that are sample names..|
 |`table`|Tabular data of type `T`|same|
 
@@ -23,7 +23,7 @@ The package provides another two wrappers, `MethodTable{A, T}`, and `AnalysisTab
 This type is used for storing method, containing all analytes, their internal standards and calibration curve setting, and data for fitting calibration curve.
 |Property|Description|
 |----------|---------|
-|`analytetable`|`Table` with 3 columns, `analytes` identical to property `analytes`, `isd`, matching each analyte to index of its internal standard, and `calibration` matching each analyte to index of other analyte for fitting its calibration curve. `-1` indicates the analyte itself is internal standard, and `0` indicates no internal standard. For example, a row `(analytes = AnalyteX, isd = 2, calibration = 3)` means that internal standard of `AnalyteX` is the second analyte, and it will be quantified using calibration curve of the third analyte.|
+|`analytetable`|`Table` with at least 3 columns, `analytes` identical to property `analytes`, `isd`, matching each analyte to index of its internal standard, and `calibration` matching each analyte to index of other analyte for fitting its calibration curve. `-1` indicates the analyte itself is internal standard, and `0` indicates no internal standard. For example, a row `(analytes = AnalyteX, isd = 2, calibration = 3)` means that internal standard of `AnalyteX` is the second analyte, and it will be quantified using calibration curve of the third analyte.|
 |`signal`|`Symbol`, propertyname for extracting signal data from an `AnalysisTable`|
 |`pointlevel`|`Vector{Int}` matching each point to level. It can be empty if there is only one level in `conctable`.|
 |`conctable`|`AbstractDataTable{A, <: T}` containing concentration data for each level. Sample names must be symbol or string of integers for multiple levels. One level indicates using `SingleCalibration`.|
@@ -119,7 +119,7 @@ batch_name.batch
    ├──1_quantity2.dt 
    └──2_quantity3.dt
 ```
-Config files has the following general forms
+Config files have the following general forms
 ```
 [property1]
 value
@@ -139,7 +139,7 @@ The property `delim` determines the default delimiter for `table.txt` in this di
 ### *.dt
 All `*.dt` files will be read as `ColumnDataTable` or `RowDataTable`. They contain `config.txt` and `table.txt`.
 
-Config file for `ColumnDataTable` needs at least the following two properties.
+Config file for `ColumnDataTable` needs the following properties.
 ```
 [Type]
 C
@@ -157,7 +157,7 @@ analyte_col_name_2
 .
 .
 ``` 
-Config file for `RowDataTable` needs at least the following two properties.
+Config file for `RowDataTable` needs the following properties.
 ```
 [Type]
 R
@@ -177,16 +177,19 @@ sample_col_name_2
 ``` 
 
 ### *.mt
-It must contain two `*dt` files. `true_concentrstion.dt` contains true concentration for each analyte and level. The sample names must be integers.
+It must contain two `*dt` files. `true_concentration.dt` contains true concentration for each analyte and level. The sample names must be integers.
 Another `*.dt` file is signal data for each analyte and calibration point. The file name is determined by `config.txt`.
 
-Config file for `method.mt` needs two properties, `signal` and `pointlevel`.
+Config file for `method.mt` needs the following  properties.
 ```
 [signal]
 area
 
 [delim]
 \t
+
+[levelname]
+level
 
 [pointlevel]
 level_for_1st_point
@@ -195,11 +198,13 @@ level_for_2nd_point
 .
 .
 ```
-`signal` specify which `.dt` file serving as signal data. For the above file, `method.mt/area.dt` will be `method.signaltable`.
+`signal` specifys which `.dt` file serving as signal data. For the above file, `method.mt/area.dt` will become `method.signaltable`.
 
-`pointlevel` maps each point to level which should be integers as well.
+`pointlevel` maps each point to level which should be integers.
 
-`analytetable.txt` contains analyte names, index of their internal standards, and index of of other analytes whose calibration curve is used. 
+`level` specifys the column representing property `pointlevel` of `MethodTable`. It only works for which `signaltable` is `ColumnDataTable`; otherwise, it falls back to use `pointlevel`.
+
+`analytetable.txt` needs to contain analyte names, index of their internal standards, and index of of other analytes whose calibration curve is used. 
 ```
 analytes isd   calibration
 analyte1 isd1  calibration_analyte_id1
@@ -277,7 +282,7 @@ signaltable = ColumnDataTable(
    :point; 
    analytetype = AnalyteTest
 )
-method = MethodTable(conctable, signaltable, :area, repeat(1:7, 3); analyte = AnalyteTest.(analyte_names), isd = [2, -1, 4, -1], calibration = [1, -1, 3, -1])
+method = MethodTable(conctable, signaltable, :area, :point; analyte = AnalyteTest.(analyte_names), isd = [2, -1, 4, -1], calibration = [1, -1, 3, -1])
 
 # Create sample data
 rdata = AnalysisTable([:area], [
@@ -329,6 +334,7 @@ cdata.area[1, "G1(drug_a)"] == 6
 collect(eachanalyte(cdata.area))
 collect(eachsample(cdata.area))
 getanalyte(cdata.area, AnalyteG1("G1(drug_b)"))
+getanalyte(cdata.area, 1)
 getsample(cdata.area, "S2")
 dynamic_range(cbatch.calibration[1])
 signal_range(rbatch.calibration[2])

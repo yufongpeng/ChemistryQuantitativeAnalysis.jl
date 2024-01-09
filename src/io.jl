@@ -41,14 +41,14 @@ function read_calibration(file::String; analytetype = String, delim = '\t')
 end
 
 """
-    read_datatable(file::String, T; analytetype::Type{A} = String, delim = '\\t') -> AbstractDataTable{A, S <: T}
+    read_datatable(file::String, T; analytetype::Type{A} = String, delim = '\\t', levelname = :level) -> AbstractDataTable{A, S <: T}
 
 Read ".dt" file into julia as `ColumnDataTable` or `RowDataTable`. `T` is the sink function for tabular data, `analytetype` is a concrete type for `analyte` which msut have a method for string input, 
-and `delim` specifies delimiter for tabular data if `config[:delim]` does not exist.
+and `delim` specifies delimiter for tabular data if `config[:delim]` does not exist. `level` is specifically used for methodtable, indicating the column representing calibration level; this column should be all integers.
 
 See README.md for the structure of ".dt" file.
 """
-function read_datatable(file::String, T; analytetype = String, delim = '\t')
+function read_datatable(file::String, T; analytetype = String, delim = '\t', levelname = nothing)
     endswith(file, ".dt") || throw(ArgumentError("The file is not a valid table directory"))
     config = read_config(joinpath(file, "config.txt"))
     delim = get(config, :delim, delim)
@@ -62,7 +62,7 @@ function read_datatable(file::String, T; analytetype = String, delim = '\t')
         RowDataTable(getproperty(tbl, analyte_name), analyte_name, sample_name, tbl)
     else
         sample_name = Symbol(first(split(config[:Sample], "\t")))
-        tbl = CSV.read(joinpath(file, "table.txt"), T; delim, typemap = Dict(Int => Float64), types = Dict(sample_name => String))
+        tbl = CSV.read(joinpath(file, "table.txt"), T; delim, typemap = Dict(Int => Float64), types = Dict(sample_name => String, levelname => Int), validate = false)
         analyte_name = String.(filter!(!isempty, vectorize(config[:Analyte])))
         config[:Type] == "C" || throw(ArgumentError("StackDataTable is not implemented yet."))
         for i in Symbol.(analyte_name)
@@ -111,8 +111,10 @@ function read_methodtable(file::String, T; tabletype = T, analytetype = String, 
     isd = replace(analytetable.isd, missing => 0)
     conctable = read_datatable(joinpath(file, "true_concentration.dt"), T; analytetype, delim)
     if length(conctable.sample) > 1
-        signaltable = read_datatable(joinpath(file, "$signal.dt"), T; analytetype, delim)
-        if haskey(config, :pointlevel)
+        signaltable = read_datatable(joinpath(file, "$signal.dt"), T; analytetype, delim, levelname = get(config, :levelname, nothing))
+        if haskey(config, :levelname) && in(Symbol(config[:levelname]), propertynames(signaltable))
+            pointlevel = getproperty(signaltable, Symbol(config[:levelname]))
+        elseif haskey(config, :pointlevel)
             pointlevel = parse.(Int, config[:pointlevel])
         else
             nl = length(conctable.sample)
@@ -281,8 +283,13 @@ function write(file::String, tbl::MethodTable; delim = '\t')
     mkpath(file)
     write(joinpath(file, "true_concentration.dt"), tbl.conctable; delim)
     isnothing(tbl.signaltable) || write(joinpath(file, "$(tbl.signal).dt"), tbl.signaltable; delim)
+    id = nothing
+    if isa(tbl.signaltable, ColumnDataTable)
+        id = findfirst(x -> getproperty(tbl.signaltable.table, x) == tbl.pointlevel, propertynames(tbl.signaltable.table))
+    end
     open(joinpath(file, "config.txt"), "w+") do config
-        Base.write(config, "[signal]\n", tbl.signal, "\n\n[delim]\n", escape_string(string(delim)), "\n\n[pointlevel]\n", join(tbl.pointlevel, "\n"))
+        isnothing(id) ? Base.write(config, "[signal]\n", tbl.signal, "\n\n[delim]\n", escape_string(string(delim)), "\n\n[pointlevel]\n", join(tbl.pointlevel, "\n")) : 
+            Base.write(config, "[signal]\n", tbl.signal, "\n\n[delim]\n", escape_string(string(delim)), "\n\n[levelname]\n", propertynames(tbl.signaltable.table)[id])
     end
     CSV.write(joinpath(file, "analytetable.txt"), tbl.analytetable; delim)
 end

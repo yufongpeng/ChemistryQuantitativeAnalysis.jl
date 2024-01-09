@@ -285,6 +285,7 @@ propertynames(tbl::MethodTable) = (:analytetable, :signal, :pointlevel, :conctab
 """
     MethodTable(conctable::AbstractDataTable, signaltable::Union{AbstractDataTable, Nothing}, signal, pointlevel = []; kwargs...)
     MethodTable{T}(conctable::AbstractDataTable, signaltable::Union{AbstractDataTable, Nothing}, signal, pointlevel = []; kwargs...)
+    MethodTable(conctable::AbstractDataTable, signaltable::ColumnDataTable, signal::Symbol, levelname::Symbol; kwargs...)
 
 User-friendly contructors for `MethodTable`. `kwargs` will be columns in `analytetable`; when `analyte`, `isd` and `calibration` are not provided, it will use analyte in `conctable`.
 """
@@ -296,6 +297,10 @@ MethodTable(conctable::AbstractDataTable{A, T},
             signaltable::Nothing,
             signal::Symbol,
             pointlevel::Vector{Int} = Int[]; kwargs...) where {A, T} = MethodTable{A, T}(conctable, signaltable, signal, pointlevel; kwargs...)
+MethodTable(conctable::AbstractDataTable{A, T}, 
+            signaltable::ColumnDataTable{B, S},
+            signal::Symbol,
+            levelname::Symbol; kwargs...) where {A, B, T, S} = MethodTable{promote_type(T, S)}(conctable, signaltable, signal, getproperty(signaltable, levelname); kwargs...)
 function MethodTable{T}(conctable::AbstractDataTable, 
                     signaltable::Union{AbstractDataTable, Nothing},
                     signal::Symbol,

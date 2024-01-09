@@ -4,6 +4,9 @@ area
 [delim]
 \t
 
+[levelname]
+Level
+
 [pointlevel]
 1
 1
