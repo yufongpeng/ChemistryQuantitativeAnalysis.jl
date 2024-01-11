@@ -144,13 +144,13 @@ function inv_predict!(cal::MultipleCalibration)
     cal
 end
 
-function fill_result!(dt::ColumnDataTable, result::Vector{Vector{Float64}})
+function fill_result!(dt::ColumnDataTable, result::AbstractVector{<: AbstractVector{Float64}})
     for (a, c) in zip(eachanalyte(dt), result)
         a .= c
     end
     dt
 end
-function fill_result!(dt::RowDataTable, result::Vector{Vector{Float64}})
+function fill_result!(dt::RowDataTable, result::AbstractVector{<: AbstractVector{Float64}})
     for (i, p) in enumerate(eachsample(dt))
         p .= getindex.(result, i)
     end
