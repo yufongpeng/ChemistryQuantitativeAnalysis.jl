@@ -165,16 +165,16 @@ function read_batch(file::String, T; tabletype = T, analytetype = String, delim 
     )
 end
 
-function show(io::IO, cal::MultipleCalibration{A}) where A
-    print(io, "Calibration{$A} of $(first(cal.analyte)) with $(length(unique(cal.table.level[cal.table.include]))) levels and $(length(findall(cal.table.include))) points")
+function print_summary(io::IO, cal::MultipleCalibration{A}) where A
+    print(io, "Calibration{$A} of ", first(cal.analyte), " with ", length(unique(cal.table.level[cal.table.include])), " levels and ", length(findall(cal.table.include)), " points")
 end
 
-function show(io::IO, cal::SingleCalibration{A}) where A
-    print(io, "Calibration{$A} of $(first(cal.analyte)) with single level")
+function print_summary(io::IO, cal::SingleCalibration{A}) where A
+    print(io, "Calibration{$A} of ", first(cal.analyte), " with single level")
 end
 
 function show(io::IO, ::MIME"text/plain", cal::MultipleCalibration)
-    print(io, cal, ":\n")
+    print(io, typeof(cal), " with ", length(unique(cal.table.level[cal.table.include])), " levels and ", length(findall(cal.table.include)), "points:\n")
     print(io, "∘ Analyte: ", first(cal.analyte), "\n")
     print(io, "∘ ISD: ", last(cal.analyte), "\n")
     print(io, "∘ Type: ", cal.type ? "linear\n" : "quadratic\n")
@@ -185,21 +185,36 @@ function show(io::IO, ::MIME"text/plain", cal::MultipleCalibration)
 end
 
 function show(io::IO, ::MIME"text/plain", cal::SingleCalibration)
-    print(io, cal, ":\n")
+    print(io, typeof(cal), " with single level:\n")
     print(io, "∘ Analyte (ISD): ", first(cal.analyte), "\n")
     print(io, "∘ Concentration: ", cal.conc)
 end
 
-function show(io::IO, batch::Batch{A, T}) where {A, T}
-    print(io, string("Batch{$A, $(shorten_type_repr(T))} with $(length(batch.method.analytetable.isd .< 0)) internal standards out of $(length(batch.method.analytetable.analyte)) analytes"))
+function print_summary(io::IO, batch::Batch{A, T}) where {A, T}
+    print(io, "Batch{$A, $(shorten_type_repr(T))} with ", length(batch.method.analytetable.isd .< 0), " internal standards out of ", length(batch.method.analytetable.analyte), " analytes")
 end
 
-function show(io::IO, ::MIME"text/plain", batch::Batch)
-    print(io, batch, ":\n")
-    print(io, "∘ Analytes:\n")
+function show(io::IO, ::MIME"text/plain", batch::Batch{A, T}) where {A, T}
+    print_summary(io, batch)
+    print(io, ":\n∘ Analytes:\n")
     show(io, MIME"text/plain"(), batch.method.analytetable)
-    print(io, "\n\n∘ Calibration:\n")
-    show(io, MIME"text/plain"(), batch.calibration)
+    print(io, "\n\n∘ Calibration:")
+    if length(batch.calibration) > 10
+        for c in @view batch.calibration[1:5]
+            print(io, "\n ")
+            print_summary(io, c)
+        end
+        print(io, "\n ⋮")
+        for c in @view batch.calibration[end - 4:end]
+            print(io, "\n ")
+            print_summary(io, c)
+        end
+    else
+        for c in batch.calibration
+            print(io, "\n ")
+            print_summary(io, c)
+        end
+    end
     print(io, "\n\n∘ Data:\n")
     show(io, MIME"text/plain"(), batch.data)
 end
@@ -209,49 +224,55 @@ function shorten_type_repr(T)
     length(t) > 50 ? replace(t, r"\{.*\}" => "{...}") : t
 end
 
-function show(io::IO, tbl::ColumnDataTable{A, T}) where {A, T}
-    print(io, string("ColumnDataTable{$A, $(shorten_type_repr(T))} with $(length(tbl.analyte)) analytes and $(length(tbl.sample)) samples"))
+function print_summary(io::IO, tbl::ColumnDataTable{A, T}) where {A, T}
+    print(io, "ColumnDataTable{$A, $(shorten_type_repr(T))} with ", length(tbl.analyte), " analytes and ", length(tbl.sample), " samples")
 end
 
 function show(io::IO, ::MIME"text/plain", tbl::ColumnDataTable)
-    print(io, tbl, ":\n")
+    print_summary(io, tbl)
+    println(io, "::")
     show(io, MIME"text/plain"(), tbl.table)
 end
 
-function show(io::IO, tbl::RowDataTable{A, T}) where {A, T}
-    print(io, string("RowDataTable{$A, $(shorten_type_repr(T))} with $(length(tbl.analyte)) analytes and $(length(tbl.sample)) samples"))
+function print_summary(io::IO, tbl::RowDataTable{A, T}) where {A, T}
+    print(io, "RowDataTable{$A, $(shorten_type_repr(T))} with ", length(tbl.analyte), " analytes and ", length(tbl.sample), " samples")
 end
 
 function show(io::IO, ::MIME"text/plain", tbl::RowDataTable)
-    print(io, tbl, ":\n")
+    print_summary(io, tbl)
+    println(io, "::")
     show(io, MIME"text/plain"(), tbl.table)
 end
 
-function show(io::IO, tbl::AnalysisTable{A, T}) where {A, T}
-    print(io, string("AnalysisTable{$A, $(shorten_type_repr(T))} with $(length(tbl.analyte)) analytes and $(length(tbl.sample)) samples"))
+function print_summary(io::IO, tbl::AnalysisTable{A, T}) where {A, T}
+    print(io, "AnalysisTable{$A, $(shorten_type_repr(T))} with ", length(tbl.analyte), " analytes and ", length(tbl.sample), " samples")
 end
 
 function show(io::IO, ::MIME"text/plain", tbl::AnalysisTable)
-    print(io, tbl, ":")
+    print_summary(io, tbl)
+    print(io, ":")
     for (k, v) in pairs(tbl.tables)
-        print(io, "\n∘ ", k, ": \n")
+        print(io, "\n∘ ", k, " | ")
         show(io, MIME"text/plain"(), v)
     end
 end
 
-function show(io::IO, tbl::MethodTable{A, T}) where {A, T}
-    isnothing(tbl.signaltable) && return print(io, string("MethodTable{$A, $(shorten_type_repr(T))} with $(length(tbl.analytetable.analyte)) analytes"))
-    print(io, string("MethodTable{$A, $(shorten_type_repr(T))} with $(length(tbl.analytetable.analyte)) analytes, $(length(tbl.conctable.sample)) levels and $(length(tbl.signaltable.sample)) points."))
+function print_summary(io::IO, tbl::MethodTable{A, T}) where {A, T}
+    if isnothing(tbl.signaltable)
+        print(io, "MethodTable{$A, $(shorten_type_repr(T))} with ", length(tbl.analytetable.analyte), " analytes")
+    else
+        print(io, "MethodTable{$A, $(shorten_type_repr(T))} with ", length(tbl.analytetable.analyte), " analytes, ", length(tbl.conctable.sample), " levels and ", length(tbl.signaltable.sample), " points")
+    end
 end
 
 function show(io::IO, ::MIME"text/plain", tbl::MethodTable)
-    print(io, tbl, ":\n")
-    print(io, "∘ Analytes:\n")
+    print_summary(io, tbl)
+    print(io, ":\n∘ Analytes:\n")
     show(io, MIME"text/plain"(), tbl.analytetable)
-    print(io, "\n∘ Level: ", join(tbl.pointlevel, ", "), "\n")
+    print(io, "\n\n∘ Level: ", join(tbl.pointlevel, ", "), "\n")
     print(io, "∘ Concentration: \n")
     show(io, MIME"text/plain"(), tbl.conctable.table)
-    print(io, "\n∘ Signal: \n")
+    print(io, "\n\n∘ Signal: \n")
     show(io, MIME"text/plain"(), isnothing(tbl.signaltable) ? nothing : tbl.signaltable.table)
 end
 
