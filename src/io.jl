@@ -230,7 +230,7 @@ end
 
 function show(io::IO, ::MIME"text/plain", tbl::ColumnDataTable)
     print_summary(io, tbl)
-    println(io, "::")
+    println(io, ":")
     show(io, MIME"text/plain"(), tbl.table)
 end
 
@@ -240,7 +240,7 @@ end
 
 function show(io::IO, ::MIME"text/plain", tbl::RowDataTable)
     print_summary(io, tbl)
-    println(io, "::")
+    println(io, ":")
     show(io, MIME"text/plain"(), tbl.table)
 end
 
