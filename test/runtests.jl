@@ -226,5 +226,17 @@ end
         @test @test_noerror test_show(save_mc_r.data)
         @test @test_noerror test_show(save_sc_c.data)
         @test @test_noerror test_show(save_sc_r.data)
+        mkbatch(joinpath(datapath, "new1.batch"); data_config = Dict(:Type => "R", :Sample => ["S0", "S1", "S2"]), signal_config = Dict(:Type => "R", :Sample => ["C0"]), conc_config = Dict(:Type => "R", :Sample => [1]))
+        mkbatch(joinpath(datapath, "new2.batch"); data_config = Dict(:Analyte => ["A1", "A2"]), signal_config = Dict(:Analyte => ["A1", "A2", "A3"]), conc_config = Dict(:Type => "R", :Sample => [1, 2, 3, 4, 5, 6]))
+        mkbatch(joinpath(datapath, "new3.batch"); data_config = Dict(:Type => "R", :Sample => ["S0", "S1", "S2"]), conc_config = Dict(:Analyte => ["A1", "A2", "A3"]), signal_config = Dict(:Type => "R", :Sample => ["C1", "C2", "C3", "C4", "C5", "C6"]))
+        mkbatch(joinpath(datapath, "new4.batch"); method_config = Dict(:signal => "height", :levelname => "L"))
+        n1 = ChemistryQuantitativeAnalysis.read(joinpath(datapath, "new1.batch"), Table)
+        n2 = ChemistryQuantitativeAnalysis.read(joinpath(datapath, "new2.batch"), Table)
+        n3 = ChemistryQuantitativeAnalysis.read(joinpath(datapath, "new3.batch"), Table)
+        n4 = ChemistryQuantitativeAnalysis.read(joinpath(datapath, "new4.batch"), Table)
+        @test n1.data.sample == [:S0, :S1, :S2]
+        @test length(unique(n2.calibration[1].table.level[n2.calibration[1].table.include])) == 6
+        @test n3.data.analyte == ["A1", "A2", "A3"]
+        @test :L in propertynames(n4.method.signaltable)
     end
 end

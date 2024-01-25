@@ -166,11 +166,11 @@ function read_batch(file::String, T; tabletype = T, analytetype = String, delim 
 end
 
 function print_summary(io::IO, cal::MultipleCalibration{A}) where A
-    print(io, "Calibration{$A} of ", first(cal.analyte), " with ", length(unique(cal.table.level[cal.table.include])), " levels and ", length(findall(cal.table.include)), " points")
+    print(io, "MultipleCalibration{$A} of ", first(cal.analyte), " with ", length(unique(cal.table.level[cal.table.include])), " levels and ", length(findall(cal.table.include)), " points")
 end
 
 function print_summary(io::IO, cal::SingleCalibration{A}) where A
-    print(io, "Calibration{$A} of ", first(cal.analyte), " with single level")
+    print(io, "SingleCalibration{$A} of ", first(cal.analyte), " with single level")
 end
 
 function show(io::IO, ::MIME"text/plain", cal::MultipleCalibration)
@@ -221,7 +221,7 @@ end
 
 function shorten_type_repr(T)
     t = repr(T)
-    length(t) > 50 ? replace(t, r"\{.*\}" => "{...}") : t
+    length(t) > 50 ? replace(t, r"\{.*\}" => "{…}") : t
 end
 
 function print_summary(io::IO, tbl::ColumnDataTable{A, T}) where {A, T}
@@ -251,10 +251,20 @@ end
 function show(io::IO, ::MIME"text/plain", tbl::AnalysisTable)
     print_summary(io, tbl)
     print(io, ":")
-    for (k, v) in pairs(tbl.tables)
-        print(io, "\n∘ ", k, " | ")
-        show(io, MIME"text/plain"(), v)
+    if length(collect(keys(tbl.tables))) > 2
+        ks = collect(keys(tbl.tables))
+        print(io, "\n∘ ", ks[1], " | ")
+        show(io, MIME"text/plain"(), tbl.tables[ks[1]])
+        print(io, "\n   ⋮")
+        print(io, "\n∘ ", ks[end], " | ")
+        show(io, MIME"text/plain"(), tbl.tables[ks[end]])
+    else
+        for (k, v) in pairs(tbl.tables)
+            print(io, "\n∘ ", k, " | ")
+            show(io, MIME"text/plain"(), v)
+        end
     end
+
 end
 
 function print_summary(io::IO, tbl::MethodTable{A, T}) where {A, T}
@@ -378,4 +388,126 @@ function read(file::String, T; tabletype = T, analytetype = String, delim = '\t'
     elseif endswith(file, ".dt")
         read_datatable(file, T; analytetype, delim)
     end
+end
+
+"""
+    mkbatch(file::String; 
+                    delim = '\t',
+                    data_config = Dict{Symbol, Any}(), 
+                    signal_config = Dict{Symbol, Any}(), 
+                    conc_config = Dict{Symbol, Any}(), 
+                    method_config = Dict{Symbol, Any}()
+                    )
+
+Create a template directory of a batch. See "README.md" for available keys and values for config.
+"""
+function mkbatch(file::String; 
+                    delim = '\t',
+                    data_config = Dict{Symbol, Any}(), 
+                    signal_config = Dict{Symbol, Any}(), 
+                    conc_config = Dict{Symbol, Any}(), 
+                    method_config = Dict{Symbol, Any}()
+                    )
+    mkpath(file)
+    default_analyte = get(conc_config, :Analyte, get(signal_config, :Analyte, get(data_config, :Analyte, ["Analyte1", "Analyte2"])))
+    default_sample = ["S1", "S2"]
+    default_point = ["C1", "C2", "C3", "C4", "C5"]
+    default_level = [1, 2, 3, 4, 5]
+    default_config_c = [
+        Dict(:Type => "C", :delim => delim, :Analyte => default_analyte, :Sample => "Sample"), 
+        Dict(:Type => "C", :delim => delim, :Analyte => default_analyte, :Sample => "Sample"), 
+        Dict(:Type => "C", :delim => delim, :Analyte => default_analyte, :Sample => "Level")
+    ]
+    default_config_r = [
+        Dict(:Type => "R", :delim => delim, :Analyte => "Analyte", :Sample => default_sample), 
+        Dict(:Type => "R", :delim => delim, :Analyte => "Analyte", :Sample => default_point), 
+        Dict(:Type => "R", :delim => delim, :Analyte => "Analyte", :Sample => default_level)
+    ]
+    table = Vector{Table}(undef, 3)
+    confs = Vector{String}(undef, 3)
+    data_config = convert(Dict{Symbol, Any}, data_config)
+    signal_config = convert(Dict{Symbol, Any}, signal_config)
+    conc_config = convert(Dict{Symbol, Any}, conc_config)
+    method_config = convert(Dict{Symbol, Any}, method_config)
+    for (i, (config, default_c, default_r)) in enumerate(zip([data_config, signal_config, conc_config], default_config_c, default_config_r))
+        default = get(config, :Type, "C") == "C" ? default_c : default_r
+        for (k, v) in default
+            get!(config, k, v)
+        end
+        if config[:Type] == "C"
+            #table[i] = string(config[:Sample], config[:delim], join(config[:Analyte], config[:delim]))
+            config[:Analyte_merge] = join(config[:Analyte], "\n")
+            config[:Sample_merge] = config[:Sample]
+        else
+            #table[i] = string(config[:Analyte], config[:delim], join(config[:Sample], config[:delim]))
+            config[:Sample_merge] = join(config[:Sample], "\n")
+            config[:Analyte_merge] = config[:Analyte]
+        end
+        confs[i] = string("[Type]\n", config[:Type], "\n\n[delim]\n", escape_string(string(config[:delim])), 
+                                    "\n\n[Analyte]\n", config[:Analyte_merge], 
+                                    "\n\n[Sample]\n", config[:Sample_merge])
+    end
+    if data_config[:Type] == "C"
+        #table[1] = string(table[1], "\n", join((string(x, data_config[:delim], join(repeat(["1.0"], length(data_config[:Analyte])), data_config[:delim])) for x in default_sample), "\n"))
+        table[1] = Table(; Symbol(data_config[:Sample]) => default_sample, (Symbol.(data_config[:Analyte]) .=> Ref(repeat([1.0], length(default_sample))))...)
+    else
+        table[1] = Table(; Symbol(data_config[:Analyte]) => default_analyte, (Symbol.(data_config[:Sample]) .=> Ref(repeat([1.0], length(default_analyte))))...)
+    end
+    if signal_config[:Type] == "R" && conc_config[:Type] == "R"
+        default_level = parse.(Int, string.(conc_config[:Sample]))
+        default_point = signal_config[:Sample]
+        pointlevel = [i > lastindex(default_level) ? default_level[end] : default_level[i] for i in eachindex(default_point)]
+    elseif signal_config[:Type] == "R"
+        default_point = signal_config[:Sample]
+        default_level = collect(eachindex(default_point))
+        pointlevel = default_level
+    elseif conc_config[:Type] == "R"
+        default_level = parse.(Int, string.(conc_config[:Sample]))
+        default_point = map(default_level) do s
+            string("C", s)            
+        end
+        pointlevel = default_level
+    end
+    default_method = if signal_config[:Type] == "C"
+        Dict(:signal => "area", :delim => delim, :levelname => "Level")
+    else
+        Dict(:signal => "area", :delim => delim, :pointlevel => pointlevel)
+    end
+    for (k, v) in default_method
+        get!(method_config, k, v)
+    end
+    if haskey(method_config, :pointlevel)
+        if length(method_config[:pointlevel]) != length(pointlevel) || any(x -> !in(x, default_level), method_config[:pointlevel])
+            @warn "Replace poinlevel with default: $(pointlevel)"
+            method_config[:pointlevel] = pointlevel
+        end
+    end
+    if signal_config[:Type] == "C"
+        confms = string("[signal]\n", method_config[:signal], "\n\n[delim]\n", escape_string(string(method_config[:delim])), 
+                        "\n\n[levelname]\n", method_config[:levelname])
+        table[2] = Table(; Symbol(signal_config[:Sample]) => default_point, Symbol(method_config[:levelname]) => default_level, (Symbol.(signal_config[:Analyte]) .=> Ref(repeat([1.0], length(default_point))))...)
+    else
+        confms = string("[signal]\n", method_config[:signal], "\n\n[delim]\n", escape_string(string(method_config[:delim])), 
+                        "\n\n[pointlevel]\n", join(method_config[:pointlevel], "\n"))
+        table[2] = Table(; Symbol(signal_config[:Analyte]) => default_analyte, (Symbol.(signal_config[:Sample]) .=> Ref(repeat([1.0], length(default_analyte))))...)
+    end
+    if conc_config[:Type] == "C"
+        table[3] = Table(; Symbol(conc_config[:Sample]) => default_level, (Symbol.(conc_config[:Analyte]) .=> Ref(repeat([1.0], length(default_level))))...)
+    else
+        table[3] = Table(; Symbol(conc_config[:Analyte]) => default_analyte, (Symbol.(conc_config[:Sample]) .=> Ref(repeat([1.0], length(default_analyte))))...)
+    end
+    signal = method_config[:signal]
+    data_name = string(0, "_", signal, ".dt")
+    mkpath(joinpath(file, "data.at", data_name))
+    write(joinpath(file, "data.at", data_name, "config.txt"), confs[1])
+    CSV.write(joinpath(file, "data.at", data_name, "table.txt"), table[1]; delim = data_config[:delim])
+    mkpath(joinpath(file, "method.mt", "true_concentration.dt"))
+    mkpath(joinpath(file, "method.mt", "$signal.dt"))
+    write(joinpath(file, "method.mt", "$signal.dt", "config.txt"), confs[2])
+    CSV.write(joinpath(file, "method.mt", "$signal.dt", "table.txt"), table[2]; delim = signal_config[:delim])
+    write(joinpath(file, "method.mt", "true_concentration.dt", "config.txt"), confs[3])
+    CSV.write(joinpath(file, "method.mt", "true_concentration.dt", "table.txt"), table[3]; delim = conc_config[:delim])
+    CSV.write(joinpath(file, "method.mt", "analytetable.txt"), Table(; analyte = default_analyte, isd = repeat([0], length(default_analyte)), calibration = collect(eachindex(default_analyte))); delim = method_config[:delim])
+    write(joinpath(file, "method.mt", "config.txt"), confms)
+    write(joinpath(file, "config.txt"), string("[delim]\n", escape_string(string(delim))))
 end

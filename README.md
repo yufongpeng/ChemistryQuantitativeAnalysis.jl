@@ -119,27 +119,27 @@ batch_name.batch
    ├──1_quantity2.dt 
    └──2_quantity3.dt
 ```
+There is a function `mkbatch` which create a valid batch directory programatically.
+
 Config files have the following general forms
 ```
-[property1]
+[header1]
 value
 
-[property2]
+[header2]
 value1
 value2
 value3
-.
-.
-.
+⋮
 ```
-The property `delim` determines the default delimiter for `table.txt` in this directory and subdirectories.
+The header `delim` determines the default delimiter for `table.txt` in this directory and subdirectories.
 
 `data.at` and `calibration` is not necessary for initializing a batch. The former can be added to the batch directly in julia, and the latter will be generated after calibration.
 
 ### *.dt
 All `*.dt` files will be read as `ColumnDataTable` or `RowDataTable`. They contain `config.txt` and `table.txt`.
 
-Config file for `ColumnDataTable` needs the following properties.
+Config file for `ColumnDataTable` needs the following headers.
 ```
 [Type]
 C
@@ -153,11 +153,9 @@ sample_col_name
 [Analyte]
 analyte_col_name_1
 analyte_col_name_2
-.
-.
-.
+⋮
 ``` 
-Config file for `RowDataTable` needs the following properties.
+Config file for `RowDataTable` needs the following headers.
 ```
 [Type]
 R
@@ -171,16 +169,14 @@ analyte_col_name
 [Sample]
 sample_col_name_1
 sample_col_name_2
-.
-.
-.
+⋮
 ``` 
 
 ### *.mt
 It must contain two `*dt` files. `true_concentration.dt` contains true concentration for each analyte and level. The sample names must be integers.
 Another `*.dt` file is signal data for each analyte and calibration point. The file name is determined by `config.txt`.
 
-Config file for `method.mt` needs the following  properties.
+Config file for `method.mt` needs the following  headers.
 ```
 [signal]
 area
@@ -194,9 +190,7 @@ level
 [pointlevel]
 level_for_1st_point
 level_for_2nd_point
-.
-.
-.
+⋮
 ```
 `signal` specifys which `.dt` file serving as signal data. For the above file, `method.mt/area.dt` will become `method.signaltable`.
 
@@ -204,16 +198,14 @@ level_for_2nd_point
 
 `level` specifys the column representing property `pointlevel` of `MethodTable`. It only works for which `signaltable` is `ColumnDataTable`; otherwise, it falls back to use `pointlevel`.
 
-`analytetable.txt` needs to contain analyte names, index of their internal standards, and index of of other analytes whose calibration curve is used. 
+`analytetable.txt` needs to contain analyte names, index of their internal standards, and index of of other analytes whose calibration curve is used. The column names are fixed for these three columns.
 ```
-analytes isd   calibration
-analyte1 isd1  calibration_analyte_id1
-analyte2 isd2  calibration_analyte_id2
-.
-.
-.
+analytes isd   calibration other_information
+analyte1 isd1  calibration_analyte_id1 other_information1
+analyte2 isd2  calibration_analyte_id2 other_information2
+⋮
 ```
-The delimiter should be "\t".
+The delimiter should be "\t", and the order of columns does not matter.
 
 ### *.at
 It can contain multiple `*.dt`. The file names must start from an integer, `_` and `name.dt`, e.g. `0_area.dt`. The integer is for the order of reading into `AnalysisTable`, and `name` will be the key. The name of signal data is determined in `method.mt/config.txt`.

@@ -10,7 +10,7 @@ export MultipleCalibration, SingleCalibration,
     relative_signal, set_relative_signal, set_relative_signal!, update_relative_signal!,
     quantification, quantification!, set_quantification, set_quantification!, update_quantification!,
     findanalyte, getanalyte, findsample, getsample, set_isd!, eachanalyte, eachsample,
-    formula_repr, weight_repr, weight_value, formula_repr_utf8, weight_repr_utf8, format_number
+    formula_repr, weight_repr, weight_value, formula_repr_utf8, weight_repr_utf8, format_number, mkbatch
 
 import Base: getproperty, propertynames, show, write, eltype, length, iterate, getindex, setindex!
 import Dictionaries: set!
