@@ -1,6 +1,6 @@
 using ChemistryQuantitativeAnalysis, TypedTables, DataFrames
 using Test
-import Base: show
+import Base: show, convert
 
 struct AnalyteG1
     name::String
@@ -13,13 +13,14 @@ struct AnalyteOther
 end
 const AnalyteTest = Union{AnalyteG1, AnalyteG2, AnalyteOther}
 show(io::IO, analyte::AnalyteTest) = print(io, analyte.name)
-function Union{AnalyteG1, AnalyteG2, AnalyteOther}(name::String)
+function (::Type{AnalyteTest})(name::String)
     g = match(r"^G(\d)\(.*\)$", name)
     isnothing(g) && return AnalyteOther(name)
     g = parse(Int, first(g))
     g == 1 ? AnalyteG1(name) : g == 2 ? AnalyteG2(name) : AnalyteOther(name)
 end
-analyte_names = ["G1(drug_a)", "G2(drug_a)", "G1(drug_b)", "G2(drug_b)"]
+convert(::Type{AnalyteTest}, s::String) = AnalyteTest(s)
+analytes = convert(Vector{AnalyteTest}, ["G1(drug_a)", "G2(drug_a)", "G1(drug_b)", "G2(drug_b)"])
 conc = Float64[1, 2, 5, 10, 20, 50, 100]
 signal1 = vcat(Float64[1, 2, 5, 10, 20, 50, 100], [1, 2, 5, 10, 20, 50, 100] .+ 0.1, [1, 2, 5, 10, 20, 50, 100] .- 0.1)
 signal2 = vcat(Float64[1, 2, 5, 10, 20, 50, 100] .^ 2, [1, 2, 5, 10, 20, 50, 100] .^ 2 .+ 0.1, [1, 2, 5, 10, 20, 50, 100] .^ 2 .- 0.1)
@@ -81,7 +82,7 @@ end
             :point; 
             analytetype = AnalyteTest
         )
-        global method = MethodTable(conctable, signaltable, :area, :point; analyte = AnalyteTest.(analyte_names), isd = [2, -1, 4, -1], calibration = [1, -1, 3, -1])
+        global method = MethodTable(conctable, signaltable, :area, :point; analyte = analytes, isd = [2, -1, 4, -1], calibration = [1, -1, 3, -1])
         global cdata = AnalysisTable([:area], [
             ColumnDataTable(
                 DataFrame(
@@ -98,13 +99,12 @@ end
         global rdata = AnalysisTable([:area], [
             RowDataTable(
                 DataFrame(
-                    "Analyte" => analyte_names, 
+                    "Analyte" => analytes, 
                     "S1" => Float64[6, 6, 200, 2],
                     "S2" => Float64[24, 6, 800, 2],
                     "S3" => Float64[54, 6, 9800, 2]
                     ), 
-                :Analyte; 
-                analytetype = AnalyteTest
+                :Analyte
                 )
             ]
         )
@@ -117,7 +117,7 @@ end
         @test propertynames(cbatch) == (:method, :calibration, :data, :analyte, :isd, :nonisd, :point, :level)
         @test propertynames(cbatch.method) == (:analytetable, :signal, :pointlevel, :conctable, :signaltable, :analyte, :isd, :nonisd, :point, :level)
         @test propertynames(cdata) == (:analyte, :sample, :tables, :area)
-        @test propertynames(cdata.area) == (:analyte, :analytename, :sample, :samplename, :samplecol, :table, :Sample, Symbol.(analyte_names)...)
+        @test propertynames(cdata.area) == (:analyte, :analytename, :sample, :samplename, :samplecol, :table, :Sample, Symbol.(analytes)...)
         @test propertynames(rdata.area) == (:analyte, :analytename, :analytecol, :sample, :samplename, :table, :Analyte, Symbol.(["S1", "S2", "S3"])...)
     end
     @testset "Interface.jl" begin
@@ -132,8 +132,7 @@ end
         rdata2 = AnalysisTable([:area], [
             RowDataTable(
                 Table(rdata.area.table), 
-                :Analyte; 
-                analytetype = AnalyteTest
+                :Analyte
                 )
             ]
         )
@@ -234,7 +233,7 @@ end
         n2 = ChemistryQuantitativeAnalysis.read(joinpath(datapath, "new2.batch"), Table)
         n3 = ChemistryQuantitativeAnalysis.read(joinpath(datapath, "new3.batch"), Table)
         n4 = ChemistryQuantitativeAnalysis.read(joinpath(datapath, "new4.batch"), Table)
-        @test n1.data.sample == [:S0, :S1, :S2]
+        @test n1.data.sample == ["S0", "S1", "S2"]
         @test length(unique(n2.calibration[1].table.level[n2.calibration[1].table.include])) == 6
         @test n3.data.analyte == ["A1", "A2", "A3"]
         @test :L in propertynames(n4.method.signaltable)

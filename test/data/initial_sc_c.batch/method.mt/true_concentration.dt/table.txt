@@ -1,2 +1,2 @@
 Sample	Analyte2	Analyte4
-qc	10	100
+1	10	100

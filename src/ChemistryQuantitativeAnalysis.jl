@@ -16,53 +16,59 @@ import Base: getproperty, propertynames, show, write, eltype, length, iterate, g
 import Dictionaries: set!
     
 abstract type AbstractCalibration{A} end
-abstract type AbstractDataTable{A, T, V} end
+abstract type AbstractDataTable{A, S, T, V, U} end
 # abstract type AbstractAnalysisTable{A, T, S} end
 
 """
-    ColumnDataTable{A, T, V <: AbstractVector{A}} <: AbstractDataTable{A, T, V}
+    ColumnDataTable{A, S, T, V <: AbstractVector{A}, U <: AbstractVector{S}} <: AbstractDataTable{A, S, T, V, U}
 
-Tabular data wrapper indicates part of columns represent analytes, and all rows reprsent samples. `A` determines analyte type, and `T` determines table type.
+Tabular data wrapper indicates part of columns represent analytes, and all rows reprsent samples. `A` determines analyte type, `S` determines sample type, and `T` determines table type.
 
 # Fields
 * `analyte`: `V <: AbstractVector{A}`, analytes in user-defined types.
+* `sample`: `U <: AbstractVector{S}`, samples in user-defined types, i.e., `getproperty(dt.table, dt.samplecol)`.
 * `samplecol`: `Symbol`, the column name that each element is sample name.
 * `table`: Tabular data of type `T`.
 
 # Properties
-* `analytename`: `Vector{Symbol}`, the column names of `table` that are analyte names.
+* `analytename`: `AbstractVector{Symbol}`, the column names of `table` that are analyte names.
 * `samplename`: `AbstractVector{Symbol}`, sample names in type symbol.
-* `sample`: `AbstractVector`, sample names, i.e., `getproperty(dt.table, dt.samplecol)`.
 """
-struct ColumnDataTable{A, T, V <: AbstractVector{A}} <: AbstractDataTable{A, T, V}
+struct ColumnDataTable{A, S, T, V <: AbstractVector{A}, U <: AbstractVector{S}} <: AbstractDataTable{A, S, T, V, U}
     analyte::V
+    sample::U
     samplecol::Symbol
     table::T
+    function ColumnDataTable(analyte::V, sample::U, samplecol::Symbol, table::T) where {T, V <: AbstractVector, U <: AbstractVector}
+        sample === getproperty(table, samplecol) || throw(ArgumentError("`sample` is not identical to `getproperty(table, sample)`."))
+        new{eltype(analyte), eltype(sample), T, V, U}(analyte, sample, samplecol, table)
+    end
 end
 
 """
     ColumnDataTable(analytename::AbstractVector{Symbol}, samplecol::Symbol, table; analytetype = String)
+    ColumnDataTable(analytename::AbstractVector{B}, samplecol::Symbol, table; analytetype = String)
     ColumnDataTable(samplecol::Symbol, table; analytename = setdiff(propertynames(table), [samplecol]), analytetype = String)
     ColumnDataTable(table, samplecol::Symbol; analytename = setdiff(propertynames(table), [samplecol]), analytetype = String)
 
-User-friendly contructors for `ColumnDataTable{A, T}`.
+User-friendly contructors for `ColumnDataTable{A}`.
 
 * `analytename`: `AbstractVector{Symbol}`, the column names of `table` that are analyte names.
 * `samplecol`: `Symbol`, the column name that each element is sample name.
-* `analytetype`: either a constructor of `A` or a function returning analytes of type `A`.
+* `analytetype`: type `A`. There must be a function `convert(::Type{A}, s)` converting `s` from a `String` or `B` into `A`. Note that the conversion should be able to be reversed by `string`; in other words, `string(convert(analytetype, x))` should equal `x` for a valid string `x`.
 """
 ColumnDataTable(analytename::AbstractVector{Symbol}, samplecol::Symbol, table; analytetype = String) = 
-    ColumnDataTable(analytetype.(string.(analytename)), samplecol, table)
+    ColumnDataTable(convert(Vector{analytetype}, string.(analytename)), getproperty(table, samplecol), samplecol, table)
+ColumnDataTable(analytename::AbstractVector, samplecol::Symbol, table; analytetype = String) = 
+    ColumnDataTable(convert(Vector{analytetype}, analytename), getproperty(table, samplecol), samplecol, table)
 ColumnDataTable(samplecol::Symbol, table; analytename = setdiff(propertynames(table), [samplecol]), analytetype = String) = 
     ColumnDataTable(analytename, samplecol, table; analytetype)
-ColumnDataTable(table, samplecol::Symbol; analytename = setdiff(propertynames(table), [samplecol]), analytetype = String) = 
+ColumnDataTable(table, samplecol::Symbol; analytename = setdiff(propertynames(table), [samplecol]), analytetype = Strin) = 
     ColumnDataTable(analytename, samplecol, table; analytetype)
 
 function getproperty(tbl::ColumnDataTable, property::Symbol)
-    if property == :sample
-        getproperty(tbl.table, tbl.samplecol)
-    elseif property == :samplename
-        Symbol.(getproperty(tbl.table, tbl.samplecol))
+    if property == :samplename
+        Symbol.(getfield(tbl, :sample))
     elseif property == :analytename
         Symbol.(getfield(tbl, :analyte))
     elseif !in(property, fieldnames(ColumnDataTable)) && in(property, propertynames(getfield(tbl, :table)))
@@ -73,56 +79,55 @@ function getproperty(tbl::ColumnDataTable, property::Symbol)
 end
 propertynames(tbl::ColumnDataTable) = Tuple(unique((:analyte, :analytename, :sample, :samplename, :samplecol, :table, propertynames(getfield(tbl, :table))...)))
 """
-    RowDataTable{A, T, V <: AbstractVector{A}} <: AbstractDataTable{A, T, V}
+    RowDataTable{A, S, T, V <: AbstractVector{A}, U <: AbstractVector{S}} <: AbstractDataTable{A, S, T, V, U}
 
-Tabular data wrapper indicates part of columns represent analyte, and all rows reprsent samples. `A` determines analyte type, and `T` determines table type.
+Tabular data wrapper indicates part of columns represent analyte, and all rows reprsent samples. `A` determines analyte type, `S` determines sample type, and `T` determines table type.
 
 # Fields
-* `analyte`: `V <: AbstractVector{A}`, analyte in user-defined types.
+* `analyte`: `V <: AbstractVector{A}`, analytes in user-defined types, i.e., `getproperty(dt.table, dt.analytecol)`
+* `sample`: `U <: AbstractVector{S}`, samples in user-defined types.
 * `analytecol`: `Symbol`, the column name that each element is analyte name.
-* `samplename`: `Vector{Symbol}`, the column names that are sample names.
 * `table`: Tabular data of type `T`.
 
 # Properties
 * `analytename`: `AbstractVector{Symbol}`, analyte in type symbol.
-* `sample`: `Vector{Symbol}`, identical to `samplename`.
+* `samplename`: `AbstractVector{Symbol}`, the column names of `table` that are sample names.
 """
-struct RowDataTable{A, T, V <: AbstractVector{<: A}} <: AbstractDataTable{A, T, V}
+struct RowDataTable{A, S, T, V <: AbstractVector{A}, U <: AbstractVector{S}} <: AbstractDataTable{A, S, T, V, U}
     analyte::V
+    sample::U
     analytecol::Symbol
-    samplename::Vector{Symbol}
     table::T
-    function RowDataTable(analyte::V, analytecol::Symbol, samplename::AbstractVector{Symbol}, table::T) where {T, V <: AbstractVector}
-        length(analyte) == length(getproperty(table, analytecol)) || throw(ArgumentError("The length of `analyte` is different from that of `table`."))
-        new{eltype(analyte), T, V}(analyte, analytecol, collect(samplename), table)
+    function RowDataTable(analyte::V, sample::U, analytecol::Symbol, table::T) where {T, V <: AbstractVector, U <: AbstractVector}
+        analyte === getproperty(table, analytecol) || throw(ArgumentError("`analyte` is not identical to `getproperty(table, analytecol)`."))
+        new{eltype(analyte), eltype(sample), T, V, U}(analyte, sample, analytecol, table)
     end
 end
 
 """
-    RowDataTable(analytecol::Symbol, samplename::AbstractVector{Symbol}, table; analytetype = String)
-    RowDataTable(analytecol::Symbol, table; samplename = setdiff(propertynames(table), [analytecol]), analytetype = String)
-    RowDataTable(table, analytecol::Symbol; samplename = setdiff(propertynames(table), [analytecol]), analytetype = String)
+    RowDataTable(analytecol::Symbol, samplename::AbstractVector{Symbol}, table; sampletype = String)
+    RowDataTable(analytecol::Symbol, samplename::AbstractVector{B}, table; sampletype = String)
+    RowDataTable(analytecol::Symbol, table; samplename = setdiff(propertynames(table), [analytecol]), sampletype = String)
+    RowDataTable(table, analytecol::Symbol; samplename = setdiff(propertynames(table), [analytecol]), sampletype = String)
 
-User-friendly contructors for `RowDataTable{A, T}`.
+User-friendly contructors for `RowDataTable{A, S}`.
 
 * `analytecol`: `Symbol`, the column name that each element is analyte name.
 * `samplename`: `AbstractVector{Symbol}`, the column names that are sample names..
-* `analytetype`: either a constructor of `A` or a function returning analytes of type `A`.
+* `sampletype`: type `S`. There must be a function `convert(::Type{S}, s)` or `parse(::Type{S}, s)` specifically for `S` being a suptype of `Number` which converts `s` from a `String` or `B` into `S`. Note that the conversion should be able to be reversed by `string`; in other words, if `sampletype` is a subtype of `Number`, `string(parse(sampletype, x))` should equal `x`; otherwise, `string(convert(sampletype, x))` should equal `x` for a valid string `x`.
 """
-function RowDataTable(analytecol::Symbol, samplename::AbstractVector{Symbol}, table; analytetype = String)
-    et = eltype(getproperty(table, analytecol))
-    analytetype isa Function || et <: analytetype && return RowDataTable(getproperty(table, analytecol), analytecol, samplename, table)
-    analytetype isa Function && all(analytetype(string(x)) isa et for x in getproperty(table, analytecol)) && return RowDataTable(getproperty(table, analytecol), analytecol, samplename, table)
-    RowDataTable(analytetype.(string.(getproperty(table, analytecol))), analytecol, samplename, table)
-end
-RowDataTable(analytecol::Symbol, table; samplename = setdiff(propertynames(table), [analytecol]), analytetype = String) = 
-    RowDataTable(analytecol, samplename, table; analytetype)
-RowDataTable(table, analytecol::Symbol; samplename = setdiff(propertynames(table), [analytecol]), analytetype = String) = 
-    RowDataTable(analytecol, samplename, table; analytetype)
+RowDataTable(analytecol::Symbol, samplename::AbstractVector{Symbol}, table; sampletype = String) = 
+    RowDataTable(getproperty(table, analytecol), sampletype <: Number ? parse.(sampletype, string.(samplename)) : convert(Vector{sampletype}, string.(samplename)), analytecol, table)
+RowDataTable(analytecol::Symbol, samplename::AbstractVector, table; sampletype = String) = 
+    RowDataTable(getproperty(table, analytecol), sampletype <: Number ? parse.(sampletype, samplename) : convert(Vector{sampletype}, samplename), analytecol, table)
+RowDataTable(analytecol::Symbol, table; samplename = setdiff(propertynames(table), [analytecol]), sampletype = String) = 
+    RowDataTable(analytecol, samplename, table; sampletype)
+RowDataTable(table, analytecol::Symbol; samplename = setdiff(propertynames(table), [analytecol]), sampletype = String) = 
+    RowDataTable(analytecol, samplename, table; sampletype)
 
 function getproperty(tbl::RowDataTable, property::Symbol)
-    if property == :sample
-        getfield(tbl, :samplename)
+    if property == :samplename
+        Symbol.(getfield(tbl, :sample))
     elseif property == :analytename
         Symbol.(getfield(tbl, :analyte))
     elseif !in(property, fieldnames(RowDataTable)) && in(property, propertynames(getfield(tbl, :table)))
@@ -133,14 +138,14 @@ function getproperty(tbl::RowDataTable, property::Symbol)
 end
 propertynames(tbl::RowDataTable) = Tuple(unique((:analyte, :analytename, :analytecol, :sample, :samplename, :table, propertynames(getfield(tbl, :table))...)))
 """
-    AnalysisTable{A, T, S} <: AbstractAnalysisTable{A, T, S}
+    AnalysisTable{A, S, T}
 
-Tabular data wrapper of multiple tables for analysis. `A` determines analyte type, and `T` determines table type.
+Tabular data wrapper of multiple tables for analysis. `A` determines analyte type, `S` determines sample type, and `T` determines table type.
 
 # Fields
-* `analyte`: `Vector{A}`, analyte in user-defined types.
-* `sample`: `Vector{S}`, sample names.
-* `tables`: `Dictionary{Symbol, <: AbstractDataTable{A, <: T}}`, a dictionary mapping data type to datatable.
+* `analyte`: `Vector{A}`, analytes in user-defined types.
+* `sample`: `Vector{S}`, samples in user-defined types.
+* `tables`: `Dictionary{Symbol, <: AbstractDataTable{A, S, <: T}}`, a dictionary mapping data type to datatable.
 
 # Properties
 All keys of `tables` are available.
@@ -149,12 +154,12 @@ All keys of `tables` are available.
 * `AnalysisTable(analyte, sample, tables)`
 * `AnalysisTable{T}(analyte, sample, tables)`
 """
-struct AnalysisTable{A, T, S}
+struct AnalysisTable{A, S, T}
     analyte::Vector{A}
     sample::Vector{S}
     tables::Dictionary{Symbol, <: AbstractDataTable{A}}
-    AnalysisTable(analyte::AbstractVector{A}, sample::AbstractVector{S}, tables::Dictionary{Symbol, <: AbstractDataTable{A, T}}) where {A, T, S} = new{A, T, S}(collect(analyte), collect(sample), tables)
-    AnalysisTable{T}(analyte::AbstractVector{A}, sample::AbstractVector{S}, tables::Dictionary{Symbol, <: AbstractDataTable{A, <: T}}) where {A, T, S} = new{A, T, S}(collect(analyte), collect(sample), tables)
+    AnalysisTable(analyte::AbstractVector{A}, sample::AbstractVector{S}, tables::Dictionary{Symbol, <: AbstractDataTable{A, S, T}}) where {A, S, T} = new{A, S, T}(convert(Vector, analyte), convert(Vector, sample), tables)
+    AnalysisTable{T}(analyte::AbstractVector{A}, sample::AbstractVector{S}, tables::Dictionary{Symbol, <: AbstractDataTable{A, S, <: T}}) where {A, S, T} = new{A, S, T}(convert(Vector, analyte), convert(Vector, sample), tables)
 end
 
 """
@@ -163,9 +168,9 @@ end
 
 A `Dictionary`-like constructor for `AnalysisTable`.
 """
-AnalysisTable(keys::AbstractVector{Symbol}, tables::AbstractVector{<: AbstractDataTable{A, T}}) where {A, T} = AnalysisTable{T}(keys, tables)
-function AnalysisTable{T}(keys::AbstractVector{Symbol}, tables::AbstractVector{<: AbstractDataTable{A, <: T}}) where {A, T}
-    allequal(table.analyte for table in tables) || throw(ArgumentError("Tables should have identical analyte"))
+AnalysisTable(keys::AbstractVector{Symbol}, tables::AbstractVector{<: AbstractDataTable{A, S, T}}) where {A, S, T} = AnalysisTable{T}(keys, tables)
+function AnalysisTable{T}(keys::AbstractVector{Symbol}, tables::AbstractVector{<: AbstractDataTable{A, S, <: T}}) where {A, S, T}
+    allequal(table.analyte for table in tables) || throw(ArgumentError("Tables should have identical analyte"))g
     allequal(table.sample for table in tables) || throw(ArgumentError("Tables should have identical sample"))
     AnalysisTable{T}(deepcopy(first(tables).analyte), deepcopy(first(tables).sample), Dictionary(keys, tables))
 end
@@ -191,15 +196,15 @@ Tabular data wrapper for calibration method. `A` determines analyte type, and `T
     * `calibration`: index of analyte for calibration curve. `-1` means the analyte itself is a internal standard, so it will not be put into any calibration curve.
 * `signal`: `Symbol`, data type for quantification, e.g. `:area`.
 * `pointlevel`: `Vector{Int}` matching each point to level. It can be empty if there is only one level in `conctable`.
-* `conctable`: `C <: AbstractDataTable{A, <: T}` containing concentration data for each level. Sample names must be symbol or string of integers for multiple levels. One level indicates using `SingleCalibration`.
-* `signaltable`: `D <: AbstractDataTable{A, <: T}` containig signal for each point. It can be `nothing` if signal data is unecessary.
+* `conctable`: `C <: AbstractDataTable{A, Int, <: T}` containing concentration data for each level. Sample names must be symbol or string of integers for multiple levels. One level indicates using `SingleCalibration`.
+* `signaltable`: `D <: AbstractDataTable{A, S, <: T}` containig signal for each point. It can be `nothing` if signal data is unecessary.
 
 # Properties
 * `analyte`: `AbstractVector{A}`, analytes in user-defined types, identical to `analytetable.analyte`.
 * `isd`: `AbstractVector{A}`, analytes which are internal standards.
 * `nonisd`: `AbstractVector{A}`, analytes which are not internal standards.
-* `point`: `AbstractVector{Symbol}`, calibration points, identical to `signaltable.sample`.
-* `level`: `AbstractVector{Symbol}`, calibration levels, identical to `conctable.sample`.
+* `point`: `AbstractVector{S}`, calibration points, identical to `signaltable.sample`. If `signaltable` is `nothing`, this value is `nothing` too.
+* `level`: `AbstractVector{Int}`, calibration levels, identical to `conctable.sample`.
 
 # Constructors
 * `MethodTable(analytetable, signal, pointlevel, conctable, signaltable = nothing)`
@@ -215,15 +220,15 @@ struct MethodTable{A, T, C <: AbstractDataTable, D <: Union{AbstractDataTable, N
                         analytetable::Table,
                         signal::Symbol,
                         pointlevel::AbstractVector{Int}, 
-                        conctable::AbstractDataTable{B, <: T}, 
-                        signaltable::AbstractDataTable{C, <: T}) where {B, C, T}
+                        conctable::AbstractDataTable{B, Int, <: T}, 
+                        signaltable::AbstractDataTable{C, S, <: T}) where {B, C, S, T}
         cp = propertynames(analytetable)
         :analyte in cp || throw(ArgumentError("Column `:analyte` is required in `analytetable"))
         :isd in cp || throw(ArgumentError("Column `:isd` is required in `analytetable"))
         :calibration in cp || throw(ArgumentError("Column `:calibration` is required in `analytetable"))
         A = eltype(analytetable.analyte)
-        B <: A || throw(ArgumentError("Analyte type of conctable should be a subtype of $A"))
-        C <: A || throw(ArgumentError("Analyte type of signaltable should be a subtype of $A"))
+        B <: A || throw(ArgumentError("Analyte type of conctable $B should be a subtype of $A"))
+        C <: A || throw(ArgumentError("Analyte type of signaltable $C should be a subtype of $A"))
         for a in conctable.analyte
             a in analytetable.analyte || throw(ArgumentError("Analyte `$a` is not in the `analytetable`."))
         end
@@ -233,13 +238,13 @@ struct MethodTable{A, T, C <: AbstractDataTable, D <: Union{AbstractDataTable, N
                 a in signaltable.analyte || throw(ArgumentError("Analyte `$a` is not in the `signatable`."))
             end
         end
-        new{A, T, typeof(conctable), typeof(signaltable)}(analytetable, signal, collect(pointlevel), conctable, signaltable)
+        new{A, T, typeof(conctable), typeof(signaltable)}(analytetable, signal, convert(Vector, pointlevel), conctable, signaltable)
     end
     function MethodTable{T}(
                         analytetable::Table,
                         signal::Symbol,
                         pointlevel::AbstractVector{Int}, 
-                        conctable::AbstractDataTable{B, <: T}, 
+                        conctable::AbstractDataTable{B, Int, <: T}, 
                         signaltable::Nothing) where {B, T}
         cp = propertynames(analytetable)
         :analyte in cp || throw(ArgumentError("Column `:analyte` is required in `analytetable"))
@@ -250,7 +255,7 @@ struct MethodTable{A, T, C <: AbstractDataTable, D <: Union{AbstractDataTable, N
         for a in conctable.analyte
             a in analytetable.analyte || throw(ArgumentError("Analyte `$a` is not in the `analytetable`."))
         end
-        new{A, T, typeof(conctable), Nothing}(analytetable, signal, collect(pointlevel), conctable, signaltable)
+        new{A, T, typeof(conctable), Nothing}(analytetable, signal, convert(Vector, pointlevel), conctable, signaltable)
     end
 end
 
@@ -258,15 +263,15 @@ MethodTable(
             analytetable::Table,
             signal::Symbol,
             pointlevel::AbstractVector{Int}, 
-            conctable::AbstractDataTable{B, T}, 
+            conctable::AbstractDataTable{B, Int, T}, 
             signaltable::Nothing) where {B, T} = MethodTable{T}(analytetable, signal, pointlevel, conctable, signaltable)
 
 MethodTable(
             analytetable::Table,
             signal::Symbol,
             pointlevel::AbstractVector{Int}, 
-            conctable::AbstractDataTable{B, T}, 
-            signaltable::AbstractDataTable{C, S}) where {B, C, T, S} = MethodTable{promote_type(T, S)}(analytetable, signal, pointlevel, conctable, signaltable)
+            conctable::AbstractDataTable{B, Int, T}, 
+            signaltable::AbstractDataTable{C, S, D}) where {B, C, T, S, D} = MethodTable{promote_type(T, D)}(analytetable, signal, pointlevel, conctable, signaltable)
 
 function getproperty(tbl::MethodTable, p::Symbol)
     if p == :analyte
@@ -293,18 +298,18 @@ propertynames(tbl::MethodTable) = (:analytetable, :signal, :pointlevel, :conctab
 
 User-friendly contructors for `MethodTable`. `kwargs` will be columns in `analytetable`; when `analyte`, `isd` and `calibration` are not provided, it will use analyte in `conctable`.
 """
-MethodTable(conctable::AbstractDataTable{A, T}, 
-            signaltable::AbstractDataTable{B, S},
+MethodTable(conctable::AbstractDataTable{A, Int, T}, 
+            signaltable::AbstractDataTable{B, S, D},
             signal::Symbol,
-            pointlevel::AbstractVector{Int}; kwargs...) where {A, B, T, S} = MethodTable{promote_type(T, S)}(conctable, signaltable, signal, pointlevel; kwargs...)
-MethodTable(conctable::AbstractDataTable{A, T}, 
+            pointlevel::AbstractVector{Int}; kwargs...) where {A, B, T, S, D} = MethodTable{promote_type(T, D)}(conctable, signaltable, signal, pointlevel; kwargs...)
+MethodTable(conctable::AbstractDataTable{A, Int, T}, 
             signaltable::Nothing,
             signal::Symbol,
             pointlevel::AbstractVector{Int} = Int[]; kwargs...) where {A, T} = MethodTable{A, T}(conctable, signaltable, signal, pointlevel; kwargs...)
-MethodTable(conctable::AbstractDataTable{A, T}, 
-            signaltable::ColumnDataTable{B, S},
+MethodTable(conctable::AbstractDataTable{A, Int, T}, 
+            signaltable::ColumnDataTable{B, S, D},
             signal::Symbol,
-            levelname::Symbol; kwargs...) where {A, B, T, S} = MethodTable{promote_type(T, S)}(conctable, signaltable, signal, getproperty(signaltable, levelname); kwargs...)
+            levelname::Symbol; kwargs...) where {A, B, T, S, D} = MethodTable{promote_type(T, D)}(conctable, signaltable, signal, getproperty(signaltable, levelname); kwargs...)
 function MethodTable{T}(conctable::AbstractDataTable, 
                     signaltable::Union{AbstractDataTable, Nothing},
                     signal::Symbol,
@@ -381,14 +386,14 @@ A type represents a batch for quantitative analysis. `A` determines analyte type
 # Fields
 * `method`: `MethodTable{A, <: T}`, method.
 * `calibration`: `AbstractVector{MultipleCalibration{<: A}}` or `AbstractVector{SingleCalibration{<: A}}`.
-* `data`: Data for analysis, `AnalysisTable{A, <: T}` or `Nothing`.
+* `data`: Data for analysis, `AnalysisTable{A, S, <: T}` or `Nothing`.
 
 # Properties
 * `analyte`: `AbstractVector{A}`, analytes in user-defined types, identical to `method.analytetable.analyte`.
 * `isd`: `AbstractVector{<: A}`, analytes which are internal standards.
 * `nonisd`: `AbstractVector{<: A}`, analytes which are not internal standards.
-* `point`: `AbstractVector{Symbol}`, calibration points, identical to `method.signaltable.sample`.
-* `level`: `AbstractVector{Symbol}`, calibration levels, identical to `method.conctable.sample`.
+* `point`: `AbstractVector{X}` or `Nothing`, calibration points, identical to `method.point`.
+* `level`: `AbstractVector{Int}`, calibration levels, identical to `method.level`.
 
 # Constructors
 * `Batch(method, calibration, data = nothing)`
@@ -398,10 +403,10 @@ mutable struct Batch{A, T}
     method::MethodTable{A}
     calibration::AbstractVector{<: AbstractCalibration}
     data::Union{AnalysisTable, Nothing}
-    Batch{T}(method::MethodTable{A, <: T}, calibration::AbstractVector{<: AbstractCalibration{<: A}}, data::AnalysisTable{<: A, <: T}) where {A, T} = new{A, T}(method, calibration, data)
+    Batch{T}(method::MethodTable{A, <: T}, calibration::AbstractVector{<: AbstractCalibration{<: A}}, data::AnalysisTable{<: A, <: S, <: T}) where {A, S, T} = new{A, T}(method, calibration, data)
     Batch{T}(method::MethodTable{A, <: T}, calibration::AbstractVector{<: AbstractCalibration{<: A}}, data::Nothing) where {A, T} = new{A, T}(method, calibration, data)
     Batch{T}(method::MethodTable{A, <: T}, calibration::AbstractVector{<: AbstractCalibration{<: A}}) where {A, T} = new{A, T}(method, calibration, nothing)
-    Batch(method::MethodTable{A, T}, calibration::AbstractVector{<: AbstractCalibration{<: A}}, data::AnalysisTable{<: A, S}) where {A, T, S} = new{A, promote_type(T, S)}(method, calibration, data)
+    Batch(method::MethodTable{A, T}, calibration::AbstractVector{<: AbstractCalibration{<: A}}, data::AnalysisTable{<: A, S, D}) where {A, T, S, D} = new{A, promote_type(T, D)}(method, calibration, data)
     Batch(method::MethodTable{A, T}, calibration::AbstractVector{<: AbstractCalibration{<: A}}, data::Nothing) where {A, T} = new{A, T}(method, calibration, data)
     Batch(method::MethodTable{A, T}, calibration::AbstractVector{<: AbstractCalibration{<: A}}) where {A, T} = new{A, T}(method, calibration, nothing)
 end
@@ -417,11 +422,11 @@ Batch(method::MethodTable{A, T}, data = nothing;
                 zero = false, 
                 weight = 0
                 ) where {A, T} = Batch{T}(method, data; type, zero, weight)
-Batch(method::MethodTable{A, T}, data::AnalysisTable{<: A, S};
+Batch(method::MethodTable{A, T}, data::AnalysisTable{<: A, S, D};
                 type = true, 
                 zero = false, 
                 weight = 0
-                ) where {A, T, S} = Batch{promote_type(T, S)}(method, data; type, zero, weight)
+                ) where {A, T, S, D} = Batch{promote_type(T, D)}(method, data; type, zero, weight)
 function Batch{T}(method::MethodTable{A, <: T}, data = nothing;
                 type = true, 
                 zero = false, 
@@ -468,19 +473,19 @@ include("cal.jl")
 include("io.jl")
 
 """
-    ColumnDataTable(tbl::RowDataTable{A, T}, samplecol::Symbol, tablesink = T; sampletype = String)
+    ColumnDataTable(tbl::RowDataTable{A, S, T}, samplecol::Symbol, tablesink = T)
 
-Convert `RowDataTable` to `ColumnDataTable` with `samplecol` as the column name of sample. `sampletype` is either a constructor or a function taking `Symbol` as input.
+Convert `RowDataTable` to `ColumnDataTable` with `samplecol` as the column name of sample.
 """
-ColumnDataTable(tbl::RowDataTable{A, T}, samplecol::Symbol, tablesink = T; sampletype = String) where {A, T} = 
-    ColumnDataTable(tbl.analyte, samplecol, tablesink((; (samplecol => sampletype.(tbl.sample), (tbl.analytename .=> eachanalyte(tbl))...)...)))
+ColumnDataTable(tbl::RowDataTable{A, S, T}, samplecol::Symbol, tablesink = T) where {A, S, T} = 
+    ColumnDataTable(tbl.analyte, samplecol, tablesink((; (samplecol => tbl.sample, (tbl.analytename .=> eachanalyte(tbl))...)...)); analytetype = A)
 
 """
     RowDataTable(tbl::ColumnDataTable{A, T}, analytecol::Symbol, tablesink = T)
 
 Convert `RowDataTable` to `ColumnDataTable` with `analytecol` as the column name of sample.
 """
-RowDataTable(tbl::ColumnDataTable{A, T}, analytecol::Symbol, tablesink = T) where {A, T} = 
-    RowDataTable(tbl.analyte, analytecol, tbl.samplename, tablesink((; (analytecol => tbl.analyte, (tbl.samplename .=> eachsample(tbl))...)...)))
+RowDataTable(tbl::ColumnDataTable{A, S, T}, analytecol::Symbol, tablesink = T) where {A, S, T} = 
+    RowDataTable(analytecol, tbl.sample, tablesink((; (analytecol => tbl.analyte, (tbl.samplename .=> eachsample(tbl))...)...)); sampletype = S)
 
 end

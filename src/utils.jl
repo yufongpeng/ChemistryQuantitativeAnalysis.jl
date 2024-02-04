@@ -38,18 +38,18 @@ end
     findanalyte(dt::AbstractDataTable{A}, analyte::B) where {A, B <: A}
     findanalyte(dt::AbstractDataTable, analyte::Symbol)
 
-Return the index of the first element of `dt.analyte` for which the element equals to `analyte`.
+Return the index of the first element of `dt.analyte` or `dt.analytename` for which the element equals to `analyte`.
 """
 findanalyte(dt::AbstractDataTable{A}, analyte::B) where {A, B <: A} = findfirst(==(analyte), dt.analyte)
 findanalyte(dt::AbstractDataTable, analyte::Symbol) = findfirst(==(analyte), dt.analytename)
 
 """
-    findsample(dt::AbstractDataTable, sample)
+    findsample(dt::AbstractDataTable{A, S}, sample::T) where {A, S, T <: S}
     findsample(dt::AbstractDataTable, sample::Symbol)
 
-Return the index of the first element of `dt.sample` for which the element equals to `sample`.
+Return the index of the first element of `dt.sample` or `dt.samplename` for which the element equals to `sample`.
 """
-findsample(dt::AbstractDataTable, sample) = findfirst(==(sample), dt.sample)
+findsample(dt::AbstractDataTable{A, S}, sample::T) where {A, S, T <: S} = findfirst(==(sample), dt.sample)
 findsample(dt::AbstractDataTable, sample::Symbol) = findfirst(==(sample), dt.samplename)
 
 """
@@ -66,26 +66,26 @@ function getanalyte(dt::RowDataTable, analyte)
     isnothing(id) && throw(ArgumentError("Analyte $analyte is not in the table"))
     [getproperty(dt.table, p)[id] for p in dt.samplename]
 end
-getanalyte(dt::ColumnDataTable, id::Int) = getproperty(dt.table, dt.analytename[id])
+getanalyte(dt::ColumnDataTable, id::Int) = getproperty(dt.table, Symbol(dt.analyte[id]))
 function getanalyte(dt::ColumnDataTable, analyte)
     id = findanalyte(dt, analyte)
     isnothing(id) && throw(ArgumentError("Analyte $analyte is not in the table"))
-    getproperty(dt.table, dt.analytename[id])
+    getproperty(dt.table, Symbol(dt.analyte[id]))
 end
 
 """
     getsample(dt::RowDataTable, id::Int)
     getsample(dt::ColumnDataTable, id::Int)
-    getsample(dt::RowDataTable, sample::Symbol)
-    getsample(dt::ColumnDataTable, sample::Symbol)
+    getsample(dt::RowDataTable, sample)
+    getsample(dt::ColumnDataTable, sample)
 
 Get data belonging to `sample` or `dt.sample[id]` as a `Vector`. For `ColumnDataTable`, a new vector is created; mutating this vector will not change the value in `dt`.
 """
-getsample(dt::RowDataTable, id::Int) = getproperty(dt.table, dt.samplename[id])
+getsample(dt::RowDataTable, id::Int) = getproperty(dt.table, Symbol(dt.sample[id]))
 function getsample(dt::RowDataTable, sample)
     id = findsample(dt, sample)
     isnothing(id) && throw(ArgumentError("Sample $sample is not in the table"))
-    getproperty(dt.table, dt.samplename[id])
+    getproperty(dt.table, Symbol(dt.sample[id]))
 end
 getsample(dt::ColumnDataTable, id::Int) = [getproperty(dt.table, p)[id] for p in dt.analytename]
 function getsample(dt::ColumnDataTable, sample)
