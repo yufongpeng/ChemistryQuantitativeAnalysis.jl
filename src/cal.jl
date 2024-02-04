@@ -476,7 +476,7 @@ function update_calibration!(cal::MultipleCalibration, method::MethodTable)
     cal.analyte = (first(cal.analyte), isd)
     ord = sortperm(method.pointlevel)
     cal.table.y .= isnothing(isd) ? getanalyte(method.signaltable, first(cal.analyte))[ord] : (getanalyte(method.signaltable, first(cal.analyte)) ./ getanalyte(method.signaltable, isd))[ord]
-    cal.table.include .= true
+    # cal.table.include .= true
     cal.formula = getformula(cal)
     calfit!(cal)
     inv_predict_accuracy!(cal)
