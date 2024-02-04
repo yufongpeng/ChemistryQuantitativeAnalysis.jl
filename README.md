@@ -8,28 +8,28 @@
 For an interactive frontend, see [`InteractiveQuantification.jl`](https://github.com/yufongpeng/InteractiveQuantification.jl).
 
 ## Tabular data wrapper
-This package provides two wrappers for data, `ColumnDataTable{A, T}` and `RowDataTable{A, T}` which are subtypes of `AbstractDataTable{A, T}`. `ColumnDataTable` indicates that part of columns represent analytes, and all rows reprsent samples. `RowDataTable` indicates that part of columns represent samples, and all rows represent analytes. Both types have the same properties, but the actual meanings may be different. 
-|Property|`ColumnDataTable{A, T}`|`RowDataTable{A, T}`|
+This package provides two wrappers for data, `ColumnDataTable{A, T, V}` and `RowDataTable{A, T, V}` which are subtypes of `AbstractDataTable{A, T, V}`. `ColumnDataTable` indicates that part of columns represent analytes, and all rows reprsent samples. `RowDataTable` indicates that part of columns represent samples, and all rows represent analytes. Both types have the same properties, but the actual meanings may be different. 
+|Property|`ColumnDataTable{A, T, V}`|`RowDataTable{A, T, V}`|
 |----------|---------------------|------------------|
-|`analytename`|`AbstractVector{Symbol}`, the column names that are analytes names|`AbstractVector{Symbol}`, symbols transformed from column `analytecol`.|
-|`samplename`|`AbstractVector{Symbol}`, symbols transformed from column `samplecol`.|`AbstractVector{Symbol}`, the column names that are sample names.|
-|`analyte`|`AbstractVector{A}`, analytes in user-defined types.|same|
-|`sample`|`AbstractVector`, the column `samplecol`.|`AbstractVector{Symbol}`, the column names that are sample names..|
+|`analytename`|`Vector{Symbol}`, the column names that are analytes names|`Vector{Symbol}`, symbols transformed from column `analytecol`.|
+|`samplename`|`Vector{Symbol}`, symbols transformed from column `samplecol`.|`Vector{Symbol}`, the column names that are sample names.|
+|`analyte`|`V <: AbstractVector{A}`, analytes in user-defined types.|same|
+|`sample`|`AbstractVector`, the column `samplecol`.|`Vector{Symbol}`, the column names that are sample names..|
 |`table`|Tabular data of type `T`|same|
 
 `ColumnDataTable` can be created by `ColumnDataTable(table, samplecol; analytetype, analytename)`. By default, `analytename` includes all properties of `table` without `samplecol`. `RowDataTable` can be created by `RowDataTable(table, analytecol; analytetype, samplename)`. By default, `samplename` includes all properties of `table` without `analytecol`.
-To add new samples to `ColumnDataTable{A, T}`, user can directly modify `table`; for `RowDataTable{A, T}`, user have to modify `samplename` as well. To add new analytes, user can directly modify `table` for `RowDataTable{A, T}`, and additionally modify `analyte` for `ColumnDataTable{A, T}`.
+To add new samples to `ColumnDataTable`, user can directly modify `table`; for `RowDataTable`, user have to modify `samplename` as well. To add new analytes, user can directly modify `table` for `RowDataTable`, and additionally modify `analyte` for `ColumnDataTable`.
 
-The package provides another two wrappers, `MethodTable{A, T}`, and `AnalysisTable{A, T} <: AbstractAnalysisTable{A, T}`.
+The package provides another two wrappers, `MethodTable{A, T, C, D}`, and `AnalysisTable{A, T, S}`.
 ### MethodTable
 This type is used for storing method, containing all analytes, their internal standards and calibration curve setting, and data for fitting calibration curve.
 |Property|Description|
 |----------|---------|
 |`analytetable`|`Table` with at least 3 columns, `analytes` identical to property `analytes`, `isd`, matching each analyte to index of its internal standard, and `calibration` matching each analyte to index of other analyte for fitting its calibration curve. `-1` indicates the analyte itself is internal standard, and `0` indicates no internal standard. For example, a row `(analytes = AnalyteX, isd = 2, calibration = 3)` means that internal standard of `AnalyteX` is the second analyte, and it will be quantified using calibration curve of the third analyte.|
 |`signal`|`Symbol`, propertyname for extracting signal data from an `AnalysisTable`|
-|`pointlevel`|`AbstractVector{Int}` matching each point to level. It can be empty if there is only one level in `conctable`.|
-|`conctable`|`AbstractDataTable{A, <: T}` containing concentration data for each level. Sample names must be symbol or string of integers for multiple levels. One level indicates using `SingleCalibration`.|
-|`signaltable`|`AbstractDataTable{A, <: T}` containig signal for each point. It can be `nothing` if signal data is unecessary.|
+|`pointlevel`|`Vector{Int}` matching each point to level. It can be empty if there is only one level in `conctable`.|
+|`conctable`|`C <: AbstractDataTable{A, <: T}` containing concentration data for each level. Sample names must be symbol or string of integers for multiple levels. One level indicates using `SingleCalibration`.|
+|`signaltable`|`D <: AbstractDataTable{A, <: T}` containig signal for each point. It can be `nothing` if signal data is unecessary.|
 |`analyte`|`AbstractVector{A}`, analytes in user-defined types.|
 |`isd`|`AbstractVector{A}` that each analytes are internal standards.|
 |`nonisd`|`AbstractVector{A}` that each analytes are not internal standards.|same|
@@ -37,11 +37,11 @@ This type is used for storing method, containing all analytes, their internal st
 |`level`|`AbstractVector`, calibration levels, identical to `conctable.samples`.|
 
 ### AnalysisTable
-`AnalysisTable{A, T}` is basically a `Dictionary{Symbol, <: AbstractDataTable{A, <: T}}` which data can be extracted using proeperty syntax. For example, `at.tables[:area] === at.area`.
+`AnalysisTable{A, T, S}` is basically a `Dictionary{Symbol, <: AbstractDataTable{A, <: T}}` which data can be extracted using proeperty syntax. For example, `at.tables[:area] === at.area`.
 |Property|Description|
 |----------|---------|
-|`analyte`|`AbstractVector{A}`, analytes in user-defined types.|
-|`sample`|`AbstractVector`, sample names.|
+|`analyte`|`Vector{A}`, analytes in user-defined types.|
+|`sample`|`Vector{S}`, sample names.|
 |`tables`|`Dictionary{Symbol, <: AbstractDataTable{A, <: T}}`, a dictionary mapping data type to datatable.|
 |Other|All keys of `tables`|
 
