@@ -58,7 +58,7 @@ findsample(dt::AbstractDataTable, sample::Symbol) = findfirst(==(sample), dt.sam
     getanalyte(dt::RowDataTable, analyte)
     getanalyte(dt::ColumnDataTable, analyte)
 
-Get data belonging to `analyte` or `dt.analyte[id]` as a `Vector`.
+Get data belonging to `analyte` or `dt.analyte[id]` as a `Vector`. For `RowDataTable`, a new vector is created; mutating this vector will not change the value in `dt`.
 """
 getanalyte(dt::RowDataTable, id::Int) = [getproperty(dt.table, p)[id] for p in dt.samplename]
 function getanalyte(dt::RowDataTable, analyte)
@@ -79,7 +79,7 @@ end
     getsample(dt::RowDataTable, sample::Symbol)
     getsample(dt::ColumnDataTable, sample::Symbol)
 
-Get data belonging to `sample` or `dt.sample[id]` as a `Vector`.
+Get data belonging to `sample` or `dt.sample[id]` as a `Vector`. For `ColumnDataTable`, a new vector is created; mutating this vector will not change the value in `dt`.
 """
 getsample(dt::RowDataTable, id::Int) = getproperty(dt.table, dt.samplename[id])
 function getsample(dt::RowDataTable, sample)

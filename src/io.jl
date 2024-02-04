@@ -400,6 +400,13 @@ end
                     )
 
 Create a template directory of a batch. See "README.md" for available keys and values for config.
+
+The default table wrapper is `ColumnDataTable`, which default sample column name is "Sample", and default sample column name for levels is "Level".
+The default analyte column name for `RowDataTable` is "Analyte".
+    
+The priorities of default analytes are `conc_config[:Analyte]`, `signal_config[:Analyte]`, `data_config[:Analyte]`, and lastly `["Analyte1", "Analyte2"]`.
+The default samples for data are `["S1", "S2"]`. The default calibration points are `["C1", "C2", "C3", "C4", "C5"]`. The default calibration levels are `[1, 2, 3, 4, 5]`.
+
 """
 function mkbatch(file::String; 
                     delim = '\t',

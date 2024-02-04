@@ -3,10 +3,12 @@
 [![Build Status](https://github.com/yufongpeng/ChemistryQuantitativeAnalysis.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/yufongpeng/ChemistryQuantitativeAnalysis.jl/actions/workflows/CI.yml?query=branch%3Amain)
 [![Coverage](https://codecov.io/gh/yufongpeng/ChemistryQuantitativeAnalysis.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/yufongpeng/ChemistryQuantitativeAnalysis.jl)
 
-`ChemistryQuantitativeAnalysis.jl` is a package for quantitative analysis of chemicals based on tabular data.
+`ChemistryQuantitativeAnalysis.jl` is a package for quantitative analysis of chemicals based on tabular data. 
+
+For an interactive frontend, see [`InteractiveQuantification.jl`](https://github.com/yufongpeng/InteractiveQuantification.jl).
 
 ## Tabular data wrapper
-This package provides two basic wrappers, `ColumnDataTable{A, T}` and `RowDataTable{A, T}` which are subtypes of `AbstractDataTable{A, T}`. `ColumnDataTable` indicates that part of columns represent analytes, and all rows reprsent samples. `RowDataTable` indicates that part of columns represent samples, and all rows represent analytes. Both types have the same properties, but the actual meanings may be different. 
+This package provides two wrappers for data, `ColumnDataTable{A, T}` and `RowDataTable{A, T}` which are subtypes of `AbstractDataTable{A, T}`. `ColumnDataTable` indicates that part of columns represent analytes, and all rows reprsent samples. `RowDataTable` indicates that part of columns represent samples, and all rows represent analytes. Both types have the same properties, but the actual meanings may be different. 
 |Property|`ColumnDataTable{A, T}`|`RowDataTable{A, T}`|
 |----------|---------------------|------------------|
 |`analytename`|`AbstractVector{Symbol}`, the column names that are analytes names|`AbstractVector{Symbol}`, symbols transformed from column `analytecol`.|
@@ -238,7 +240,7 @@ end
 struct AnalyteOther
     name::String
 end
-const AnalyteTest = Union{AnalyteG1, AnalyteG2, AnalyteOther}
+const AnalyteTest = Union{AnalyteG1, AnalyteG2, AnalyteOther} # Use Union rather than abstarct type because csv parser only support concrete type
 show(io::IO, analyte::AnalyteTest) = print(io, analyte.name)
 
 # Analyte parser
