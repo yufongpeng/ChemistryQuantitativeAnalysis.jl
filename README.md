@@ -217,7 +217,11 @@ To read a batch into julia, call `ChemistryQuantitativeAnalysis.read`.
 ```julia-repl
 julia> batch = ChemistryQuantitativeAnalysis.read("batch_name.batch", T; table_type, analytetype, delim)
 ```
-`T` is the sink function for tabular data; it should create an object following `Tables.jl` interface. `table_type` is `T` parameter in the type signature of `Batch` which determines the underlying table type, `analytetype` is a concrete type for `analyte` that `convert(analytetype::Type{analytetype}, s::String)` must have been defined, `sampletype` is a concrete type for `sample` that `convert(sampletype::Type{sampletype}, s::String)` must have been defined, and `delim` specifies delimiter for tabular data if `config[:delim]` does not exist. Note that `string(convert(analytetype, x)` equals `x`, and if `sampletype` is a subtype of `Number`, `string(parse(sampletype, x))` equals `x`; otherwise, `string(convert(sampletype, x))` equals x for a valid string `x`.
+`T` is the sink function for tabular data; it should create an object following `Tables.jl` interface. `table_type` is `T` parameter in the type signature of `Batch` which determines the underlying table type, `analytetype` is a concrete type for `analyte`, `sampletype` is a concrete type for `sample`, and `delim` specifies delimiter for tabular data if `config[:delim]` does not exist. 
+
+For `analytetype` and `sampletype`, `string(cqaconvert(analytetype, x))` and `string(cqaconvert(sampletype, x))` should equal `x` if `x` is a valid string. Additionally, `tryparse` have to be extended for `CSV` parsing:
+* `tryparse(::Type{analytetype}, x::AbstractString)` is neccessary for `RowDataTable`.
+* `tryparse(::Type{sampletype}, x::AbstractString)` is neccessary for `ColumnDataTable`.
 
 To write batch to disk, call `ChemistryQuantitativeAnalysis.write`. There is a keyword argument `delim` controling delimiter of tables.
 ```julia-repl
@@ -228,6 +232,7 @@ There will be a folder `calibration` containing multiple `*.mcal` or `*.scal` fo
 ## Examples
 ```julia
 using ChemistryQuantitativeAnalysis, TypedTables, DataFrames
+const CQA = ChemistryQuantitativeAnalysis
 import Base: show, convert
 
 # Custom Analyte type
@@ -250,10 +255,9 @@ function (::Type{AnalyteTest})(name::String)
     g = parse(Int, first(g))
     g == 1 ? AnalyteG1(name) : g == 2 ? AnalyteG2(name) : AnalyteOther(name)
 end
-convert(::Type{AnalyteTest}, s::String) = AnalyteTest(s)
 
 # Generate data
-analytes = convert(Vector{AnalyteTest}, ["G1(drug_a)", "G2(drug_a)", "G1(drug_b)", "G2(drug_b)"])
+analytes = typedmap(AnalyteTest, ["G1(drug_a)", "G2(drug_a)", "G1(drug_b)", "G2(drug_b)"])
 conc = Float64[1, 2, 5, 10, 20, 50, 100]
 signal1 = vcat(Float64[1, 2, 5, 10, 20, 50, 100], [1, 2, 5, 10, 20, 50, 100] .+ 0.1, [1, 2, 5, 10, 20, 50, 100] .- 0.1)
 signal2 = vcat(Float64[1, 2, 5, 10, 20, 50, 100] .^ 2, [1, 2, 5, 10, 20, 50, 100] .^ 2 .+ 0.1, [1, 2, 5, 10, 20, 50, 100] .^ 2 .- 0.1)

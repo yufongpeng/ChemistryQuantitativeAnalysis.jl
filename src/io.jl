@@ -1,3 +1,56 @@
+"""
+    cqaconvert(::Type{T}, x::S)
+    cqaconvert(fn::Function, x::S)
+
+Call constructor, `parse`, or `fn`. Extend this function if defining `T(x)` is not safe.
+
+Return
+* `parse(T, x)` if `T <: Number` and `S <: Union{AbstractString, AbstractChar}`.
+* `fn(x)` if `fn` is a `Function`.
+* `T(x)` otherwise.
+
+Note that `string(cqaconvert(T, x))` should equal `x` for a valid string `x`, i.e. `string` and `x -> cqaconvert(T, x)` are inverse functions.
+"""
+cqaconvert(::Type{T}, x) where T = T(x)::T
+cqaconvert(::Type{T}, x::T) where T = x
+cqaconvert(::Type{T}, x::Union{AbstractString, AbstractChar}) where {T <: Number} = parse(T, x)::T
+cqaconvert(fn::T, x) where {T <: Function} = fn(x)
+
+"""
+    cqamap(::Type{T}, x::AbstractVector{S})
+    cqamap(fn::Function, x::AbstractVector)
+
+Convert `x` to `AbstractVector{T}`. If direct construction is not possible, i.e. neither `T <: S` nor `S <: T`, it applys `cqaconvert` on every elements.
+
+For a function, the element type is inferred by `cqatype(fn, v)` for the returned vector `v` to avoid `Vector{Any}`. 
+"""
+cqamap(::Type{T}, x::AbstractVector{T}) where T = x
+cqamap(::Type{T}, x::AbstractVector{<: T}) where T = Vector{T}(x)
+cqamap(::Type{T}, x::AbstractVector{S}) where {S, T <: S} = Vector{T}(x)
+cqamap(::Type{T}, x::AbstractVector) where T = 
+    map!(e -> cqaconvert(T, e), Vector{T}(undef, length(x)), x)
+function cqamap(fn::T, x::AbstractVector) where {T <: Function}
+    v = map(e -> cqaconvert(fn, e), x)
+    cqamap(cqatype(fn, v), v)
+end
+
+"""
+    cqatype(fn::Function, x::AbstractVector)
+
+Return the union of types of each element to avoid `Vector{Any}`. Extend this function if neccessary.
+"""
+cqatype(fn::T, v::AbstractVector) where {T <: Function} = Union{typeof.(v)...}
+
+"""
+    typedmap(::Type{T}, c...) 
+    typedmap(f, ::Type{T}, c...)
+
+Transform collection `c` by applying `T` or `f` to each element. For multiple collection arguments, apply `T` or `f` elementwise, and stop when any of them  
+is exhausted. The element type of returned collection will be forced to `T`.
+"""
+typedmap(::Type{T}, iters...) where T = collect(T, Base.Generator(T, iters...))
+typedmap(fn::F, ::Type{T}, iters...) where {F, T} = collect(T, Base.Generator(fn, iters...))
+
 function read_config(file::String)
     config = Dictionary{Symbol, Any}()
     lasttag = nothing
@@ -25,8 +78,10 @@ end
 """
     read_calibration(file::String; analytetype::Type{A} = String, delim = '\\t') -> AbstractCalibration{A}
 
-Read ".mcal" or ".scal" file into julia as `MultipleCalibration` or `SingleCalibration`. `analytetype` is a concrete type for `analyte` that `convert(analytetype::Type{analytetype}, s::String)` must have been defined, 
-and `delim` specifies delimiter for tabular data if `config[:delim]` does not exist.
+Read ".mcal" or ".scal" file into julia as `MultipleCalibration` or `SingleCalibration`. `analytetype` is a concrete type for `analyte`, 
+and `delim` specifies delimiter for tabular data if `config[:delim]` does not exist. 
+    
+See `ChemistryQuantitativeAnalysis.read` for the requirement of `analytetype`.
 
 See README.md for the structure of ".mcal" and ".scal" file.
 """
@@ -44,9 +99,10 @@ end
     read_datatable(file::String, T; analytetype::Type{A} = String, sampletype::Type{S} = String, delim = '\\t', levelname = :level) -> AbstractDataTable{A, S, D <: T}
 
 Read ".dt" file into julia as `ColumnDataTable` or `RowDataTable`. `T` is the sink function for tabular data, 
-`analytetype` is a concrete type for `analyte` that `convert(analytetype::Type{analytetype}, s::String)` must have been defined, `sampletype` is a concrete type for `sample` that `convert(sampletype::Type{sampletype}, s::String)` or `parse(sampletype::Type{sampletype}, s::String)` must have been defined, 
+`analytetype` is a concrete type for `analyte`, `sampletype` is a concrete type for `sample`, 
 and `delim` specifies delimiter for tabular data if `config[:delim]` does not exist. `level` is specifically used for methodtable, indicating the column representing calibration level; this column should be all integers. 
-Note that `string(convert(analytetype, x)` equals `x`, and if `sampletype` is a subtype of `Number`, `string(parse(sampletype, x))` equals `x`; otherwise, `string(convert(sampletype, x))` equals x for a valid string `x`.
+
+See `ChemistryQuantitativeAnalysis.read` for the requirements of `analytetype` and `sampletype`.
 
 See README.md for the structure of ".dt" file.
 """
@@ -61,7 +117,7 @@ function read_datatable(file::String, T; analytetype = String, sampletype = Stri
         for i in Symbol.(sample_name)
             replace!(getproperty(tbl, i), missing => 0)
         end
-        RowDataTable(getproperty(tbl, analyte_name), sampletype <: Number ? parse.(sampletype, sample_name) : convert(Vector{sampletype}, sample_name), analyte_name, tbl)
+        RowDataTable(getproperty(tbl, analyte_name), cqamap(sampletype, sample_name), analyte_name, tbl)
     else
         config[:Type] == "C" || throw(ArgumentError("StackDataTable is not implemented yet."))
         sample_name = Symbol(first(split(config[:Sample], "\t")))
@@ -70,7 +126,7 @@ function read_datatable(file::String, T; analytetype = String, sampletype = Stri
         for i in Symbol.(analyte_name)
             replace!(getproperty(tbl, i), missing => 0)
         end
-        ColumnDataTable(convert(Vector{analytetype}, analyte_name), getproperty(tbl, sample_name), sample_name, tbl)
+        ColumnDataTable(cqamap(analytetype, analyte_name), getproperty(tbl, sample_name), sample_name, tbl)
     end
 end
 
@@ -78,8 +134,10 @@ end
     read_analysistable(file::String, T; tabletype = T, analytetype::Type{A} = String, sampletype::Type{S} = String, delim = '\\t') -> AnalysisTable{A, S, D <: T}
 
 Read ".at" file into julia as `AnalysisTable`. `T` is the sink function for tabular data, `tabletype` is `T` parameter in the type signature of `Batch` which determines the underlying table type, 
-`analytetype` is a concrete type for `analyte` that `convert(analytetype::Type{analytetype}, s::String)` must have been defined, `sampletype` is a concrete type for `sample` that `convert(sampletype::Type{sampletype}, s::String)` or `parse(sampletype::Type{sampletype}, s::String)` must have been defined, 
-and `delim` specifies delimiter for tabular data if `config[:delim]` in `tables` do not exist. Note that `string(convert(analytetype, x)` equals `x`, and if `sampletype` is a subtype of `Number`, `string(parse(sampletype, x))` equals `x`; otherwise, `string(convert(sampletype, x))` equals x for a valid string `x`.
+`analytetype` is a concrete type for `analyte`, `sampletype` is a concrete type for `sample`, 
+and `delim` specifies delimiter for tabular data if `config[:delim]` in `tables` do not exist. 
+    
+See `ChemistryQuantitativeAnalysis.read` for the requirements of `analytetype` and `sampletype`.
 
 If `tabletype` is set to `nothing`, table type will be determined automatically which may be too restrict when using parameterized table types.
 
@@ -98,8 +156,10 @@ end
     read_methodtable(file::String, T; tabletype = T, analytetype::Type{A} = String, sampletype = String, delim = '\\t') -> MethodTable{A, S <: T}
 
 Read ".mt" file into julia as `MethodTable`. `T` is the sink function for tabular data, `tabletype` is `T` parameter in the type signature of `MethodTable` which determines the underlying table type, 
-`analytetype` is a concrete type for `analyte` that `convert(analytetype::Type{analytetype}, s::String)` must have been defined, `sampletype` is a concrete type for `sample` that `convert(sampletype::Type{sampletype}, s::String)` or `parse(sampletype::Type{sampletype}, s::String)` must have been defined, 
-and `delim` specifies delimiter for tabular data if `config[:delim]` does not exist. Note that `string(convert(analytetype, x)` equals `x`, and if `sampletype` is a subtype of `Number`, `string(parse(sampletype, x))` equals `x`; otherwise, `string(convert(sampletype, x))` equals x for a valid string `x`.
+`analytetype` is a concrete type for `analyte`, `sampletype` is a concrete type for `sample`, 
+and `delim` specifies delimiter for tabular data if `config[:delim]` does not exist. 
+    
+See `ChemistryQuantitativeAnalysis.read` for the requirements of `analytetype` and `sampletype`.
 
 If `tabletype` is set to `nothing`, table type will be determined automatically which may be too restrict when using parameterized table types.
 
@@ -142,8 +202,10 @@ end
     read_batch(file::String, T; tabletype = T, analytetype::Type{A} = String, sampletype = String, delim = '\\t') -> Batch{A, tabletype}
 
 Read ".batch" file into julia as `Batch`. `T` is the sink function for tabular data, `tabletype` is `T` parameter in the type signature of `Batch` which determines the underlying table type, 
-`analytetype` is a concrete type for `analyte` that `convert(analytetype::Type{analytetype}, s::String)` must have been defined, `sampletype` is a concrete type for `sample` that `convert(sampletype::Type{sampletype}, s::String)` or `parse(sampletype::Type{sampletype}, s::String)` must have been defined, 
-and `delim` specifies delimiter for tabular data if `config[:delim]` does not exist. Note that `string(convert(analytetype, x)` equals `x`, and if `sampletype` is a subtype of `Number`, `string(parse(sampletype, x))` equals `x`; otherwise, `string(convert(sampletype, x))` equals x for a valid string `x`.
+`analytetype` is a concrete type for `analyte`, `sampletype` is a concrete type for `sample`, 
+and `delim` specifies delimiter for tabular data if `config[:delim]` does not exist. 
+    
+See `ChemistryQuantitativeAnalysis.read` for the requirements of `analytetype` and `sampletype`.
 
 If `tabletype` is set to `nothing`, table type will be determined automatically which may be too restrict when using parameterized table types.
 
@@ -375,8 +437,12 @@ end
 Read ".scal" as `SingleCalibration`, ".mcal" as `MultipleCalibration`, ".at" as `AnalysisTable`, ".mt" as `MethodTable`, and ".batch" as `Batch`. 
 
 `T` is the sink function for tabular data, `tabletype` is `T` parameter in the type signature which determines the underlying table type, 
-`analytetype` is a concrete type for `analyte` that `convert(analytetype::Type{analytetype}, s::String)` must have been defined, `sampletype` is a concrete type for `sample` that `convert(sampletype::Type{sampletype}, s::String)` or `parse(sampletype::Type{sampletype}, s::String)` must have been defined, 
+`analytetype` is a concrete type for `analyte`, `sampletype` is a concrete type for `sample`, 
 and `delim` specifies delimiter for tabular data if `config[:delim]` does not exist.
+
+For `analytetype` and `sampletype`, `string(cqaconvert(analytetype, x))` and `string(cqaconvert(sampletype, x))` should equal `x` if `x` is a valid string. Additionally, `tryparse` have to be extended for `CSV` parsing:
+* `tryparse(::Type{analytetype}, x::AbstractString)` is neccessary for `RowDataTable`.
+* `tryparse(::Type{sampletype}, x::AbstractString)` is neccessary for `ColumnDataTable`.
 
 If `tabletype` is set to `nothing`, table type will be determined automatically which may be too restrict when using parameterized table types.
 

@@ -10,7 +10,7 @@ export MultipleCalibration, SingleCalibration,
     relative_signal, set_relative_signal, set_relative_signal!, update_relative_signal!,
     quantification, quantification!, set_quantification, set_quantification!, update_quantification!,
     findanalyte, getanalyte, findsample, getsample, set_isd!, eachanalyte, eachsample,
-    formula_repr, weight_repr, weight_value, formula_repr_utf8, weight_repr_utf8, format_number, mkbatch
+    formula_repr, weight_repr, weight_value, formula_repr_utf8, weight_repr_utf8, format_number, mkbatch, typedmap
 
 import Base: getproperty, propertynames, show, write, eltype, length, iterate, getindex, setindex!
 import Dictionaries: set!
@@ -53,14 +53,14 @@ end
 
 User-friendly contructors for `ColumnDataTable{A}`.
 
-* `analytename`: `AbstractVector{Symbol}`, the column names of `table` that are analyte names.
+* `analytename`: `AbstractVector{Symbol}`, the column names of `table` that are analyte names. It will be converted to `Vector{String}` before conversion to `AbstractVector{A}`. Vector of other type is also valid and will not be converted to `Vector{String}` first.
 * `samplecol`: `Symbol`, the column name that each element is sample name.
-* `analytetype`: type `A`. There must be a function `convert(::Type{A}, s)` converting `s` from a `String` or `B` into `A`. Note that the conversion should be able to be reversed by `string`; in other words, `string(convert(analytetype, x))` should equal `x` for a valid string `x`.
+* `analytetype`: type `A` or a function. After first conversion of `analytename`, it will be converted to `AbstractVector{A}` using `cqamap(analytetype, analytename)`. See `cqaconvert` for the requirement of `analytetype`.
 """
 ColumnDataTable(analytename::AbstractVector{Symbol}, samplecol::Symbol, table; analytetype = String) = 
-    ColumnDataTable(convert(Vector{analytetype}, string.(analytename)), getproperty(table, samplecol), samplecol, table)
+    ColumnDataTable(cqamap(analytetype, string.(analytename)), getproperty(table, samplecol), samplecol, table)
 ColumnDataTable(analytename::AbstractVector, samplecol::Symbol, table; analytetype = String) = 
-    ColumnDataTable(convert(Vector{analytetype}, analytename), getproperty(table, samplecol), samplecol, table)
+    ColumnDataTable(cqamap(analytetype, analytename), getproperty(table, samplecol), samplecol, table)
 ColumnDataTable(samplecol::Symbol, table; analytename = setdiff(propertynames(table), [samplecol]), analytetype = String) = 
     ColumnDataTable(analytename, samplecol, table; analytetype)
 ColumnDataTable(table, samplecol::Symbol; analytename = setdiff(propertynames(table), [samplecol]), analytetype = Strin) = 
@@ -113,13 +113,13 @@ end
 User-friendly contructors for `RowDataTable{A, S}`.
 
 * `analytecol`: `Symbol`, the column name that each element is analyte name.
-* `samplename`: `AbstractVector{Symbol}`, the column names that are sample names..
-* `sampletype`: type `S`. There must be a function `convert(::Type{S}, s)` or `parse(::Type{S}, s)` specifically for `S` being a suptype of `Number` which converts `s` from a `String` or `B` into `S`. Note that the conversion should be able to be reversed by `string`; in other words, if `sampletype` is a subtype of `Number`, `string(parse(sampletype, x))` should equal `x`; otherwise, `string(convert(sampletype, x))` should equal `x` for a valid string `x`.
+* `samplename`: `AbstractVector{Symbol}`, the column names of `table` that are sample names. It will be converted to `Vector{String}` before conversion to `AbstractVector{S}`. Vector of other type is also valid and will not be converted to `Vector{String}` first.
+* `sampletype`: type `S` or a function. After first conversion of `sampletype`, it will be converted to `AbstractVector{S}` using `cqamap(sampletype, sampletype)`. See `cqaconvert` for the requirement of `sampletype`.
 """
 RowDataTable(analytecol::Symbol, samplename::AbstractVector{Symbol}, table; sampletype = String) = 
-    RowDataTable(getproperty(table, analytecol), sampletype <: Number ? parse.(sampletype, string.(samplename)) : convert(Vector{sampletype}, string.(samplename)), analytecol, table)
+    RowDataTable(getproperty(table, analytecol), cqamap(sampletype, string.(samplename)), analytecol, table)
 RowDataTable(analytecol::Symbol, samplename::AbstractVector, table; sampletype = String) = 
-    RowDataTable(getproperty(table, analytecol), sampletype <: Number ? parse.(sampletype, samplename) : convert(Vector{sampletype}, samplename), analytecol, table)
+    RowDataTable(getproperty(table, analytecol), cqamap(sampletype, samplename), analytecol, table)
 RowDataTable(analytecol::Symbol, table; samplename = setdiff(propertynames(table), [analytecol]), sampletype = String) = 
     RowDataTable(analytecol, samplename, table; sampletype)
 RowDataTable(table, analytecol::Symbol; samplename = setdiff(propertynames(table), [analytecol]), sampletype = String) = 
