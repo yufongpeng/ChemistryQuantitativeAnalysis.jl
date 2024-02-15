@@ -10,9 +10,9 @@ relative_signal(method::MethodTable, at::AnalysisTable; signal = method.signal) 
 relative_signal(batch::Batch, at::AnalysisTable; signal = batch.method.signal) = relative_signal(batch.method, at; signal)
 function relative_signal(method::MethodTable, dt::AbstractDataTable)
     analytetable = method.analytetable
-    aid = [findfirst(==(analyte), analytetable.analyte) for analyte in dt.analyte]
+    aid = [findfirst(==(analyte), analytetable.analyte) for analyte in analyteobj(dt)]
     cs = ThreadsX.map(eachindex(aid)) do i
-        analytetable.isd[aid[i]] < 0 ? repeat([NaN], length(dt.sample)) :
+        analytetable.isd[aid[i]] < 0 ? repeat([NaN], length(sampleobj(dt))) :
                 analytetable.isd[aid[i]] == 0 ? getanalyte(dt, i) :
                 getanalyte(dt, i) ./ getanalyte(dt, analytetable.analyte[analytetable.isd[aid[i]]])
     end
@@ -30,8 +30,8 @@ set_relative_signal(at::AnalysisTable, batch::Batch; signal = batch.method.signa
     set_relative_signal(at, batch.method; signal, rel_sig)
 function set_relative_signal(at::AnalysisTable, method::MethodTable; signal = method.signal, rel_sig = :relative_signal)
     result = relative_signal(method, at; signal)
-    new = AnalysisTable(at.analyte, at.sample, Dictionary(at.tables))
-    set!(new.tables, rel_sig, result)
+    new = AnalysisTable(analyteobj(at), sampleobj(at), Dictionary(tables(at)))
+    set!(new, rel_sig, result)
     new
 end
 
@@ -45,7 +45,7 @@ set_relative_signal!(at::AnalysisTable, batch::Batch; signal = batch.method.sign
     set_relative_signal!(at, batch.method; signal, rel_sig)
 function set_relative_signal!(at::AnalysisTable, method::MethodTable; signal = method.signal, rel_sig = :relative_signal)
     result = relative_signal(method, at; signal)
-    set!(at.tables, rel_sig, result)
+    set!(at, rel_sig, result)
     at
 end
 
@@ -71,10 +71,10 @@ inv_predict(batch::Batch, at::AnalysisTable; rel_sig = :relative_signal) =
 
 function inv_predict(batch::Batch, dt::AbstractDataTable)
     analytetable = batch.method.analytetable
-    cid = [analytetable.calibration[findfirst(==(analyte), analytetable.analyte)] for analyte in dt.analyte]
+    cid = [analytetable.calibration[findfirst(==(analyte), analytetable.analyte)] for analyte in analyteobj(dt)]
     cal_id = [id > 0 ? findfirst(cal -> first(cal.analyte) == analytetable.analyte[id], batch.calibration) : nothing for id in cid]
     cs = ThreadsX.map(eachindex(cal_id)) do i
-        isnothing(cal_id[i]) ? repeat([NaN], length(dt.sample)) : 
+        isnothing(cal_id[i]) ? repeat([NaN], length(sampleobj(dt))) : 
             inv_predict(batch.calibration[cal_id[i]], getanalyte(dt, i))
     end
     fill_result!(deepcopy(dt), cs)
@@ -113,8 +113,8 @@ Inversely predict concantration, update or insert the value into a copy of `at` 
 """
 function set_inv_predict(at::AnalysisTable, batch::Batch; rel_sig = :relative_signal, est_conc = :estimated_concentration)
     result = inv_predict(batch, at; rel_sig)
-    new = AnalysisTable(at.analyte, at.sample, Dictionary(at.tables))
-    set!(new.tables, est_conc, result)
+    new = AnalysisTable(analyteobj(at), sampleobj(at), Dictionary(tables(at)))
+    set!(new, est_conc, result)
     new
 end
 
@@ -124,7 +124,7 @@ end
 Inversely predict concantration, update or insert the value into `at` at index `est_conc`, and return the object using `getproperty(at, rel_sig)` as relstive signal data.
 """
 function set_inv_predict!(at::AnalysisTable, batch::Batch; rel_sig = :relative_signal, est_conc = :estimated_concentration)
-    set!(at.tables, est_conc, inv_predict(batch, at; rel_sig))
+    set!(at, est_conc, inv_predict(batch, at; rel_sig))
     at
 end
 
@@ -136,7 +136,7 @@ This function assigns `at` to `batch.data` and returns the updated `batch`.
 """
 function update_inv_predict!(batch::Batch, at::AnalysisTable = batch.data; rel_sig = :relative_signal, est_conc = :estimated_concentration)
     batch.data = at
-    set!(at.tables, est_conc, inv_predict(batch, at; rel_sig))
+    set!(at, est_conc, inv_predict(batch, at; rel_sig))
     batch
 end
 
@@ -176,10 +176,10 @@ Quantify all analyes based on relative signal data, and return the result as `Ab
 quantification(batch::Batch, at::AnalysisTable; signal = batch.method.signal) = quantification(batch, getproperty(at, signal))
 function quantification(batch::Batch, dt::AbstractDataTable)
     analytetable = batch.method.analytetable
-    cid = [analytetable.calibration[findfirst(==(analyte), analytetable.analyte)] for analyte in dt.analyte]
+    cid = [analytetable.calibration[findfirst(==(analyte), analytetable.analyte)] for analyte in analyteobj(dt)]
     cal_id = [id > 0 ? findfirst(cal -> first(cal.analyte) == analytetable.analyte[id], batch.calibration) : nothing for id in cid]
     cs = ThreadsX.map(eachindex(cal_id)) do i
-        isnothing(cal_id[i]) && return repeat([NaN], length(dt.sample))
+        isnothing(cal_id[i]) && return repeat([NaN], length(sampleobj(dt)))
         cal = batch.calibration[cal_id[i]]
         quantification(cal, dt, i, last(cal.analyte))
     end
@@ -211,7 +211,7 @@ Quantify all analytes, update or insert the values into a copy of `at` at index 
 function set_quantification(at::AnalysisTable, batch::Batch; signal = batch.method.signal, rel_sig = :relative_signal, est_conc = :estimated_concentration)
     new = set_relative_signal(at, batch; signal, rel_sig)
     result = inv_predict(batch, new,; rel_sig)
-    set!(new.tables, est_conc, result)
+    set!(new, est_conc, result)
     new
 end
 
@@ -250,9 +250,9 @@ accuracy(at::AnalysisTable; true_conc = :true_concentration, est_conc = :estimat
     accuracy(getproperty(at, est_conc), getproperty(at, true_conc))
 
 function accuracy(dtp::AbstractDataTable, dtt::AbstractDataTable)
-    cs = dtp.analyte == dtt.analyte ? ThreadsX.map(eachindex(dtp.analyte)) do i
+    cs = analyteobj(dtp) == analyteobj(dtt) ? ThreadsX.map(eachindex(analyteobj(dtp))) do i
         accuracy(getanalyte(dtp, i), getanalyte(dtt, i))
-    end : ThreadsX.map(dtp.analyte) do analyte
+    end : ThreadsX.map(analyteobj(dtp)) do analyte
         accuracy(getanalyte(dtp, analyte), getanalyte(dtt, analyte))
     end
     fill_result!(deepcopy(dtp), cs)
@@ -283,8 +283,8 @@ using `getproperty(at, true_conc)` as true concentration and `getproperty(at, es
 """
 function set_accuracy(at::AnalysisTable; true_conc = :true_concentration, est_conc = :estimated_concentration, acc = :accuracy)
     result = accuracy(at; true_conc, est_conc)
-    new = AnalysisTable(at.analyte, at.sample, Dictionary(at.tables))
-    set!(new.tables, acc, result)
+    new = AnalysisTable(analyteobj(at), sampleobj(at), Dictionary(tables(at)))
+    set!(new, acc, result)
     new
 end
 
@@ -295,7 +295,7 @@ Calculate accuracy, update or insert the values into `at` at index `acc`, and re
 using `getproperty(at, true_conc)` as true concentration and `getproperty(at, est_conc)` as estimated concentration.
 """
 function set_accuracy!(at::AnalysisTable; true_conc = :true_concentration, est_conc = :estimated_concentration, acc = :accuracy)
-    set!(at.tables, acc, accuracy(at; true_conc, est_conc))
+    set!(at, acc, accuracy(at; true_conc, est_conc))
     at
 end
 
@@ -308,7 +308,7 @@ This function assigns `at` to `batch.data` and returns the updated `batch`.
 """
 function update_accuracy!(batch::Batch, at::AnalysisTable = batch.data; true_conc = :true_concentration, est_conc = :estimated_concentration, acc = :accuracy)
     batch.data = at
-    set!(at.tables, acc, accuracy(at; true_conc, est_conc))
+    set!(at, acc, accuracy(at; true_conc, est_conc))
     batch
 end
 
@@ -320,25 +320,26 @@ Apply `inv_predict!` and `accuracy!` subsequantly to `Batch` or `AbstractCalibra
 const inv_predict_accuracy! = accuracy! ∘ inv_predict!
 
 """
-    calibration(analyte::Tuple, tbl::Table; analyte = 1, isd = 0, type = true, zero = false, weight = 0)
-    calibration(batch::Batch{A}, analyte::B; id = batch.method.signaltable.sample, isd = isd_of(batch.method, analyte),
+    calibration(anisd::Tuple, tbl::Table; analyte = 1, isd = 0, type = true, zero = false, weight = 0)
+    calibration(batch::Batch{A}, ana::B; id = sample(batch.method.signaltable), isd = isd_of(batch.method, analyte),
                         type = true, zero = false, weight = 0) where {A, B <: A}
-    calibration(method::MethodTable{A}, analyte::B; id = method.signaltable.sample, isd = isd_of(method, analyte),
+    calibration(method::MethodTable{A}, ana::B; id = sample(method.signaltable), isd = isd_of(method, analyte),
                 type = true, zero = false, weight = 0) where {A, B <: A}
 
 Create `MultipleCalibration`.
 
+* `anisd`: `Tuple{B <: A, Any}` which will be stored as `analyte`. The first element is the analyte to be quantified, and the second element is its internal standard, which `nothing` means no internal standard.
+* `analyte`: `B` which will be stored as first argument of `analyte`.
 * `tbl`: `TypedTable.Table` which will be stored as `table`. It is clean-up calibration data for points selection.
 * `method`: `MethodTable`, calibration method and data. 
 * `batch`: `Batch`.
 
 # Keyword arguments
-* `analyte`: `Tuple{B <: A, Any}` which will be stored as `analyte`. The first element is the analyte to be quantified, and the second element is its internal standard, which `nothing` means no internal standard.
 * `type`: `Bool` determines whether fitting a linear line (`true`) or quadratic curve (`false`), which will be stored as `type`.
 * `zero`: `Bool` determines whether forcing the curve crossing (0, 0) (`true`) or ignoring it (`false`), which will be stored as `zero`.
 * `weight`: `Float64` represents the exponential applying to each element of `x` as a weighting vector, which will be stored as `weight`.
 """
-function calibration(analyte::Tuple, tbl::Table;
+function calibration(anisd::Tuple, tbl::Table;
                     type = true, 
                     zero = false, 
                     weight = 0
@@ -352,17 +353,17 @@ function calibration(analyte::Tuple, tbl::Table;
     f = getformula(type, zero)
     model = calfit(table, f, type, zero, weight)
     table = Table(; id = table.id, level = table.level, y = table.y, x = table.x, x̂ = zeros(Float64, length(table)), accuracy = zeros(Float64, length(table)), include = table.include)
-    inv_predict_accuracy!(MultipleCalibration(analyte, type, zero, weight, f, table, model))
+    inv_predict_accuracy!(MultipleCalibration(anisd, type, zero, weight, f, table, model))
 end
 calibration(batch::Batch{A}, analyte::B; 
-                    id = batch.method.signaltable.sample,
+                    id = sampleobj(batch.method.signaltable),
                     isd = isd_of(batch.method, analyte),
                     type = true, 
                     zero = false, 
                     weight = 0
                     ) where {A, B} = calibration(batch.method, analyte; id, isd, type, zero, weight)
 function calibration(method::MethodTable{A}, analyte::B; 
-                    id = method.signaltable.sample,
+                    id = sampleobj(method.signaltable),
                     isd = isd_of(method, analyte),
                     type = true, 
                     zero = false, 
@@ -387,8 +388,8 @@ function calibration(method::MethodTable{A}, analyte::B;
     inv_predict_accuracy!(MultipleCalibration((analyte, isd), type, zero, Float64(weight), f, table, model))
 end
 function calibration(method::MethodTable{A}, i::Int; 
-                    id = method.signaltable.sample,
-                    isd = isd_of(method, method.conctable.analyte[i]),
+                    id = sampleobj(method.signaltable),
+                    isd = isd_of(method, analyteobj(method.conctable)[i]),
                     type = true, 
                     zero = false, 
                     weight = 0
@@ -409,7 +410,7 @@ function calibration(method::MethodTable{A}, i::Int;
                     include = trues(length(id)))
     f = getformula(type, zero)
     model = calfit(table, f, type, zero, weight)
-    inv_predict_accuracy!(MultipleCalibration((method.conctable.analyte[i], isd), type, zero, Float64(weight), f, table, model))
+    inv_predict_accuracy!(MultipleCalibration((analyteobj(method.conctable)[i], isd), type, zero, Float64(weight), f, table, model))
 end
 
 """
@@ -503,10 +504,10 @@ function set_isd!(batch::Batch{A}, analyte::B, isd::Union{C, Nothing} = nothing)
     batch
 end
 function set_isd!(method::MethodTable{A}, analyte::B, isd::Union{C, Nothing} = nothing) where {A, B <: A, C <: A}
-    aid = findfirst(==(analyte), method.analytemap.analyte)
+    aid = findfirst(==(analyte), method.analytetable.analyte)
     isnothing(aid) && throw(ArgumentError("Analyte $analyte is not in the method"))
     isnothing(isd) && (method.analytetable.isd[aid] = 0; return method)
-    iid = findfirst(==(isd), method.analytemap.analyte)
+    iid = findfirst(==(isd), method.analytetable.analyte)
     isnothing(iid) && throw(ArgumentError("Analyte $isd is not in the method"))
     method.analytetable.isd[aid] = iid
     method

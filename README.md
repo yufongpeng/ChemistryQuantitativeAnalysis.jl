@@ -8,11 +8,11 @@
 For an interactive frontend, see [`InteractiveQuantification.jl`](https://github.com/yufongpeng/InteractiveQuantification.jl).
 
 ## Tabular data wrapper
-This package provides two wrappers for data, `ColumnDataTable{A, S, T, V, U}` and `RowDataTable{A, S, T, V, U}` which are subtypes of `AbstractDataTable{A, S, T, V, U}`. `ColumnDataTable` indicates that part of columns represent analytes, and all rows reprsent samples. `RowDataTable` indicates that part of columns represent samples, and all rows represent analytes. Both types have the same properties, but the actual meanings may be different. 
-|Property|`ColumnDataTable{A, S, T, V, U}`|`RowDataTable{A, S, T, V, U}`|
+This package provides two wrappers for data, `ColumnDataTable{A, S, T, V, U}` and `RowDataTable{A, S, T, V, U}` which are subtypes of `AbstractDataTable{A, S, T, V, U}`. `ColumnDataTable` indicates that part of columns represent analytes, and all rows reprsent samples. `RowDataTable` indicates that part of columns represent samples, and all rows represent analytes. Both types behave like the underlying `table` object. 
+|Fields|`ColumnDataTable{A, S, T, V, U}`|`RowDataTable{A, S, T, V, U}`|
 |----------|---------------------|------------------|
-|`analytename`|`Vector{Symbol}`, the column names that are analytes names|`Vector{Symbol}`, symbols transformed from column `analytecol`.|
-|`samplename`|`Vector{Symbol}`, symbols transformed from column `samplecol`.|`Vector{Symbol}`, the column names that are sample names.|
+|`analytecol`|-|`Symbol`, column name whose elements are analytes.|
+|`samplecol`|`Symbol`, column name whose elements are samples.|-|
 |`analyte`|`V <: AbstractVector{A}`, analytes in user-defined types.|same|
 |`sample`|`U <: AbstractVector{S}`, samples in user-defined types.|same|
 |`table`|Tabular data of type `T`|same|
@@ -38,12 +38,11 @@ This type is used for storing method, containing all analytes, their internal st
 
 ### AnalysisTable
 `AnalysisTable{A, S, T}` is basically a `Dictionary{Symbol, <: AbstractDataTable{A, S, <: T}}` which data can be extracted using proeperty syntax. For example, `at.tables[:area] === at.area`.
-|Property|Description|
+|Field|Description|
 |----------|---------|
 |`analyte`|`Vector{A}`, analytes in user-defined types.|
 |`sample`|`Vector{S}`, samples in user-defined types.|
 |`tables`|`Dictionary{Symbol, <: AbstractDataTable{A, S, <: T}}`, a dictionary mapping data type to datatable.|
-|Other|All keys of `tables`|
 
 The key for signal data is determined by `method.signal`. Default names for relative signal, true concentration, estimated concentration and accuracy are `relative_signal`, `true_concentration`, `estimated_concentration` and `accuracy`.
 
@@ -327,6 +326,10 @@ update_inv_predict!(cbatch) # Fit `cbatch.data.relative_signal` into calibration
 update_quantification!(cbatch) # equivalent to `update_inv_predict!(update_relative_signal!(cbatch))`
 
 # Utils
+analyteobj(cdata.area)
+sampleeobj(cdata)
+analytename(cdata)
+sampleename(cdata.area)
 cdata.area[1, "G2(drug_a)"] = 6
 cdata.area[1, "G1(drug_a)"] == 6
 collect(eachanalyte(cdata.area))

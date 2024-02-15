@@ -22,7 +22,7 @@ cqaconvert(fn::T, x) where {T <: Function} = fn(x)
 
 Convert `x` to `AbstractVector{T}`. If direct construction is not possible, i.e. neither `T <: S` nor `S <: T`, it applys `cqaconvert` on every elements.
 
-For a function, the element type is inferred by `cqatype(fn, v)` for the returned vector `v` to avoid `Vector{Any}`. 
+For a function, the element type is inferred by `cqatype(fn, v)` for the returned vector `v` to avoid abstract element type. 
 """
 cqamap(::Type{T}, x::AbstractVector{T}) where T = x
 cqamap(::Type{T}, x::AbstractVector{<: T}) where T = Vector{T}(x)
@@ -37,7 +37,7 @@ end
 """
     cqatype(fn::Function, x::AbstractVector)
 
-Return the union of types of each element to avoid `Vector{Any}`. Extend this function if neccessary.
+Return the union of types of each element to avoid abstract element type. Extend this function if neccessary.
 """
 cqatype(fn::T, v::AbstractVector) where {T <: Function} = Union{typeof.(v)...}
 
@@ -45,8 +45,8 @@ cqatype(fn::T, v::AbstractVector) where {T <: Function} = Union{typeof.(v)...}
     typedmap(::Type{T}, c...) 
     typedmap(f, ::Type{T}, c...)
 
-Transform collection `c` by applying `T` or `f` to each element. For multiple collection arguments, apply `T` or `f` elementwise, and stop when any of them  
-is exhausted. The element type of returned collection will be forced to `T`.
+Transform collection `c` by applying `f` to each element. For multiple collection arguments, apply `f` elementwise, and stop when any of them  
+is exhausted. The element type of returned collection will be forced to `T`. In addtion, `typedmap(T, c...)` is equivalent to `typedmap(T, T, c...)`.
 """
 typedmap(::Type{T}, iters...) where T = collect(T, Base.Generator(T, iters...))
 typedmap(fn::F, ::Type{T}, iters...) where {F, T} = collect(T, Base.Generator(fn, iters...))
@@ -174,15 +174,15 @@ function read_methodtable(file::String, T; tabletype = T, analytetype = String, 
     analyte = analytetype.(analytetable.analyte)
     isd = replace(analytetable.isd, missing => 0)
     conctable = read_datatable(joinpath(file, "true_concentration.dt"), T; analytetype, sampletype = Int, delim)
-    if length(conctable.sample) > 1
+    if length(sampleobj(conctable)) > 1
         signaltable = read_datatable(joinpath(file, "$signal.dt"), T; analytetype, sampletype, delim, levelname = get(config, :levelname, nothing))
         if haskey(config, :levelname) && in(Symbol(config[:levelname]), propertynames(signaltable))
             pointlevel = getproperty(signaltable, Symbol(config[:levelname]))
         elseif haskey(config, :pointlevel)
             pointlevel = parse.(Int, config[:pointlevel])
         else
-            nl = length(conctable.sample)
-            ns = length(signal.sample)
+            nl = length(sampleobj(conctable))
+            ns = length(sampleobj(signaltable))
             nr = ns ÷ nl
             rr = ns - nl * nr
             pointlevel = vcat(repeat([1], rr), repeat(1:nl, nr))
@@ -218,9 +218,9 @@ function read_batch(file::String, T; tabletype = T, analytetype = String, sample
     method = read_methodtable(joinpath(file, "method.mt"), T; tabletype, analytetype, sampletype, delim)
     if !in("calibration", readdir(file)) || isempty(readdir(joinpath(file, "calibration")))
         if isnothing(method.signaltable)
-            cal = [SingleCalibration((analyte, ), first(getanalyte(method.conctable, analyte))) for analyte in method.conctable.analyte]
+            cal = [SingleCalibration((analyte, ), first(getanalyte(method.conctable, analyte))) for analyte in analyteobj(method.conctable)]
         else
-            cal = [calibration(method, analyte) for analyte in method.conctable.analyte if !isisd(method, analyte)]
+            cal = [calibration(method, analyte) for analyte in analyteobj(method.conctable) if !isisd(method, analyte)]
         end
     else
         cal = [read_calibration(joinpath(file, "calibration", f); delim, analytetype) for f in readdir(joinpath(file, "calibration")) if endswith(f, ".mcal") || endswith(f, ".scal")]
@@ -292,41 +292,41 @@ function shorten_type_repr(T)
 end
 
 function print_summary(io::IO, tbl::ColumnDataTable{A, S, T}) where {A, S, T}
-    print(io, "ColumnDataTable{$A, $S, $(shorten_type_repr(T))} with ", length(tbl.analyte), " analytes and ", length(tbl.sample), " samples")
+    print(io, "ColumnDataTable{$A, $S, $(shorten_type_repr(T))} with ", length(analyteobj(tbl)), " analytes and ", length(sampleobj(tbl)), " samples")
 end
 
 function show(io::IO, ::MIME"text/plain", tbl::ColumnDataTable)
     print_summary(io, tbl)
     println(io, ":")
-    show(io, MIME"text/plain"(), tbl.table)
+    show(io, MIME"text/plain"(), table(tbl))
 end
 
 function print_summary(io::IO, tbl::RowDataTable{A, S, T}) where {A, S, T}
-    print(io, "RowDataTable{$A, $S, $(shorten_type_repr(T))} with ", length(tbl.analyte), " analytes and ", length(tbl.sample), " samples")
+    print(io, "RowDataTable{$A, $S, $(shorten_type_repr(T))} with ", length(analyteobj(tbl)), " analytes and ", length(sampleobj(tbl)), " samples")
 end
 
 function show(io::IO, ::MIME"text/plain", tbl::RowDataTable)
     print_summary(io, tbl)
     println(io, ":")
-    show(io, MIME"text/plain"(), tbl.table)
+    show(io, MIME"text/plain"(), table(tbl))
 end
 
 function print_summary(io::IO, tbl::AnalysisTable{A, S, T}) where {A, S, T}
-    print(io, "AnalysisTable{$A, $S, $(shorten_type_repr(T))} with ", length(tbl.analyte), " analytes and ", length(tbl.sample), " samples")
+    print(io, "AnalysisTable{$A, $S, $(shorten_type_repr(T))} with ", length(analyteobj(tbl)), " analytes and ", length(sampleobj(tbl)), " samples")
 end
 
 function show(io::IO, ::MIME"text/plain", tbl::AnalysisTable)
     print_summary(io, tbl)
     print(io, ":")
-    if length(collect(keys(tbl.tables))) > 2
-        ks = collect(keys(tbl.tables))
+    if length(tbl) > 2
+        ks = propertynames(tbl)
         print(io, "\n∘ ", ks[1], " | ")
-        show(io, MIME"text/plain"(), tbl.tables[ks[1]])
+        show(io, MIME"text/plain"(), tbl[ks[1]])
         print(io, "\n   ⋮")
         print(io, "\n∘ ", ks[end], " | ")
-        show(io, MIME"text/plain"(), tbl.tables[ks[end]])
+        show(io, MIME"text/plain"(), tbl[ks[end]])
     else
-        for (k, v) in pairs(tbl.tables)
+        for (k, v) in pairs(tbl)
             print(io, "\n∘ ", k, " | ")
             show(io, MIME"text/plain"(), v)
         end
@@ -338,7 +338,7 @@ function print_summary(io::IO, tbl::MethodTable{A, T}) where {A, T}
     if isnothing(tbl.signaltable)
         print(io, "MethodTable{$A, $(shorten_type_repr(T))} with ", length(tbl.analytetable.analyte), " analytes")
     else
-        print(io, "MethodTable{$A, $(shorten_type_repr(T))} with ", length(tbl.analytetable.analyte), " analytes, ", length(tbl.conctable.sample), " levels and ", length(tbl.signaltable.sample), " points")
+        print(io, "MethodTable{$A, $(shorten_type_repr(T))} with ", length(tbl.analytetable.analyte), " analytes, ", length(sampleobj(tbl.conctable)), " levels and ", length(sampleobj(tbl.signaltable)), " points")
     end
 end
 
@@ -348,31 +348,31 @@ function show(io::IO, ::MIME"text/plain", tbl::MethodTable)
     show(io, MIME"text/plain"(), tbl.analytetable)
     print(io, "\n\n∘ Level: ", join(tbl.pointlevel, ", "), "\n")
     print(io, "∘ Concentration: \n")
-    show(io, MIME"text/plain"(), tbl.conctable.table)
+    show(io, MIME"text/plain"(), table(tbl.conctable))
     print(io, "\n\n∘ Signal: \n")
-    show(io, MIME"text/plain"(), isnothing(tbl.signaltable) ? nothing : tbl.signaltable.table)
+    show(io, MIME"text/plain"(), isnothing(tbl.signaltable) ? nothing : table(tbl.signaltable))
 end
 
 function write(file::String, tbl::RowDataTable; delim = '\t')
     mkpath(file)
     open(joinpath(file, "config.txt"), "w+") do config
-        Base.write(config, "[Type]\nR\n\n[delim]\n", escape_string(string(delim)), "\n\n[Analyte]\n", tbl.analytecol, "\n\n[Sample]\n", join(tbl.samplename, "\n"))
+        Base.write(config, "[Type]\nR\n\n[delim]\n", escape_string(string(delim)), "\n\n[Analyte]\n", analytecol(tbl), "\n\n[Sample]\n", join(samplename(tbl), "\n"))
     end
-    CSV.write(joinpath(file, "table.txt"), tbl.table; delim)
+    CSV.write(joinpath(file, "table.txt"), table(tbl); delim)
 end
 
 function write(file::String, tbl::ColumnDataTable; delim = '\t')
     mkpath(file)
     open(joinpath(file, "config.txt"), "w+") do config
-        Base.write(config, "[Type]\nC\n\n[delim]\n", escape_string(string(delim)), "\n\n[Analyte]\n", join(tbl.analytename, "\n"), "\n\n[Sample]\n", tbl.samplecol)
+        Base.write(config, "[Type]\nC\n\n[delim]\n", escape_string(string(delim)), "\n\n[Analyte]\n", join(analytename(tbl), "\n"), "\n\n[Sample]\n", samplecol(tbl))
     end
-    CSV.write(joinpath(file, "table.txt"), tbl.table; delim)
+    CSV.write(joinpath(file, "table.txt"), table(tbl); delim)
 end
 
 function write(file::String, tbl::AnalysisTable; delim = '\t')
     mkpath(file)
     rm.(readdir(file; join = true); recursive = true)
-    for (i, (k, v)) in enumerate(pairs(tbl.tables))
+    for (i, (k, v)) in enumerate(pairs(tables(tbl)))
         write(joinpath(file, "$(i - 1)_$k.dt"), v; delim)
     end
 end
@@ -383,11 +383,11 @@ function write(file::String, tbl::MethodTable; delim = '\t')
     isnothing(tbl.signaltable) || write(joinpath(file, "$(tbl.signal).dt"), tbl.signaltable; delim)
     id = nothing
     if isa(tbl.signaltable, ColumnDataTable)
-        id = findfirst(x -> getproperty(tbl.signaltable.table, x) == tbl.pointlevel, propertynames(tbl.signaltable.table))
+        id = findfirst(x -> getproperty(tbl.signaltable, x) == tbl.pointlevel, propertynames(tbl.signaltable))
     end
     open(joinpath(file, "config.txt"), "w+") do config
         isnothing(id) ? Base.write(config, "[signal]\n", tbl.signal, "\n\n[delim]\n", escape_string(string(delim)), "\n\n[pointlevel]\n", join(tbl.pointlevel, "\n")) : 
-            Base.write(config, "[signal]\n", tbl.signal, "\n\n[delim]\n", escape_string(string(delim)), "\n\n[levelname]\n", propertynames(tbl.signaltable.table)[id])
+            Base.write(config, "[signal]\n", tbl.signal, "\n\n[delim]\n", escape_string(string(delim)), "\n\n[levelname]\n", propertynames(tbl.signaltable)[id])
     end
     CSV.write(joinpath(file, "analytetable.txt"), tbl.analytetable; delim)
 end

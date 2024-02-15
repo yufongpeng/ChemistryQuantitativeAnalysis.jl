@@ -1,6 +1,7 @@
-using ChemistryQuantitativeAnalysis, TypedTables, DataFrames
+using ChemistryQuantitativeAnalysis, TypedTables, DataFrames, Dictionaries
 using Test
 import Base: show, convert
+const CQA = ChemistryQuantitativeAnalysis
 
 struct AnalyteG1
     name::String
@@ -19,8 +20,8 @@ function (::Type{AnalyteTest})(name::String)
     g = parse(Int, first(g))
     g == 1 ? AnalyteG1(name) : g == 2 ? AnalyteG2(name) : AnalyteOther(name)
 end
-convert(::Type{AnalyteTest}, s::String) = AnalyteTest(s)
-analytes = convert(Vector{AnalyteTest}, ["G1(drug_a)", "G2(drug_a)", "G1(drug_b)", "G2(drug_b)"])
+
+analytes = typedmap(AnalyteTest, ["G1(drug_a)", "G2(drug_a)", "G1(drug_b)", "G2(drug_b)"])
 conc = Float64[1, 2, 5, 10, 20, 50, 100]
 signal1 = vcat(Float64[1, 2, 5, 10, 20, 50, 100], [1, 2, 5, 10, 20, 50, 100] .+ 0.1, [1, 2, 5, 10, 20, 50, 100] .- 0.1)
 signal2 = vcat(Float64[1, 2, 5, 10, 20, 50, 100] .^ 2, [1, 2, 5, 10, 20, 50, 100] .^ 2 .+ 0.1, [1, 2, 5, 10, 20, 50, 100] .^ 2 .- 0.1)
@@ -116,14 +117,14 @@ end
         @test getsample(RowDataTable(cdata.area, :Analyte), 2) == getsample(rdata.area, 2)
         @test propertynames(cbatch) == (:method, :calibration, :data, :analyte, :isd, :nonisd, :point, :level)
         @test propertynames(cbatch.method) == (:analytetable, :signal, :pointlevel, :conctable, :signaltable, :analyte, :isd, :nonisd, :point, :level)
-        @test propertynames(cdata) == (:analyte, :sample, :tables, :area)
-        @test propertynames(cdata.area) == (:analyte, :analytename, :sample, :samplename, :samplecol, :table, :Sample, Symbol.(analytes)...)
-        @test propertynames(rdata.area) == (:analyte, :analytename, :analytecol, :sample, :samplename, :table, :Analyte, Symbol.(["S1", "S2", "S3"])...)
+        @test propertynames(cdata) == (:area, )
+        @test propertynames(cdata.area) == [:Sample, Symbol.(analytes)...]
+        @test propertynames(rdata.area) == [:Analyte, Symbol.(["S1", "S2", "S3"])...]
     end
     @testset "Interface.jl" begin
         cdata2 = AnalysisTable([:area], [
             ColumnDataTable(
-                Table(cdata.area.table), 
+                Table(CQA.table(cdata.area)), 
                 :Sample; 
                 analytetype = AnalyteTest
                 )
@@ -131,21 +132,25 @@ end
         )
         rdata2 = AnalysisTable([:area], [
             RowDataTable(
-                Table(rdata.area.table), 
+                Table(CQA.table(rdata.area)), 
                 :Analyte
                 )
             ]
         )
         cdata.area[1, "G2(drug_a)"] = 6
         @test cdata.area[1, "G1(drug_a)"] == 6
-        @test collect(cdata2.area) == collect(cdata2.area.table)
-        @test collect(rdata2.area) == collect(rdata2.area.table)
-        @test columns(cdata2.area) == columns(cdata2.area.table)
-        @test columns(rdata2.area) == columns(rdata2.area.table)
-        @test rows(cdata2.area) == rows(cdata2.area.table)
-        @test rows(rdata2.area) == rows(rdata2.area.table)
+        @test collect(cdata2.area) == collect(CQA.table(cdata2.area))
+        @test collect(rdata2.area) == collect(CQA.table(rdata2.area))
+        @test columns(cdata2.area) == columns(CQA.table(cdata2.area))
+        @test columns(rdata2.area) == columns(CQA.table(rdata2.area))
+        @test rows(cdata2.area) == rows(CQA.table(cdata2.area))
+        @test rows(rdata2.area) == rows(CQA.table(rdata2.area))
         @test collect(eachanalyte(cdata.area)) == collect(eachanalyte(rdata.area))
         @test collect(eachsample(cdata.area)) == collect(eachsample(rdata.area))
+        set!(cbatch.data, :true_concentration, deepcopy(cbatch.data.estimated_concentration))
+        insert!(cbatch.data, :true_concentration, deepcopy(cbatch.data.estimated_concentration))
+        delete!(cbatch.data, :true_concentration)
+        unset!(cbatch.data, :true_concentration)
     end
     @testset "Calibration" begin
         accuracy(cbatch.calibration[1])
@@ -159,7 +164,7 @@ end
         @test all(isapprox.(cbatch.calibration[2].table.accuracy[1:3], [1, sqrt(1.1), sqrt(0.9)]))
         @test all(isapprox.(rbatch.calibration[1].table.accuracy[1:3], [1, 1.1, 0.9]))
         @test all(isapprox.(rbatch.calibration[2].table.accuracy[1:3], [1, sqrt(1.1), sqrt(0.9)]))
-        @test isapprox(update_calibration!(SingleCalibration((method.conctable.analyte[2], ), 100.0), method).conc, first(getanalyte(method.conctable, 2)))
+        @test isapprox(update_calibration!(SingleCalibration((analyteobj(method.conctable)[2], ), 100.0), method).conc, first(getanalyte(method.conctable, 2)))
     end
     @testset "Quantification" begin
         @test all(isapprox_nan.(set_quantification!(rbatch.data, rbatch).estimated_concentration.S1, update_inv_predict!(rbatch, set_relative_signal(rbatch.data, rbatch)).data.estimated_concentration.S1))
@@ -176,7 +181,7 @@ end
         @test getanalyte(cdata.area, AnalyteG1("G1(drug_b)")) == getanalyte(cdata.area, Symbol("G1(drug_b)"))
         @test getanalyte(rdata.area, AnalyteG1("G1(drug_b)")) == getanalyte(rdata.area, Symbol("G1(drug_b)"))
         @test getsample(cdata.area, "S2") == getsample(cdata.area, Symbol("S2"))
-        @test getsample(rdata.area, Symbol("S2")) == getproperty(rdata.area.table, Symbol("S2"))
+        @test getsample(rdata.area, Symbol("S2")) == getproperty(CQA.table(rdata.area), Symbol("S2"))
         @test all(isapprox.(dynamic_range(cbatch.calibration[1]), (1, 100)))
         @test signal_range(rbatch.calibration[2]) == (signal_lloq(rbatch.calibration[2]), signal_uloq(rbatch.calibration[2]))
         @test endswith(formula_repr_utf8(cbatch.calibration[2]), "x^2")
@@ -201,10 +206,10 @@ end
         global save_mc_r = ChemistryQuantitativeAnalysis.read(joinpath(datapath, "save_mc_r.batch"), Table)
         global save_sc_c = ChemistryQuantitativeAnalysis.read(joinpath(datapath, "save_sc_c.batch"), Table)
         global save_sc_r = ChemistryQuantitativeAnalysis.read(joinpath(datapath, "save_sc_r.batch"), Table)
-        @test all(isapprox_nan.(collect(initial_mc_c.data.estimated_concentration.table[1]), collect(save_mc_c.data.estimated_concentration.table[1])))
-        @test all(isapprox_nan.(collect(initial_mc_r.data.estimated_concentration.table[1]), collect(save_mc_r.data.estimated_concentration.table[1])))
-        @test all(isapprox_nan.(collect(initial_sc_c.data.estimated_concentration.table[1]), collect(save_sc_c.data.estimated_concentration.table[1])))
-        @test all(isapprox_nan.(collect(initial_sc_r.data.estimated_concentration.table[1]), collect(save_sc_r.data.estimated_concentration.table[1])))
+        @test all(isapprox_nan.(collect(CQA.table(initial_mc_c.data.estimated_concentration)[1]), collect(CQA.table(save_mc_c.data.estimated_concentration)[1])))
+        @test all(isapprox_nan.(collect(CQA.table(initial_mc_r.data.estimated_concentration)[1]), collect(CQA.table(save_mc_r.data.estimated_concentration)[1])))
+        @test all(isapprox_nan.(collect(CQA.table(initial_sc_c.data.estimated_concentration)[1]), collect(CQA.table(save_sc_c.data.estimated_concentration)[1])))
+        @test all(isapprox_nan.(collect(CQA.table(initial_sc_r.data.estimated_concentration)[1]), collect(CQA.table(save_sc_r.data.estimated_concentration)[1])))
         @test @test_noerror ChemistryQuantitativeAnalysis.write(joinpath(datapath, "save_mc_c.batch"), initial_mc_c)
         @test @test_noerror ChemistryQuantitativeAnalysis.write(joinpath(datapath, "save_mc_r.batch"), initial_mc_r)
         @test @test_noerror ChemistryQuantitativeAnalysis.write(joinpath(datapath, "save_sc_c.batch"), initial_sc_c)
@@ -233,9 +238,9 @@ end
         n2 = ChemistryQuantitativeAnalysis.read(joinpath(datapath, "new2.batch"), Table)
         n3 = ChemistryQuantitativeAnalysis.read(joinpath(datapath, "new3.batch"), Table)
         n4 = ChemistryQuantitativeAnalysis.read(joinpath(datapath, "new4.batch"), Table)
-        @test n1.data.sample == ["S0", "S1", "S2"]
+        @test sampleobj(n1.data) == ["S0", "S1", "S2"]
         @test length(unique(n2.calibration[1].table.level[n2.calibration[1].table.include])) == 6
-        @test n3.data.analyte == ["A1", "A2", "A3"]
+        @test analyteobj(n3.data) == ["A1", "A2", "A3"]
         @test :L in propertynames(n4.method.signaltable)
     end
 end
