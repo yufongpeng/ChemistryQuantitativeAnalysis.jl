@@ -96,8 +96,8 @@ Create an iterator which gets data belonging to each sample as a `Vector`. For `
 """
 eachsample(dt::AbstractDataTable) = EachSample(dt)
 
-Base.eltype(it::EachAnalyte) = Base.eltype(it.table)
-Base.eltype(it::EachSample) = Base.eltype(it.table)
+Base.eltype(it::EachAnalyte) = AbstractVector
+Base.eltype(it::EachSample) = AbstractVector
 Base.length(it::EachAnalyte) = Base.length(analyteobj(it.table))
 Base.length(it::EachSample) = Base.length(sampleobj(it.table))
 Base.iterate(it::EachAnalyte{<: ColumnDataTable}, st = 1) = st > length(it) ? nothing : (getproperty(table(it.table), analytename(it.table)[st]), st + 1)

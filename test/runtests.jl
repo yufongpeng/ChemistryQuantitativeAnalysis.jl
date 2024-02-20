@@ -70,8 +70,8 @@ end
                 "level" => collect(1:7), 
                 "G1(drug_a)" => conc,
                 "G1(drug_b)" => conc .* 10), 
-            :level; 
-            analytetype = AnalyteTest
+            AnalyteTest,
+            :level
         )
         global signaltable = ColumnDataTable(
             DataFrame(
@@ -80,8 +80,8 @@ end
                 "G2(drug_a)" => repeat([5.0], 21),
                 "G1(drug_b)" => signal2,
                 "G2(drug_b)" => repeat([2.0], 21)), 
-            :point; 
-            analytetype = AnalyteTest
+            AnalyteTest,
+            :point
         )
         global method = MethodTable(conctable, signaltable, :area, :point; analyte = analytes, isd = [2, -1, 4, -1], calibration = [1, -1, 3, -1])
         global cdata = AnalysisTable([:area], [
@@ -92,8 +92,8 @@ end
                     "G2(drug_a)" => Float64[5, 6, 6],
                     "G1(drug_b)" => Float64[200, 800, 9800],
                     "G2(drug_b)" => Float64[2, 2, 2]), 
-                :Sample; 
-                analytetype = AnalyteTest
+                AnalyteTest,
+                :Sample
                 )
             ]
         )
@@ -125,8 +125,8 @@ end
         cdata2 = AnalysisTable([:area], [
             ColumnDataTable(
                 Table(CQA.table(cdata.area)), 
-                :Sample; 
-                analytetype = AnalyteTest
+                AnalyteTest,
+                :Sample
                 )
             ]
         )
@@ -147,8 +147,8 @@ end
         @test rows(rdata2.area) == rows(CQA.table(rdata2.area))
         @test collect(eachanalyte(cdata.area)) == collect(eachanalyte(rdata.area))
         @test collect(eachsample(cdata.area)) == collect(eachsample(rdata.area))
-        set!(cbatch.data, :true_concentration, deepcopy(cbatch.data.estimated_concentration))
-        insert!(cbatch.data, :true_concentration, deepcopy(cbatch.data.estimated_concentration))
+        insert!(cbatch.data, :true_concentration, deepcopy(cbatch.data.area))
+        set!(cbatch.data, :true_concentration, deepcopy(cbatch.data.area))
         delete!(cbatch.data, :true_concentration)
         unset!(cbatch.data, :true_concentration)
     end

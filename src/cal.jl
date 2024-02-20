@@ -11,12 +11,16 @@ relative_signal(batch::Batch, at::AnalysisTable; signal = batch.method.signal) =
 function relative_signal(method::MethodTable, dt::AbstractDataTable)
     analytetable = method.analytetable
     aid = [findfirst(==(analyte), analytetable.analyte) for analyte in analyteobj(dt)]
-    cs = ThreadsX.map(eachindex(aid)) do i
-        analytetable.isd[aid[i]] < 0 ? repeat([NaN], length(sampleobj(dt))) :
+    cs = length(aid) > 10 ? ThreadsX.map(eachindex(aid)) do i
+        convert(Vector{Float64}, analytetable.isd[aid[i]] < 0 ? repeat([NaN], length(sampleobj(dt))) :
                 analytetable.isd[aid[i]] == 0 ? getanalyte(dt, i) :
-                getanalyte(dt, i) ./ getanalyte(dt, analytetable.analyte[analytetable.isd[aid[i]]])
+                getanalyte(dt, i) ./ getanalyte(dt, analytetable.analyte[analytetable.isd[aid[i]]]))::Vector{Float64}
+    end :  map(eachindex(aid)) do i
+        convert(Vector{Float64}, analytetable.isd[aid[i]] < 0 ? repeat([NaN], length(sampleobj(dt))) :
+                analytetable.isd[aid[i]] == 0 ? getanalyte(dt, i) :
+                getanalyte(dt, i) ./ getanalyte(dt, analytetable.analyte[analytetable.isd[aid[i]]]))::Vector{Float64}
     end
-    fill_result!(deepcopy(dt), cs)
+    fill_result!(deepcopy(dt), cs::Vector{Vector{Float64}})
 end
 relative_signal(batch::Batch, dt::AbstractDataTable) = relative_signal(batch.method, dt)
 
@@ -30,7 +34,7 @@ set_relative_signal(at::AnalysisTable, batch::Batch; signal = batch.method.signa
     set_relative_signal(at, batch.method; signal, rel_sig)
 function set_relative_signal(at::AnalysisTable, method::MethodTable; signal = method.signal, rel_sig = :relative_signal)
     result = relative_signal(method, at; signal)
-    new = AnalysisTable(analyteobj(at), sampleobj(at), Dictionary(tables(at)))
+    new = AnalysisTable(analyteobj(at), sampleobj(at), deepcopy(tables(at)))
     set!(new, rel_sig, result)
     new
 end
@@ -55,7 +59,8 @@ end
 Calculate relative signal and update or insert the value into `at` at index `rel_sig` using `getproperty(at, signal)` or `dt` as signal data.
 This function assigns `at` to `batch.data` and returns the updated `batch`.
 """
-function update_relative_signal!(batch::Batch, at::AnalysisTable = batch.data; signal = batch.method.signal, rel_sig = :relative_signal)
+function update_relative_signal!(batch::Batch, at::Union{AnalysisTable, Nothing} = batch.data; signal = batch.method.signal, rel_sig = :relative_signal)
+    isnothing(at) && throw(ArgumentError("Data can't be nothing."))
     batch.data = at
     set_relative_signal!(at, batch.method; signal, rel_sig)
     batch
@@ -73,11 +78,14 @@ function inv_predict(batch::Batch, dt::AbstractDataTable)
     analytetable = batch.method.analytetable
     cid = [analytetable.calibration[findfirst(==(analyte), analytetable.analyte)] for analyte in analyteobj(dt)]
     cal_id = [id > 0 ? findfirst(cal -> first(cal.analyte) == analytetable.analyte[id], batch.calibration) : nothing for id in cid]
-    cs = ThreadsX.map(eachindex(cal_id)) do i
-        isnothing(cal_id[i]) ? repeat([NaN], length(sampleobj(dt))) : 
-            inv_predict(batch.calibration[cal_id[i]], getanalyte(dt, i))
+    cs = length(cal_id) > 10 ? ThreadsX.map(eachindex(cal_id)) do i
+        convert(Vector{Float64}, isnothing(cal_id[i]) ? repeat([NaN], length(sampleobj(dt))) : 
+            inv_predict(batch.calibration[cal_id[i]], getanalyte(dt, i)))::Vector{Float64}
+    end : map(eachindex(cal_id)) do i
+        convert(Vector{Float64}, isnothing(cal_id[i]) ? repeat([NaN], length(sampleobj(dt))) : 
+            inv_predict(batch.calibration[cal_id[i]], getanalyte(dt, i)))::Vector{Float64}
     end
-    fill_result!(deepcopy(dt), cs)
+    fill_result!(deepcopy(dt), cs::Vector{Vector{Float64}})
 end
 
 """
@@ -92,14 +100,14 @@ Inversely predict concentration of `analyte` or analyte specified in `cal`, and 
 inv_predict(cal::SingleCalibration) = [cal.conc]
 inv_predict(cal::MultipleCalibration) = inv_predict(cal, cal.table.y)
 inv_predict(cal::AbstractCalibration, dt::AbstractDataTable; analyte = first(cal.analyte)) = inv_predict(cal, getanalyte(dt, analyte))
-function inv_predict(cal::MultipleCalibration, y::AbstractArray)
-    β = cal.model.model.pp.beta0
+function inv_predict(cal::MultipleCalibration, y::AbstractArray{T}) where T
+    β = convert(Vector{T}, cal.model.model.pp.beta0)::Vector{T}
     if cal.type && cal.zero
         y ./ β[1]
     elseif cal.type
-        (y .- β[1]) ./ β[2]
+        @. (y - β[1]) / β[2]
     else
-        c, b, a = cal.zero ? (0, β...) : β
+        c, b, a = cal.zero ? (zero(T), β...) : β
         d = @. max(b ^ 2 + 4 * a * (y - c), 0)
         @. (-b + sqrt(d)) / 2a
     end
@@ -134,7 +142,8 @@ end
 Inversely predict concentration and update or insert the value into `at` at index `est_conc` using `getproperty(at, rel_sig)` or `dt` as relstive signal data.
 This function assigns `at` to `batch.data` and returns the updated `batch`.
 """
-function update_inv_predict!(batch::Batch, at::AnalysisTable = batch.data; rel_sig = :relative_signal, est_conc = :estimated_concentration)
+function update_inv_predict!(batch::Batch, at::Union{AnalysisTable, Nothing} = batch.data; rel_sig = :relative_signal, est_conc = :estimated_concentration)
+    isnothing(at) && throw(ArgumentError("Data can't be nothing."))
     batch.data = at
     set!(at, est_conc, inv_predict(batch, at; rel_sig))
     batch
@@ -147,20 +156,20 @@ end
 
 Inverse predict concentration, update each `cal.table.x̂` with the result(s) and returns `cal` or `batch`.
 """
-inv_predict!(batch::Batch) = (inv_predict!.(batch.calibration); batch)
+inv_predict!(batch::Batch) = (foreach(inv_predict!, batch.calibration); batch)
 inv_predict!(cal::SingleCalibration) = cal
 function inv_predict!(cal::MultipleCalibration)
     cal.table.x̂ .= inv_predict(cal, cal.table.y)
     cal
 end
 
-function fill_result!(dt::ColumnDataTable, result::AbstractVector{<: AbstractVector{Float64}})
+function fill_result!(dt::ColumnDataTable, result)
     for (a, c) in zip(eachanalyte(dt), result)
         a .= c
     end
     dt
 end
-function fill_result!(dt::RowDataTable, result::AbstractVector{<: AbstractVector{Float64}})
+function fill_result!(dt::RowDataTable, result)
     for (i, p) in enumerate(eachsample(dt))
         p .= getindex.(result, i)
     end
@@ -178,12 +187,16 @@ function quantification(batch::Batch, dt::AbstractDataTable)
     analytetable = batch.method.analytetable
     cid = [analytetable.calibration[findfirst(==(analyte), analytetable.analyte)] for analyte in analyteobj(dt)]
     cal_id = [id > 0 ? findfirst(cal -> first(cal.analyte) == analytetable.analyte[id], batch.calibration) : nothing for id in cid]
-    cs = ThreadsX.map(eachindex(cal_id)) do i
+    cs = length(cal_id) > 10 ? ThreadsX.map(eachindex(cal_id)) do i
         isnothing(cal_id[i]) && return repeat([NaN], length(sampleobj(dt)))
         cal = batch.calibration[cal_id[i]]
-        quantification(cal, dt, i, last(cal.analyte))
+        convert(Vector{Float64}, quantification(cal, dt, i, last(cal.analyte)))::Vector{Float64}
+    end : map(eachindex(cal_id)) do i
+        isnothing(cal_id[i]) && return repeat([NaN], length(sampleobj(dt)))
+        cal = batch.calibration[cal_id[i]]
+        convert(Vector{Float64}, quantification(cal, dt, i, last(cal.analyte)))::Vector{Float64}
     end
-    fill_result!(deepcopy(dt), cs)
+    fill_result!(deepcopy(dt), cs::Vector{Vector{Float64}})
 end
 
 """
@@ -250,12 +263,12 @@ accuracy(at::AnalysisTable; true_conc = :true_concentration, est_conc = :estimat
     accuracy(getproperty(at, est_conc), getproperty(at, true_conc))
 
 function accuracy(dtp::AbstractDataTable, dtt::AbstractDataTable)
-    cs = analyteobj(dtp) == analyteobj(dtt) ? ThreadsX.map(eachindex(analyteobj(dtp))) do i
-        accuracy(getanalyte(dtp, i), getanalyte(dtt, i))
-    end : ThreadsX.map(analyteobj(dtp)) do analyte
+    cs = length(analyteobj(dtp)) > 10 ? ThreadsX.map(analyteobj(dtp)) do analyte
+        accuracy(getanalyte(dtp, analyte), getanalyte(dtt, analyte))
+    end : map(analyteobj(dtp)) do analyte
         accuracy(getanalyte(dtp, analyte), getanalyte(dtt, analyte))
     end
-    fill_result!(deepcopy(dtp), cs)
+    fill_result!(deepcopy(dtp), cs::Vector{Vector{Float64}})
 end
 accuracy(cal::MultipleCalibration, tbl = cal.table) = accuracy(inv_predict(cal, tbl.y), tbl.x)
 accuracy(cal::SingleCalibration, tbl) = accuracy(inv_predict(cal, tbl.y), tbl.x)
@@ -268,7 +281,7 @@ accuracy(x̂::AbstractVector, x::AbstractVector) = @. x̂ / x
 
 Calculate accuracy for analyte specified by `cal`, update each `cal.table.x̂` with the result(s), and return `cal` or `batch`.
 """
-accuracy!(batch::Batch) = (accuracy!.(batch.calibration); batch)
+accuracy!(batch::Batch) = (foreach(accuracy!, batch.calibration); batch)
 function accuracy!(cal::MultipleCalibration)
     cal.table.accuracy .= accuracy(cal.table.x̂, cal.table.x)
     cal
@@ -306,7 +319,8 @@ Calculate accuracy, and update or insert the values into `at` or a copy of `at` 
 using `getproperty(at, true_conc)` as true concentration and `getproperty(at, est_conc)` as estimated concentration. 
 This function assigns `at` to `batch.data` and returns the updated `batch`.
 """
-function update_accuracy!(batch::Batch, at::AnalysisTable = batch.data; true_conc = :true_concentration, est_conc = :estimated_concentration, acc = :accuracy)
+function update_accuracy!(batch::Batch, at::Union{AnalysisTable, Nothing} = batch.data; true_conc = :true_concentration, est_conc = :estimated_concentration, acc = :accuracy)
+    isnothing(at) && throw(ArgumentError("Data can't be nothing."))
     batch.data = at
     set!(at, acc, accuracy(at; true_conc, est_conc))
     batch
@@ -357,57 +371,67 @@ function calibration(anisd::Tuple, tbl::Table;
 end
 calibration(batch::Batch{A}, analyte::B; 
                     id = sampleobj(batch.method.signaltable),
-                    isd = isd_of(batch.method, analyte),
+                    isd = nothing,
                     type = true, 
                     zero = false, 
                     weight = 0
                     ) where {A, B} = calibration(batch.method, analyte; id, isd, type, zero, weight)
 function calibration(method::MethodTable{A}, analyte::B; 
                     id = sampleobj(method.signaltable),
-                    isd = isd_of(method, analyte),
+                    isd = missing,
                     type = true, 
                     zero = false, 
                     weight = 0
                     ) where {A, B <: A}
 
+    isd = (ismissing(isd) ? isd_of(method, analyte) : isd)
     ord = sortperm(method.pointlevel)
     level = method.pointlevel[ord]
     conc = getanalyte(method.conctable, analyte)
+    ya = getanalyte(method.signaltable, analyte)
+    yi = isnothing(isd) ? [1.0] : getanalyte(method.signaltable, isd)
+    y = @. (ya / yi)[ord]
     table = Table(; 
                     id = id[ord], 
                     level = level, 
                     x = map(level) do l
                         conc[findsample(method.conctable, Symbol(l))]
                     end, 
-                    y = isnothing(isd) ? getanalyte(method.signaltable, analyte)[ord] : (getanalyte(method.signaltable, analyte) ./ getanalyte(method.signaltable, isd))[ord], 
+                    y, 
                     x̂ = zeros(Float64, length(id)), 
                     accuracy = zeros(Float64, length(id)),
-                    include = trues(length(id)))
+                    include = trues(length(id))
+                    )
     f = getformula(type, zero)
     model = calfit(table, f, type, zero, weight)
     inv_predict_accuracy!(MultipleCalibration((analyte, isd), type, zero, Float64(weight), f, table, model))
 end
 function calibration(method::MethodTable{A}, i::Int; 
                     id = sampleobj(method.signaltable),
-                    isd = isd_of(method, analyteobj(method.conctable)[i]),
+                    isd = missing,
                     type = true, 
                     zero = false, 
                     weight = 0
                     ) where A
 
+    isd = ismissing(isd) ? isd_of(method, analyteobj(method.conctable)[i]) : isd
     ord = sortperm(method.pointlevel)
     level = method.pointlevel[ord]
     conc = getanalyte(method.conctable, i)
+    ya = getanalyte(method.signaltable, i)
+    yi = isnothing(isd) ? [1.0] : getanalyte(method.signaltable, isd)
+    y = @. (ya / yi)[ord]
     table = Table(; 
                     id = id[ord], 
                     level = level, 
                     x = map(level) do l
                         conc[findsample(method.conctable, Symbol(l))]
                     end, 
-                    y = isnothing(isd) ? getanalyte(method.signaltable, i)[ord] : (getanalyte(method.signaltable, i) ./ getanalyte(method.signaltable, isd))[ord], 
+                    y, 
                     x̂ = zeros(Float64, length(id)), 
                     accuracy = zeros(Float64, length(id)),
-                    include = trues(length(id)))
+                    include = trues(length(id))
+                    )
     f = getformula(type, zero)
     model = calfit(table, f, type, zero, weight)
     inv_predict_accuracy!(MultipleCalibration((analyteobj(method.conctable)[i], isd), type, zero, Float64(weight), f, table, model))
@@ -464,9 +488,10 @@ end
 Update calibration obeject for `analyte`, `batch.calibration[cal_id]` or `cal` after modifying any parameters in method or calibration object.
 """
 function update_calibration!(batch::Batch{A}, analyte::B) where {A, B <: A}
-    aid = findfirst(==(analyte), batch.analyte)
+    analytes = batch.analyte
+    aid = findfirst(==(analyte), analytes)
     isnothing(aid) && throw(ArgumentError("Analyte $analyte is not in this batch"))
-    ca = batch.analyte[aid]
+    ca = analytes[aid]
     cid = findfirst(x -> ==(first(x.analyte), ca), batch.calibration)
     isnothing(cid) && throw(ArgumentError("No fitted calibration data for $analyte"))
     update_calibration!(batch, cid)
@@ -476,7 +501,10 @@ function update_calibration!(cal::MultipleCalibration, method::MethodTable)
     isd = isd_of(method, first(cal.analyte))
     cal.analyte = (first(cal.analyte), isd)
     ord = sortperm(method.pointlevel)
-    cal.table.y .= isnothing(isd) ? getanalyte(method.signaltable, first(cal.analyte))[ord] : (getanalyte(method.signaltable, first(cal.analyte)) ./ getanalyte(method.signaltable, isd))[ord]
+    ya = getanalyte(method.signaltable, first(cal.analyte))
+    yi = isnothing(isd) ? [1.0] : getanalyte(method.signaltable, isd)
+    y = @. (ya / yi)[ord]
+    cal.table.y .= y
     # cal.table.include .= true
     cal.formula = getformula(cal)
     calfit!(cal)

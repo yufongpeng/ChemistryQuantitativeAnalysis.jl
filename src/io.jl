@@ -241,7 +241,7 @@ function print_summary(io::IO, cal::SingleCalibration{A}) where A
 end
 
 function show(io::IO, ::MIME"text/plain", cal::MultipleCalibration)
-    print(io, typeof(cal), " with ", length(unique(cal.table.level[cal.table.include])), " levels and ", length(findall(cal.table.include)), "points:\n")
+    print(io, typeof(cal), " with ", length(unique(cal.table.level[cal.table.include])), " levels and ", length(findall(cal.table.include)), " points:\n")
     print(io, "∘ Analyte: ", first(cal.analyte), "\n")
     print(io, "∘ ISD: ", last(cal.analyte), "\n")
     print(io, "∘ Type: ", cal.type ? "linear\n" : "quadratic\n")

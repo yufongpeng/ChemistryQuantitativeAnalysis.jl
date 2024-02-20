@@ -22,7 +22,7 @@ function isd_of(method::MethodTable{A}, analyte::B) where {A, B <: A}
     aid = findfirst(==(analyte), method.analytetable.analyte)
     isnothing(aid) && throw(ArgumentError("Analyte $analyte is not in the method"))
     iid = method.analytetable.isd[aid]
-    iid > 0 ? method.analytetable.analyte[iid] : nothing
+    (iid > 0 ? method.analytetable.analyte[iid] : nothing)::Union{A, Nothing}
 end
 """
     isisd(method::MethodTable{A}, analyte::B) where {A, B <: A}
@@ -115,11 +115,11 @@ function getanalyte(dt::RowDataTable, analyte)
     isnothing(id) && throw(ArgumentError("Analyte $analyte is not in the table"))
     [getproperty(dt, p)[id] for p in samplename(dt)]
 end
-getanalyte(dt::ColumnDataTable, id::Int) = getproperty(dt, Symbol(analyteobj(dt)[id]))
+getanalyte(dt::ColumnDataTable, id::Int) = getproperty(dt, analytename(dt)[id])
 function getanalyte(dt::ColumnDataTable, analyte)
     id = findanalyte(dt, analyte)
     isnothing(id) && throw(ArgumentError("Analyte $analyte is not in the table"))
-    getproperty(dt, Symbol(analyteobj(dt)[id]))
+    getproperty(dt, Symbol(analyteobj(dt)[id]))::AbstractVector{<: AbstractFloat}
 end
 
 """
@@ -134,7 +134,7 @@ getsample(dt::RowDataTable, id::Int) = getproperty(dt, Symbol(sampleobj(dt)[id])
 function getsample(dt::RowDataTable, sample)
     id = findsample(dt, sample)
     isnothing(id) && throw(ArgumentError("Sample $sample is not in the table"))
-    getproperty(dt, Symbol(sampleobj(dt)[id]))
+    getproperty(dt, Symbol(sampleobj(dt)[id]))::AbstractVector{<: AbstractFloat}
 end
 getsample(dt::ColumnDataTable, id::Int) = [getproperty(dt, p)[id] for p in analytename(dt)]
 function getsample(dt::ColumnDataTable, sample)
