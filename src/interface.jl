@@ -12,7 +12,15 @@ Base.length(dt::AbstractDataTable) = size(table(dt), 1)
 Base.iterate(dt::ColumnDataTable, st = 1) = st > length(dt) ? nothing : (first(Base.iterate(table(dt), st)), st + 1)
 Base.iterate(dt::RowDataTable, st = 1) = st > length(dt) ? nothing : (first(Base.iterate(table(dt), st)), st + 1)
 Base.getindex(dt::AbstractDataTable, x...) = Base.getindex(table(dt), x...)
+Base.getindex(dt::ColumnDataTable{A, S}, analyte::B, sample::T) where {A, S, B <: A, T <: S} = getanalyte(dt, analyte)[findsample(dt, sample)]
+Base.getindex(dt::RowDataTable{A, S}, analyte::B, sample::T) where {A, S, B <: A, T <: S} = getsample(dt, sample)[findanalyte(dt, analyte)]
 Base.setindex!(dt::AbstractDataTable, value, keys...) = Base.setindex!(table(dt), value, keys...)
+Base.setindex!(dt::ColumnDataTable{A, S, N}, value::N, analyte::B, sample::T) where {A, S, B <: A, T <: S, N} = setindex!(getanalyte(dt, analyte), value, findsample(dt, sample))
+Base.setindex!(dt::ColumnDataTable{A, S, N}, value, analyte::B, sample::T) where {A, S, B <: A, T <: S, N} = setindex!(getanalyte(dt, analyte), convert(N, value), findsample(dt, sample))
+Base.setindex!(dt::RowDataTable{A, S, N}, value::N, analyte::B, sample::T) where {A, S, B <: A, T <: S, N} = setindex!(getsample(dt, sample), value, findanalyte(dt, analyte))
+Base.setindex!(dt::RowDataTable{A, S, N}, value, analyte::B, sample::T) where {A, S, B <: A, T <: S, N} = setindex!(getsample(dt, sample), convert(N, value), findanalyte(dt, analyte))
+Base.copy(dt::ColumnDataTable) = ColumnDataTable(copy(analyteobj(dt)), copy(sampleobj(dt)), samplecol(dt), copy(table(dt)))
+Base.copy(dt::RowDataTable) = RowDataTable(copy(analyteobj(dt)), copy(sampleobj(dt)), analytecol(dt), copy(table(dt)))
 
 function Base.getindex(calibration::AbstractVector{<: AbstractCalibration{A}}, analyte::B) where {A, B <: A}
     id = findfirst(x -> first(x.analyte) == analyte, calibration)
@@ -24,7 +32,12 @@ function Base.setindex!(calibration::AbstractVector{<: AbstractCalibration{A}}, 
     isnothing(id) && throw(ArgumentError("Analyte $analyte does not have a calibration curve."))
     calibration[id] = v
 end
+Base.copy(cal::MultipleCalibration) = MultipleCalibration(cal.analyte, cal.type, cal.zero, cal.weight, cal.formula, cal.table, cal.model)
+Base.copy(cal::SingleCalibration) = SingleCalibration(cal.analyte, cal.conc)
 
+Base.isassigned(at::AnalysisTable, i::Symbol) = Base.isassigned(tables(at), i)
+Dictionaries.isinsertable(at::AnalysisTable) = true
+Dictionaries.issetable(at::AnalysisTable) = true
 Dictionaries.set!(at::AnalysisTable, i, v) = set!(tables(at), i, v)
 Dictionaries.unset!(at::AnalysisTable, i) = unset!(tables(at), i)
 Base.insert!(at::AnalysisTable, i, v) = insert!(tables(at), i, v)
@@ -34,13 +47,15 @@ Base.delete!(at::AnalysisTable, i) = delete!(tables(at), i)
 Base.getproperty(at::AnalysisTable, property::Symbol) = tables(at)[property]
 Base.propertynames(at::AnalysisTable) = Tuple(keys(tables(at)))
 Base.getindex(at::AnalysisTable, i) = getindex(tables(at), i)
+Base.setindex!(at::AnalysisTable, v, i) = setindex!(tables(at), v, i)
 Base.pairs(at::AnalysisTable) = pairs(tables(at))
 Base.keys(at::AnalysisTable) = keys(tables(at))
+Base.values(at::AnalysisTable) = values(tables(at))
 Base.haskey(at::AnalysisTable, i) = haskey(tables(at), i)
 Base.iterate(at::AnalysisTable, st = 1) = st > length(at) ? nothing : (first(Base.iterate(tables(at), st)), st + 1)
 Base.length(at::AnalysisTable) = length(tables(at))
-
-function Base.getproperty(tbl::MethodTable, p::Symbol)
+Base.copy(at::AnalysisTable) = AnalysisTable(copy(analyteobj(at)), copy(sampleobj(at)), Dictionary(collect(keys(tables(at))), values(tables(at))))
+function Base.getproperty(tbl::AnalysisMethod, p::Symbol)
     if p == :analyte
         getfield(tbl, :analytetable).analyte
     elseif p == :isd
@@ -56,15 +71,15 @@ function Base.getproperty(tbl::MethodTable, p::Symbol)
         getfield(tbl, p)
     end
 end
-Base.propertynames(tbl::MethodTable) = (:analytetable, :signal, :pointlevel, :conctable, :signaltable, :analyte, :isd, :nonisd, :point, :level)
+Base.propertynames(tbl::AnalysisMethod) = (:analytetable, :signal, :pointlevel, :conctable, :signaltable, :analyte, :isd, :nonisd, :point, :level)
 
 function Base.getproperty(batch::Batch, p::Symbol)
     if p == :analyte
         getfield(batch, :method).analyte
     elseif p == :isd
-        getfield(batch, :method).analyte[getfield(batch, :method).isd .< 0]
+        getfield(batch, :method).isd
     elseif p == :nonisd
-        getfield(batch, :method).analyte[getfield(batch, :method).isd .>= 0]
+        getfield(batch, :method).nonisd
     elseif p == :point
         getfield(batch, :method).point
     elseif p == :level
@@ -96,8 +111,8 @@ Create an iterator which gets data belonging to each sample as a `Vector`. For `
 """
 eachsample(dt::AbstractDataTable) = EachSample(dt)
 
-Base.eltype(it::EachAnalyte) = AbstractVector
-Base.eltype(it::EachSample) = AbstractVector
+Base.eltype(it::EachAnalyte{<: AbstractDataTable{A, S, N}}) where {A, S, N} = AbstractVector{N}
+Base.eltype(it::EachSample{<: AbstractDataTable{A, S, N}}) where {A, S, N} = AbstractVector{N}
 Base.length(it::EachAnalyte) = Base.length(analyteobj(it.table))
 Base.length(it::EachSample) = Base.length(sampleobj(it.table))
 Base.iterate(it::EachAnalyte{<: ColumnDataTable}, st = 1) = st > length(it) ? nothing : (getproperty(table(it.table), analytename(it.table)[st]), st + 1)

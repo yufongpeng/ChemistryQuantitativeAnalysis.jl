@@ -1,4 +1,63 @@
 """
+    cqaconvert(::Type{T}, x::S)
+    cqaconvert(fn::Function, x::S)
+
+Call constructor, `parse`, or `fn`. Extend this function if defining `T(x)` is not safe.
+
+Return
+* `parse(T, x)` if `T <: Number` and `S <: Union{AbstractString, AbstractChar}`.
+* `fn(x)` if `fn` is a `Function`.
+* `T(x)` otherwise.
+
+Note that `string(cqaconvert(T, x))` should equal `x` for a valid string `x`, i.e. `string` and `x -> cqaconvert(T, x)` are inverse functions.
+"""
+cqaconvert(::Type{T}, x) where T = T(x)::T
+cqaconvert(::Type{T}, x::T) where T = x
+cqaconvert(::Type{T}, x::Union{AbstractString, AbstractChar}) where {T <: Number} = parse(T, x)::T
+cqaconvert(fn::T, x) where {T <: Function} = fn(x)
+
+"""
+    cqamap(::Type{T}, x::AbstractVector{S})
+    cqamap(fn::Function, x::AbstractVector)
+
+Convert `x` to `AbstractVector{T}`. If direct construction is not possible, i.e. neither `T <: S` nor `S <: T`, it applys `cqaconvert` on every elements.
+
+For a function, `T` is inferred by `cqatype(fn)` first and then `cqatype(fn, v)` for the returned vector `v` to avoid abstract element type. 
+"""
+cqamap(::Type{T}, x::AbstractVector{T}) where T = x
+cqamap(::Type{T}, x::AbstractVector{<: T}) where T = Vector{T}(x)
+cqamap(::Type{T}, x::AbstractVector{S}) where {S, T <: S} = Vector{T}(x)
+cqamap(::Type{T}, x::AbstractVector) where T = typedmap(e -> cqaconvert(T, e), T, x)
+function cqamap(fn::T, x::AbstractVector) where {T <: Function}
+    R = cqatype(fn)
+    if isabstracttype(R)
+        v = map(e -> cqaconvert(fn, e), x)
+        cqamap(cqatype(fn, v), v)
+    else
+        typedmap(e -> cqaconvert(fn, e), R, x)
+    end
+end
+
+"""
+    cqatype(fn::Function)
+    cqatype(fn::Function, x::AbstractVector)
+
+Default returned type of `cqaconvert(fn, x)`. By default, the union of types of each element is used to avoid abstract element type. Extend this function if neccessary.
+"""
+cqatype(fn::T) where {T <: Function} = Any
+cqatype(fn::T, v::AbstractVector) where {T <: Function} = Union{typeof.(v)...}
+
+"""
+    typedmap(::Type{T}, c...) 
+    typedmap(f, ::Type{T}, c...)
+
+Transform collection `c` by applying `f` to each element. For multiple collection arguments, apply `f` elementwise, and stop when any of them  
+is exhausted. The element type of returned collection will be forced to `T`. In addtion, `typedmap(T, c...)` is equivalent to `typedmap(T, T, c...)`.
+"""
+typedmap(::Type{T}, iters...) where T = collect(T, Base.Generator(T, iters...))
+typedmap(fn::F, ::Type{T}, iters...) where {F, T} = collect(T, Base.Generator(fn, iters...))
+
+"""
     getformula(cal::MultipleCalibration)
     getformula(type::Bool, zero::Bool)
 
@@ -14,22 +73,22 @@ else
 end
 
 """
-    isd_of(method::MethodTable{A}, analyte::B) where {A, B <: A}
+    isdof(analyte::B, method::AnalysisMethod{A}) where {A, B <: A}
 
 Return internal standard of `analyte` based on `method`.
 """
-function isd_of(method::MethodTable{A}, analyte::B) where {A, B <: A}
+function isdof(analyte::B, method::AnalysisMethod{A}) where {A, B <: A}
     aid = findfirst(==(analyte), method.analytetable.analyte)
     isnothing(aid) && throw(ArgumentError("Analyte $analyte is not in the method"))
     iid = method.analytetable.isd[aid]
     (iid > 0 ? method.analytetable.analyte[iid] : nothing)::Union{A, Nothing}
 end
 """
-    isisd(method::MethodTable{A}, analyte::B) where {A, B <: A}
+    isisd(analyte::B, method::AnalysisMethod{A}) where {A, B <: A}
 
 Return if `analyte` is a internal standard based on `method`.
 """
-function isisd(method::MethodTable{A}, analyte::B) where {A, B <: A}
+function isisd(analyte::B, method::AnalysisMethod{A}) where {A, B <: A}
     aid = findfirst(==(analyte), method.analytetable.analyte)
     isnothing(aid) && throw(ArgumentError("Analyte $analyte is not in the method"))
     method.analytetable.isd[aid] < 0
@@ -39,15 +98,15 @@ end
 table(dt::AbstractDataTable) = getfield(dt, :table)
 tables(at::AnalysisTable) = getfield(at, :tables)
 """
-    analyteobj(dt::AbstractDataTable{A, S, T, V, U}) -> V
-    analyteobj(at::AnalysisTable{A, S, T}) -> Vector{A}
+    analyteobj(dt::AbstractDataTable{A}) -> Vector{A}
+    analyteobj(at::AnalysisTable{A}) -> Vector{A}
 
 Equivalent to `getfield(dt, :analyte)` or `getfield(at, :analyte)`.
 """
 analyteobj(dt::AbstractDataTable) = getfield(dt, :analyte)
 analyteobj(at::AnalysisTable) = getfield(at, :analyte)
 """
-    sampleobj(dt::AbstractDataTable{A, S, T, V, U}) -> U
+    sampleobj(dt::AbstractDataTable{A, S}) -> Vector{S}
     sampleobj(at::AnalysisTable{A, S, T}) -> Vector{S}
 
 Equivalent to `getfield(dt, :sample)` or `getfield(at, :sample)`.
@@ -109,17 +168,17 @@ findsample(dt::AbstractDataTable, sample::Symbol) = findfirst(==(sample), sample
 
 Get data belonging to `analyte` or `analyteobj(dt)[id]` as a `Vector`. For `RowDataTable`, a new vector is created; mutating this vector will not change the value in `dt`.
 """
-getanalyte(dt::RowDataTable, id::Int) = [getproperty(dt, p)[id] for p in samplename(dt)]
-function getanalyte(dt::RowDataTable, analyte)
+getanalyte(dt::RowDataTable{A, S, N}, id::Int) where {A, S, N} = [getproperty(dt, p)[id] for p in samplename(dt)]::Vector{N}
+function getanalyte(dt::RowDataTable{A, S, N}, analyte) where {A, S, N}
     id = findanalyte(dt, analyte)
     isnothing(id) && throw(ArgumentError("Analyte $analyte is not in the table"))
-    [getproperty(dt, p)[id] for p in samplename(dt)]
+    [getproperty(dt, p)[id] for p in samplename(dt)]::Vector{N}
 end
-getanalyte(dt::ColumnDataTable, id::Int) = getproperty(dt, analytename(dt)[id])
-function getanalyte(dt::ColumnDataTable, analyte)
+getanalyte(dt::ColumnDataTable{A, S, N}, id::Int) where {A, S, N} = getproperty(dt, analytename(dt)[id])::AbstractVector{N}
+function getanalyte(dt::ColumnDataTable{A, S, N}, analyte) where {A, S, N}
     id = findanalyte(dt, analyte)
     isnothing(id) && throw(ArgumentError("Analyte $analyte is not in the table"))
-    getproperty(dt, Symbol(analyteobj(dt)[id]))::AbstractVector{<: AbstractFloat}
+    getproperty(dt, Symbol(analyteobj(dt)[id]))::AbstractVector{N}
 end
 
 """
@@ -130,21 +189,21 @@ end
 
 Get data belonging to `sample` or `sampleobj(dt)[id]` as a `Vector`. For `ColumnDataTable`, a new vector is created; mutating this vector will not change the value in `dt`.
 """
-getsample(dt::RowDataTable, id::Int) = getproperty(dt, Symbol(sampleobj(dt)[id]))
-function getsample(dt::RowDataTable, sample)
+getsample(dt::RowDataTable{A, S, N}, id::Int) where {A, S, N} = getproperty(dt, Symbol(sampleobj(dt)[id]))::AbstractVector{N}
+function getsample(dt::RowDataTable{A, S, N}, sample) where {A, S, N}
     id = findsample(dt, sample)
     isnothing(id) && throw(ArgumentError("Sample $sample is not in the table"))
-    getproperty(dt, Symbol(sampleobj(dt)[id]))::AbstractVector{<: AbstractFloat}
+    getproperty(dt, Symbol(sampleobj(dt)[id]))::AbstractVector{N}
 end
-getsample(dt::ColumnDataTable, id::Int) = [getproperty(dt, p)[id] for p in analytename(dt)]
-function getsample(dt::ColumnDataTable, sample)
+getsample(dt::ColumnDataTable{A, S, N}, id::Int) where {A, S, N} = [getproperty(dt, p)[id] for p in analytename(dt)]::Vector{N}
+function getsample(dt::ColumnDataTable{A, S, N}, sample) where {A, S, N}
     id = findsample(dt, sample)
     isnothing(id) && throw(ArgumentError("Sample $sample is not in the table"))
-    [getproperty(dt, p)[id] for p in analytename(dt)]
+    [getproperty(dt, p)[id] for p in analytename(dt)]::Vector{N}
 end
 
-function critical_point(cal::MultipleCalibration)
-    β = cal.model.model.pp.beta0
+function critical_point(cal::MultipleCalibration{A, N}) where {A, N}
+    β = cal.model.model.pp.beta0::Vector{N}
     c, b, a = cal.zero ? (0, β...) : β
     -b / 2a
 end

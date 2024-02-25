@@ -8,49 +8,73 @@
 For an interactive frontend, see [`InteractiveQuantification.jl`](https://github.com/yufongpeng/InteractiveQuantification.jl).
 
 ## Tabular data wrapper
-This package provides two wrappers for data, `ColumnDataTable{A, S, T, V, U}` and `RowDataTable{A, S, T, V, U}` which are subtypes of `AbstractDataTable{A, S, T, V, U}`. `ColumnDataTable` indicates that part of columns represent analytes, and all rows reprsent samples. `RowDataTable` indicates that part of columns represent samples, and all rows represent analytes. Both types behave like the underlying `table` object. 
-|Fields|`ColumnDataTable{A, S, T, V, U}`|`RowDataTable{A, S, T, V, U}`|
+This package provides two wrappers for data, `ColumnDataTable{A, S, N, T}` and `RowDataTable{A, S, N, T}` which are subtypes of `AbstractDataTable{A, S, N, T}`. `ColumnDataTable` indicates that part of columns represent analytes, and all rows reprsent samples. `RowDataTable` indicates that part of columns represent samples, and all rows represent analytes. Both types behave like the underlying `table` object. 
+|Fields|`ColumnDataTable{A, S, N, T}`|`RowDataTable{A, S, N, T}`|
 |----------|---------------------|------------------|
 |`analytecol`|-|`Symbol`, column name whose elements are analytes.|
 |`samplecol`|`Symbol`, column name whose elements are samples.|-|
-|`analyte`|`V <: AbstractVector{A}`, analytes in user-defined types.|same|
-|`sample`|`U <: AbstractVector{S}`, samples in user-defined types.|same|
+|`analyte`|`Vector{A}`, analytes in user-defined types.|same|
+|`sample`|`Vector{S}`, samples in user-defined types.|same|
 |`table`|Tabular data of type `T`|same|
 
-`ColumnDataTable` can be created by `ColumnDataTable(table, samplecol; analytetype, analytename)`. By default, `analytename` includes all properties of `table` without `samplecol`. `RowDataTable` can be created by `RowDataTable(table, analytecol; analytetype, samplename)`. By default, `samplename` includes all properties of `table` without `analytecol`.
-To add new samples to `ColumnDataTable`, user can directly modify `table`; for `RowDataTable`, user have to modify `sample` as well. To add new analytes, user can directly modify `table` for `RowDataTable`, and additionally modify `analyte` for `ColumnDataTable`.
+`ColumnDataTable{A, S, N, T}` can be constructed in the following ways:
+1. `ColumnDataTable(analytetype::TypeOrFn, samplecol::Symbol, table; analytename = setdiff(propertynames(table), [samplecol]))`
+2. `ColumnDataTable(table, analytetype::TypeOrFn, samplecol::Symbol; analytename = setdiff(propertynames(table), [samplecol]))`
+3. `ColumnDataTable(samplecol::Symbol, table; analytename = setdiff(propertynames(table), [samplecol]))`
+4. `ColumnDataTable(table, samplecol::Symbol; analytename = setdiff(propertynames(table), [samplecol]))`
 
-The package provides another two wrappers, `MethodTable{A, T, C, D}`, and `AnalysisTable{A, S, T}`.
-### MethodTable
-This type is used for storing method, containing all analytes, their internal standards and calibration curve setting, and data for fitting calibration curve.
+`RowDataTable{A, S, N, T}` can be constructed in the following ways:
+1. `RowDataTable(analytecol::Symbol, sampletype::TypeOrFn, table; samplename = setdiff(propertynames(table), [analytecol]))`
+2. `RowDataTable(table, analytecol::Symbol, sampletype::TypeOrFn; samplename = setdiff(propertynames(table), [analytecol]))`
+3. `RowDataTable(analytecol::Symbol, table; samplename = setdiff(propertynames(table), [analytecol]))`
+4. `RowDataTable(table, analytecol::Symbol; samplename = setdiff(propertynames(table), [analytecol]))`
+
+`analaytename` and `samplename` will be converted to a vector of string, and then converted to the desired type using `cqaconvert(analytetype, analaytename)` and `cqaconvert(sampletype, samplename)`.
+
+## AnalysisMethod
+`AnalysisMethod{A, M, C, D}` is used for storing method, containing all analytes, their internal standards and calibration curve setting, and data for fitting calibration curve.
 |Property|Description|
 |----------|---------|
-|`analytetable`|`Table` with at least 3 columns, `analytes` identical to property `analytes`, `isd`, matching each analyte to index of its internal standard, and `calibration` matching each analyte to index of other analyte for fitting its calibration curve. `-1` indicates the analyte itself is internal standard, and `0` indicates no internal standard. For example, a row `(analytes = AnalyteX, isd = 2, calibration = 3)` means that internal standard of `AnalyteX` is the second analyte, and it will be quantified using calibration curve of the third analyte.|
+|`analytetable`|`M <: Table` with at least 3 columns, `analytes` identical to property `analytes`, `isd`, matching each analyte to index of its internal standard, and `calibration` matching each analyte to index of other analyte for fitting its calibration curve. `-1` indicates the analyte itself is internal standard, and `0` indicates no internal standard. For example, a row `(analytes = AnalyteX, isd = 2, calibration = 3)` means that internal standard of `AnalyteX` is the second analyte, and it will be quantified using calibration curve of the third analyte.|
 |`signal`|`Symbol`, propertyname for extracting signal data from an `AnalysisTable`|
 |`pointlevel`|`Vector{Int}` matching each point to level. It can be empty if there is only one level in `conctable`.|
-|`conctable`|`C <: AbstractDataTable{A, Int, <: T}` containing concentration data for each level. Sample names must be symbol or string of integers for multiple levels. One level indicates using `SingleCalibration`.|
-|`signaltable`|`D <: AbstractDataTable{A, S, <: T}` containig signal for each point. It can be `nothing` if signal data is unecessary.|
+|`conctable`|`C <: AbstractDataTable{A, Int}` containing concentration data for each level. Sample names must be symbol or string of integers for multiple levels. One level indicates using `SingleCalibration`.|
+|`signaltable`|`D <: AbstractDataTable{A, S}` containig signal for each point. It can be `nothing` if signal data is unecessary.|
 |`analyte`|`AbstractVector{A}`, analytes in user-defined types.|
 |`isd`|`AbstractVector{<: A}` that each analytes are internal standards.|
 |`nonisd`|`AbstractVector{<: A}` that each analytes are not internal standards.|same|
 |`point`|`AbstractVector{S}`, calibration points, identical to `signaltable.samples`. If `signaltable` is `nothing`, this value is `nothing` too.|
 |`level`|`AbstractVector{Int}`, calibration levels, identical to `conctable.samples`.|
 
-### AnalysisTable
-`AnalysisTable{A, S, T}` is basically a `Dictionary{Symbol, <: AbstractDataTable{A, S, <: T}}` which data can be extracted using proeperty syntax. For example, `at.tables[:area] === at.area`.
+Constructors of `AnalysisMethod`:
+1. `AnalysisMethod(analytetable::Table, signal::Symbol, pointlevel::Vector{Int}, conctable::AbstractDataTable{A, Int}, signaltable::Union{AbstractDataTable, Nothing})`
+2. `AnalysisMethod(conctable::AbstractDataTable{A, Int}, signaltable::ColumnDataTable, signal::Symbol, levelname::Symbol; kwargs...)`
+3. `AnalysisMethod(conctable::AbstractDataTable{A, Int}, signaltable::Nothing, signal::Symbol; kwargs...)`
+4. `AnalysisMethod(conctable::AbstractDataTable, signaltable::Union{AbstractDataTable, Nothing}, signal::Symbol, pointlevel::AbstractVector{Int}; kwargs...)`
+
+`kwargs` will be columns in `analytetable`. `levelname` is the column name for `pointlevel` if `signaltable` is a `ColumnDataTable`.
+
+## AnalysisTable
+`AnalysisTable{A, S, T}` is basically a `Dictionary{Symbol, <: AbstractDataTable{T}}` which data can be extracted using proeperty syntax. For example, `at[:area] === at.area`.
 |Field|Description|
 |----------|---------|
 |`analyte`|`Vector{A}`, analytes in user-defined types.|
 |`sample`|`Vector{S}`, samples in user-defined types.|
-|`tables`|`Dictionary{Symbol, <: AbstractDataTable{A, S, <: T}}`, a dictionary mapping data type to datatable.|
+|`tables`|`Dictionary{Symbol, <: AbstractDataTable{T}}`, a dictionary mapping data type to datatable.|
 
 The key for signal data is determined by `method.signal`. Default names for relative signal, true concentration, estimated concentration and accuracy are `relative_signal`, `true_concentration`, `estimated_concentration` and `accuracy`.
 
+`AnalysisTable{A, S, T}` can be constructed in the following ways:
+1. `AnalysisTable(keys::AbstractVector{Symbol}, tables::AbstractVector{<: AbstractDataTable{A, S}})`
+2. `analysistable(iter)`
+
+`iter` is an iterable iter of key-value `Pair`s (or other iterables of two elements, such as a two-tuples). Keys should be `Symbol`s, and values should be `AbstractDataTable`s.
+
 ## Calibration
-This package provides two calibration types, `MultipleCalibration{A}` and `SingleCalibration{A}` which are subtypes of `AbstractCalibration{A}`.
+This package provides two calibration types, `MultipleCalibration{A, N, T}` and `SingleCalibration{A, N}` which are subtypes of `AbstractCalibration{A, N}`.
 
 ### MultipleCalibration
-This type fits and stores calibration curve. It can be created from a `MethodTable{A, T}` containing calibration data, an analyte `A` using function `calibration`.
+This type fits and stores calibration curve. It can be created from a `AnalysisMethod{A, S}` containing calibration data, an analyte `A` using function `calibration`.
 |Field|Description|
 |----------|-----------|
 |`analyte`|`Tuple{A, Any}`. First element is the analyte being quantified, and the second element is its internal standard for which `nothing` indicates no internal standard.|
@@ -72,7 +96,7 @@ The columns in `table`:
 |`accuracy`|Accuracy, i.e. `x̂/x`.|
 |`include`|Whether this point is included or not|
 
-To predict concentration, call `inv_predict` or `inv_predict!` for inplace replacement of `table.x̂`. To calculate accuracy, call `accuracy` or `acccuracy!` for inplace replacement of `table.accuracy`. `inv_predict_accuracy!` calls `inv_predict!` and `acccuracy!` subsequently. `type`, `zero`, and `weigtht` can be modified directly. To change internal standard, modify `analyte`. After any modification, call `update_calibration!` with method to update the `model`.
+To predict concentration, call `inv_predict`. To calculate accuracy, call `accuracy`. `type`, `zero`, and `weigtht` can be modified directly. To change internal standard, modify `analyte`. After any modification, call `update_calibration!` with method to update the `model`.
 
 ### SingleCalibration
 This type contains data for single pont calibration. 
@@ -82,21 +106,24 @@ This type contains data for single pont calibration.
 |`conc`|`Float64`, concentration of analyte.|
 
 ## Batch
-`Batch{A, T}` represents a batch for quantitative analysis where `A` is analyte type and `T` is table type.
+`Batch{A, M, C, D}` represents a batch for quantitative analysis.
 |Property|Description|
 |----------|-----------|
-|`method`|`MethodTable{A, <: T}`, method.|
-|`calibration`|`AbstractVector{MultipleCalibration{<: A}}` or `AbstractVector{SingleCalibration{<: A}}`|
-|`data`|Data for analysis, `AnalysisTable{A, S, <: T}` or `Nothing`.|
+|`method`|`M <: AnalysisMethod{A}`, method.|
+|`calibration`|`C <: Union{AbstractVector{MultipleCalibration{<: A}}, AbstractVector{SingleCalibration{<: A}}}`|
+|`data`|Data for analysis, `D <: Union{AnalysisTable{<: A}, Nothing}`.|
 |`analyte`|`AbstractVector{A}`, analytes in user-defined types, identical to `method.analytetable.analyte`.|
-|`isd`|`AbstractVector{<: A}`, analytes which are internal standards.|
+|`isd`|`AbstractVector{<: A}`, analytes which are internal standards, identical to `method.analytetable.analyte`.|
 |`nonisd`|`AbstractVector{<: A}` that each analytes are not internal standards.|same|
-|`point`|`AbstractVector{X}` or `Nothing`, calibration points, identical to `method.point`.|
+|`point`|`AbstractVector{S}` or `Nothing`, calibration points, identical to `method.point`.|
 |`level`|`AbstractVector{Int}`, calibration levels, identical to `method.level`.|
 
-It can be created with only `method` and optionally `data`.
+Constructors for `Batch{A, M, C, D}`:
+1. `Batch(method::M, calibration::C, data::D = nothing)`
+2. `Batch(method::AnalysisMethod, data = nothing; type = true, zero = false, weight = 0)`
+3. `Batch(batch::Batch, at::AnalysisTable)`
 
-To predict concentration and calculate accuracy for calibration points, call `inv_predict!` and `acccuracy!`, respectively. To calculate relative signal, concentration or accuracy and save the result, call `update_relative_signal!`, `update_inv_predict!` (in combination, `update_quantification!`) and `update_accuracy!`, respectively. `inv_predict_accuracy!` calls `inv_predict_cal!` and `acccuracy!` subsequently. To change internal standard, call `set_isd!` with object `analyte` and `isd`.
+To calculate relative signal, concentration or accuracy and save the result, call `update_relative_signal!`, `update_inv_predict!` (in combination, `update_quantification!`) and `update_accuracy!`, respectively.
 
 ## Reading and writting data to disk
 To use data on disk, user should create a directory in the following structure:
@@ -197,7 +224,7 @@ level_for_2nd_point
 
 `pointlevel` maps each point to level which should be integers.
 
-`level` specifys the column representing property `pointlevel` of `MethodTable`. It only works for which `signaltable` is `ColumnDataTable`; otherwise, it falls back to use `pointlevel`.
+`level` specifys the column representing property `pointlevel` of `AnalysisMethod`. It only works for which `signaltable` is `ColumnDataTable`; otherwise, it falls back to use `pointlevel`.
 
 `analytetable.txt` needs to contain analyte names, index of their internal standards, and index of of other analytes whose calibration curve is used. The column names are fixed for these three columns.
 ```
@@ -232,7 +259,7 @@ There will be a folder `calibration` containing multiple `*.mcal` or `*.scal` fo
 ```julia
 using ChemistryQuantitativeAnalysis, TypedTables, DataFrames
 const CQA = ChemistryQuantitativeAnalysis
-import Base: show, convert
+import Base: show, convert, tryparse
 
 # Custom Analyte type
 struct AnalyteG1
@@ -254,6 +281,7 @@ function (::Type{AnalyteTest})(name::String)
     g = parse(Int, first(g))
     g == 1 ? AnalyteG1(name) : g == 2 ? AnalyteG2(name) : AnalyteOther(name)
 end
+tryparse(::Type{AnalyteTest}, s::String) = AnalyteTest(s) # For reading data from disk
 
 # Generate data
 analytes = typedmap(AnalyteTest, ["G1(drug_a)", "G2(drug_a)", "G1(drug_b)", "G2(drug_b)"])
@@ -272,7 +300,8 @@ conctable = ColumnDataTable(
 )
 signaltable = ColumnDataTable(
    DataFrame(
-         "point" => repeat(1:7, 3), 
+         "point" => reshape([string(a, "_", b) for (a, b) in Iterators.product(1:7, 1:3)], 21), 
+         "level" => repeat(1:7, 3),
          "G1(drug_a)" => signal1,
          "G2(drug_a)" => repeat([5.0], 21),
          "G1(drug_b)" => signal2,
@@ -280,21 +309,9 @@ signaltable = ColumnDataTable(
    :point; 
    analytetype = AnalyteTest
 )
-method = MethodTable(conctable, signaltable, :area, :point; analyte = analytes, isd = [2, -1, 4, -1], calibration = [1, -1, 3, -1])
+method = AnalysisMethod(conctable, signaltable, :area, :point; analyte = analytes, isd = [2, -1, 4, -1], calibration = [1, -1, 3, -1])
 
 # Create sample data
-rdata = AnalysisTable([:area], [
-   RowDataTable(
-         DataFrame(
-            "Analyte" => analytes, 
-            "S1" => Float64[6, 6, 200, 2],
-            "S2" => Float64[24, 6, 800, 2],
-            "S3" => Float64[54, 6, 9800, 2]
-            ), 
-         :Analyte
-         )
-   ]
-)
 cdata = AnalysisTable([:area], [
    ColumnDataTable(
          DataFrame(
@@ -308,6 +325,18 @@ cdata = AnalysisTable([:area], [
          )
    ]
 )
+rdata = AnalysisTable([:area], [
+   RowDataTable(
+         DataFrame(
+            "Analyte" => analytes, 
+            "S1" => Float64[6, 6, 200, 2],
+            "S2" => Float64[24, 6, 800, 2],
+            "S3" => Float64[54, 6, 9800, 2]
+            ), 
+         :Analyte
+         )
+   ]
+) # Less efficient for quantification
 
 # Create batch
 cbatch = Batch(method, cdata)
@@ -316,7 +345,7 @@ rbatch = Batch(method, rdata)
 # Calibration
 cbatch.calibration # a vector of `MultipleCalibration`
 cbatch.calibration[2].type = false # Use quadratic regression for the second analyte
-rbatch.calibration[AnalyteG1("G1(drug_b)")].type = false # Use quadratic regression for AnalyteG1("G1(drug_b)")
+rbatch.calibration[AnalyteG1("G1(drug_b)")].type = false # Use quadratic regression for `AnalyteG1("G1(drug_b)")`
 update_calibration!(cbatch, 2)
 update_calibration!(rbatch, AnalyteG1("G1(drug_b)"))
 
@@ -326,16 +355,16 @@ update_inv_predict!(cbatch) # Fit `cbatch.data.relative_signal` into calibration
 update_quantification!(cbatch) # equivalent to `update_inv_predict!(update_relative_signal!(cbatch))`
 
 # Utils
-analyteobj(cdata.area)
-sampleeobj(cdata)
-analytename(cdata)
-sampleename(cdata.area)
-cdata.area[1, "G2(drug_a)"] = 6
-cdata.area[1, "G1(drug_a)"] == 6
+analyteobj(cdata.area) # analytes of type `AnalyteTest`
+sampleeobj(cdata) # samples of type `String`
+analytename(cdata) # analytes of type `Symbol`
+samplename(cdata.area) # samples of type `Symbol`
+cdata.area[AnalyteTest("G2(drug_a)"), "S1"] = 6 # Set value using `dt[analyte, sample]`
+cdata.area[AnalyteTest("G2(drug_a)"), "S1"] == 6
 collect(eachanalyte(cdata.area))
 collect(eachsample(cdata.area))
-getanalyte(cdata.area, AnalyteG1("G1(drug_b)"))
-getanalyte(cdata.area, 1)
+getanalyte(cdata.area, AnalyteG1("G1(drug_b)")) # get data of `AnalyteG1("G1(drug_b)")`
+getanalyte(cdata.area, 1) # get data of first analyte
 getsample(cdata.area, "S2")
 dynamic_range(cbatch.calibration[1])
 signal_range(rbatch.calibration[2])
