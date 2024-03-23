@@ -15,10 +15,10 @@ Base.getindex(dt::AbstractDataTable, x...) = Base.getindex(table(dt), x...)
 Base.getindex(dt::ColumnDataTable{A, S}, analyte::B, sample::T) where {A, S, B <: A, T <: S} = getanalyte(dt, analyte)[findsample(dt, sample)]
 Base.getindex(dt::RowDataTable{A, S}, analyte::B, sample::T) where {A, S, B <: A, T <: S} = getsample(dt, sample)[findanalyte(dt, analyte)]
 Base.setindex!(dt::AbstractDataTable, value, keys...) = Base.setindex!(table(dt), value, keys...)
-Base.setindex!(dt::ColumnDataTable{A, S, N}, value::N, analyte::B, sample::T) where {A, S, B <: A, T <: S, N} = setindex!(getanalyte(dt, analyte), value, findsample(dt, sample))
-Base.setindex!(dt::ColumnDataTable{A, S, N}, value, analyte::B, sample::T) where {A, S, B <: A, T <: S, N} = setindex!(getanalyte(dt, analyte), convert(N, value), findsample(dt, sample))
-Base.setindex!(dt::RowDataTable{A, S, N}, value::N, analyte::B, sample::T) where {A, S, B <: A, T <: S, N} = setindex!(getsample(dt, sample), value, findanalyte(dt, analyte))
-Base.setindex!(dt::RowDataTable{A, S, N}, value, analyte::B, sample::T) where {A, S, B <: A, T <: S, N} = setindex!(getsample(dt, sample), convert(N, value), findanalyte(dt, analyte))
+Base.setindex!(dt::ColumnDataTable{A, S, N}, value::N, analyte::B, sample::T) where {A, S, B <: A, T <: S, N} = (setindex!(getanalyte(dt, analyte), value, findsample(dt, sample)); dt)
+Base.setindex!(dt::ColumnDataTable{A, S, N}, value, analyte::B, sample::T) where {A, S, B <: A, T <: S, N} = (setindex!(getanalyte(dt, analyte), convert(N, value), findsample(dt, sample)); dt)
+Base.setindex!(dt::RowDataTable{A, S, N}, value::N, analyte::B, sample::T) where {A, S, B <: A, T <: S, N} = (setindex!(getsample(dt, sample), value, findanalyte(dt, analyte)); dt)
+Base.setindex!(dt::RowDataTable{A, S, N}, value, analyte::B, sample::T) where {A, S, B <: A, T <: S, N} = (setindex!(getsample(dt, sample), convert(N, value), findanalyte(dt, analyte)); dt)
 Base.copy(dt::ColumnDataTable) = ColumnDataTable(copy(analyteobj(dt)), copy(sampleobj(dt)), samplecol(dt), copy(table(dt)))
 Base.copy(dt::RowDataTable) = RowDataTable(copy(analyteobj(dt)), copy(sampleobj(dt)), analytecol(dt), copy(table(dt)))
 
@@ -31,6 +31,7 @@ function Base.setindex!(calibration::AbstractVector{<: AbstractCalibration{A}}, 
     id = findfirst(x -> first(x.analyte) == analyte, calibration)
     isnothing(id) && throw(ArgumentError("Analyte $analyte does not have a calibration curve."))
     calibration[id] = v
+    calibration
 end
 Base.copy(cal::MultipleCalibration) = MultipleCalibration(cal.analyte, cal.type, cal.zero, cal.weight, cal.formula, cal.table, cal.model)
 Base.copy(cal::SingleCalibration) = SingleCalibration(cal.analyte, cal.conc)
@@ -38,16 +39,16 @@ Base.copy(cal::SingleCalibration) = SingleCalibration(cal.analyte, cal.conc)
 Base.isassigned(at::AnalysisTable, i::Symbol) = Base.isassigned(tables(at), i)
 Dictionaries.isinsertable(at::AnalysisTable) = true
 Dictionaries.issetable(at::AnalysisTable) = true
-Dictionaries.set!(at::AnalysisTable, i, v) = set!(tables(at), i, v)
-Dictionaries.unset!(at::AnalysisTable, i) = unset!(tables(at), i)
-Base.insert!(at::AnalysisTable, i, v) = insert!(tables(at), i, v)
+Dictionaries.set!(at::AnalysisTable, i, v) = (set!(tables(at), i, v); at)
+Dictionaries.unset!(at::AnalysisTable, i) = (unset!(tables(at), i); at)
+Base.insert!(at::AnalysisTable, i, v) = (insert!(tables(at), i, v); at)
 Base.get!(at::AnalysisTable, i, v) = get!(tables(at), i, v)
 Base.get(at::AnalysisTable, i, v) = get(tables(at), i, v)
-Base.delete!(at::AnalysisTable, i) = delete!(tables(at), i)
+Base.delete!(at::AnalysisTable, i) = (delete!(tables(at), i); at)
 Base.getproperty(at::AnalysisTable, property::Symbol) = tables(at)[property]
 Base.propertynames(at::AnalysisTable) = Tuple(keys(tables(at)))
 Base.getindex(at::AnalysisTable, i) = getindex(tables(at), i)
-Base.setindex!(at::AnalysisTable, v, i) = setindex!(tables(at), v, i)
+Base.setindex!(at::AnalysisTable, v, i) = (setindex!(tables(at), v, i); at)
 Base.pairs(at::AnalysisTable) = pairs(tables(at))
 Base.keys(at::AnalysisTable) = keys(tables(at))
 Base.values(at::AnalysisTable) = values(tables(at))

@@ -413,6 +413,7 @@ Batch(batch::Batch, at::AnalysisTable) = Batch(batch.method, batch.calibration, 
 include("interface.jl")
 include("utils.jl")
 include("cal.jl")
+include("quant.jl")
 include("io.jl")
 
 """

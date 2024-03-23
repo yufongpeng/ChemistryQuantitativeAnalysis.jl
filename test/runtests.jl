@@ -1,5 +1,5 @@
 using ChemistryQuantitativeAnalysis, TypedTables, DataFrames, Dictionaries
-using Test, JET
+using Test
 import Base: show, convert
 const CQA = ChemistryQuantitativeAnalysis
 
@@ -128,24 +128,22 @@ end
         rdata.area[AnalyteTest("G2(drug_a)"), "S1"] = 4
         @test rdata.area[AnalyteTest("G2(drug_a)"), "S1"] == 4
         rdata.area[AnalyteTest("G2(drug_a)"), "S1"] = 6
-        @test_call target_modules = (ChemistryQuantitativeAnalysis, ) collect(cdata.area)
-        @test_call target_modules = (ChemistryQuantitativeAnalysis, ) collect(rdata.area)
-        @test_call target_modules = (ChemistryQuantitativeAnalysis, ) columns(cdata.area)
-        @test_call target_modules = (ChemistryQuantitativeAnalysis, ) columns(rdata.area)
-        @test_call target_modules = (ChemistryQuantitativeAnalysis, ) rows(cdata.area)
-        @test_call target_modules = (ChemistryQuantitativeAnalysis, ) rows(rdata.area)
+        @test collect(cdata.area)[1].var"G1(drug_a)" == collect(rdata.area)[1].var"S1"
+        @test collect(columns(cdata.area))[2][1] == collect(rows(rdata.area))[1][2]
+        @test collect(columns(rdata.area))[2][1] == collect(rows(cdata.area))[1][2]
         @test collect(eachanalyte(cdata.area)) == collect(eachanalyte(rdata.area))
         @test collect(eachsample(cdata.area)) == collect(eachsample(rdata.area))
-        @test_call target_modules = (ChemistryQuantitativeAnalysis, ) insert!(cbatch.data, :true_concentration, deepcopy(cbatch.data.area))
-        @test_call target_modules = (ChemistryQuantitativeAnalysis, ) set!(cbatch.data, :true_concentration, deepcopy(cbatch.data.area))
-        @test_call target_modules = (ChemistryQuantitativeAnalysis, ) delete!(cbatch.data, :true_concentration)
-        @test_call target_modules = (ChemistryQuantitativeAnalysis, ) unset!(cbatch.data, :true_concentration)
+        @test all(isapprox.(insert!(cbatch.data, :true_concentration, deepcopy(cbatch.data.area)).true_concentration.var"G1(drug_a)", set!(cbatch.data, :true_concentration, deepcopy(cbatch.data.area)).true_concentration.var"G1(drug_a)"))
+        @test !in(:true_concentration, propertynames(delete!(cbatch.data, :true_concentration)))
+        @test !in(:true_concentration, propertynames(unset!(cbatch.data, :true_concentration)))
     end
     @testset "Calibration" begin
-        @test_call target_modules = (ChemistryQuantitativeAnalysis, ) accuracy(cbatch.calibration[1])
-        @test_call target_modules = (ChemistryQuantitativeAnalysis, ) quantification(rbatch.calibration[2])
-        @test_call target_modules = (ChemistryQuantitativeAnalysis, ) CQA.calibrate!(rbatch)
-        @test_call target_modules = (ChemistryQuantitativeAnalysis, ) CQA.validate!(cbatch)
+        CQA.calibrate!(cbatch)
+        CQA.calibrate!(rbatch)
+        CQA.validate!(cbatch)
+        CQA.validate!(rbatch)
+        @test all(accuracy(cbatch.calibration[1]) .== accuracy(rbatch.calibration[1]))
+        @test all(quantification(rbatch.calibration[2]) .== quantification(cbatch.calibration[2]))
         cbatch.calibration[2].type = false
         rbatch.calibration[AnalyteG1("G1(drug_b)")].type = false
         update_calibration!(cbatch, AnalyteG1("G1(drug_b)"))
@@ -157,17 +155,17 @@ end
         @test isapprox(update_calibration!(SingleCalibration((analyteobj(method.conctable)[2], ), 100.0), method).conc, first(getanalyte(method.conctable, 2)))
     end
     @testset "Quantification" begin
-        @test_call target_modules = (ChemistryQuantitativeAnalysis, ) set_relative_signal(rbatch.data, rbatch)
-        @test_call target_modules = (ChemistryQuantitativeAnalysis, ) set_inv_predict(cbatch.data, cbatch)
-        @test_call target_modules = (ChemistryQuantitativeAnalysis, ) set_quantification(rbatch.data, rbatch)
+        @test all(isapprox.(getanalyte(set_relative_signal(rbatch.data, rbatch).relative_signal, AnalyteTest("G1(drug_a)")), cbatch.data.area.var"G1(drug_a)" ./ cbatch.data.area.var"G2(drug_a)"))
+        set_relative_signal!(cbatch.data, cbatch)
+        set_quantification!(rbatch.data, rbatch)
+        @test all(isapprox.(set_inv_predict(cbatch.data, cbatch).estimated_concentration.var"G1(drug_a)", getanalyte(rbatch.data.estimated_concentration, AnalyteTest("G1(drug_a)"))))
+        @test all(isapprox.(getanalyte(set_quantification(rbatch.data, rbatch).estimated_concentration, AnalyteTest("G1(drug_a)")), set_quantification!(cbatch.data, cbatch).estimated_concentration.var"G1(drug_a)"))
         # @test_call target_modules = (ChemistryQuantitativeAnalysis, ) update_quantification!(rbatch)
-        @test_call target_modules = (ChemistryQuantitativeAnalysis, ) set_quantification!(cbatch.data, cbatch)
-        @test_call target_modules = (ChemistryQuantitativeAnalysis, ) quantification(cbatch, cbatch.data)
-        @test_call target_modules = (ChemistryQuantitativeAnalysis, ) quantification(cbatch.calibration[1], cbatch.data.area, cbatch.calibration[1].analyte...)
-        @test_call target_modules = (ChemistryQuantitativeAnalysis, ) update_quantification!(ebatch)
-        @test_call target_modules = (ChemistryQuantitativeAnalysis, ) update_relative_signal!(ebatch)
-        @test_call target_modules = (ChemistryQuantitativeAnalysis, ) update_inv_predict!(ebatch)
-        @test_call target_modules = (ChemistryQuantitativeAnalysis, ) update_accuracy!(ebatch)
+        @test all(isapprox.(quantification(cbatch, cbatch.data).var"G1(drug_a)", quantification(cbatch.calibration[1], cbatch.data.area, cbatch.calibration[1].analyte...)))
+        @test @test_noerror update_quantification!(ebatch)
+        @test @test_noerror update_relative_signal!(ebatch)
+        @test @test_noerror update_inv_predict!(ebatch)
+        @test @test_noerror update_accuracy!(ebatch)
         @test all(isapprox.(update_quantification!(cbatch).data.estimated_concentration.var"G1(drug_b)", getanalyte(update_quantification!(cbatch).data.estimated_concentration, AnalyteTest("G1(drug_b)"))))
         # @test all(isapprox_nan.(set_quantification!(rbatch.data, rbatch).estimated_concentration.S1, set_inv_predict!(set_relative_signal(rbatch.data, rbatch), rbatch).estimated_concentration.S1))
         # @test all(isapprox.(quantification(cbatch, cbatch.data).var"G1(drug_a)", inv_predict(cbatch.calibration[1], relative_signal(cbatch, cbatch.data))))
@@ -184,7 +182,7 @@ end
         @test getsample(cdata.area, "S2") == getsample(cdata.area, Symbol("S2"))
         @test getsample(rdata.area, Symbol("S2")) == getproperty(CQA.table(rdata.area), Symbol("S2"))
         @test all(isapprox.(dynamic_range(cbatch.calibration[1]), (1, 100)))
-        @test_call target_modules = (ChemistryQuantitativeAnalysis, ) signal_range(rbatch.calibration[2])
+        @test all(isapprox.(signal_range(rbatch.calibration[2]), signal_range(cbatch.calibration[2])))
         @test endswith(formula_repr_utf8(cbatch.calibration[2]), "x^2")
         @test weight_repr_utf8(cbatch.calibration[1]) == "none"
         @test weight_value("1/x^3") == -3
