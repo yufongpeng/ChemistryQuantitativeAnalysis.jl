@@ -11,9 +11,10 @@ export ColumnDataTable, RowDataTable,
     accuracy, set_accuracy, set_accuracy!, update_accuracy!,
     isdof, isisd, 
     findanalyte, getanalyte, findsample, getsample, eachanalyte, eachsample,
-    dynamic_range, lloq, uloq, signal_range, signal_lloq, signal_uloq, 
+    dynamic_range, lloq, uloq, signal_range, signal_lloq, signal_uloq, lod, loq, 
     formula_repr, weight_repr, weight_value, formula_repr_utf8, weight_repr_utf8, format_number, mkbatch, 
-    typedmap
+    typedmap,
+    ui_init
 
 import Base: getproperty, propertynames, show, write, eltype, length, iterate, 
         getindex, setindex!, insert!, get!, delete!, get, 
@@ -443,5 +444,10 @@ RowDataTable(analytecol::Symbol, tablesink::TypeOrFn, tbl::ColumnDataTable) =
     RowDataTable(tbl, analytecol, tablesink)
 RowDataTable(analytecol::Symbol, tbl::ColumnDataTable) = 
     RowDataTable(tbl, analytecol)
+
+function ui_init()
+    @eval ChemistryQuantitativeAnalysis include(joinpath(@__DIR__(), "ui", "ui.jl"))
+    @info "Use function `icalibrate!` to start a UI for a batch."
+end
 
 end

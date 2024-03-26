@@ -123,11 +123,24 @@ end
         @test propertynames(rdata.area) == (:Analyte, Symbol.(["S1", "S2", "S3"])...)
     end
     @testset "Interface.jl" begin
-        cdata.area[AnalyteTest("G2(drug_a)"), "S1"] = 6
-        @test cdata.area[AnalyteTest("G2(drug_a)"), "S1"] == 6
+        cdata.area[AnalyteTest("G2(drug_a)"), "S1"] = 4
+        @test cdata.area[AnalyteTest("G2(drug_a)"), "S1"] == 4
+        cdata.area[AnalyteTest("G2(drug_a)"), "S1"] = 6.0
+        @test cdata.area[AnalyteTest("G2(drug_a)"), "S1"] == 6.0
         rdata.area[AnalyteTest("G2(drug_a)"), "S1"] = 4
         @test rdata.area[AnalyteTest("G2(drug_a)"), "S1"] == 4
-        rdata.area[AnalyteTest("G2(drug_a)"), "S1"] = 6
+        rdata.area[AnalyteTest("G2(drug_a)"), "S1"] = 6.0
+        @test rdata.area[AnalyteTest("G2(drug_a)"), "S1"] == 6.0
+        @test rdata.area[1] == (Analyte = analytes[1], S1 = 6.0, S2 = 24.0, S3 = 54.0)
+        cbatch.calibration[AnalyteTest("G1(drug_a)")] = copy(cbatch.calibration[AnalyteTest("G1(drug_a)")])
+        @test get!(cdata, :area, cdata.area) == get(cdata, :area, nothing)
+        @test haskey(cdata, :area)
+        cdata[:area] = copy(cdata[:area])
+        @test all([v for (k, v) in zip(keys(rdata), values(rdata))] .== [v for v in rdata])
+        @test cbatch.isd == cbatch.method.isd
+        @test cbatch.nonisd == cbatch.method.nonisd
+        @test cbatch.point == cbatch.method.point
+        @test cbatch.level == cbatch.method.level
         @test collect(cdata.area)[1].var"G1(drug_a)" == collect(rdata.area)[1].var"S1"
         @test collect(columns(cdata.area))[2][1] == collect(rows(rdata.area))[1][2]
         @test collect(columns(rdata.area))[2][1] == collect(rows(cdata.area))[1][2]
@@ -181,11 +194,14 @@ end
         @test getanalyte(rdata.area, AnalyteG1("G1(drug_b)")) == getanalyte(rdata.area, Symbol("G1(drug_b)"))
         @test getsample(cdata.area, "S2") == getsample(cdata.area, Symbol("S2"))
         @test getsample(rdata.area, Symbol("S2")) == getproperty(CQA.table(rdata.area), Symbol("S2"))
+        @test samplename(rdata) == samplename(rdata.area)
+        @test analytename(cdata) == analytename(cdata.area)
         @test all(isapprox.(dynamic_range(cbatch.calibration[1]), (1, 100)))
-        @test all(isapprox.(signal_range(rbatch.calibration[2]), signal_range(cbatch.calibration[2])))
+        @test all(isapprox.(signal_range(rbatch.calibration[2]), (signal_lloq(cbatch.calibration[2]), signal_uloq(cbatch.calibration[2]))))
         @test endswith(formula_repr_utf8(cbatch.calibration[2]), "x^2")
         @test weight_repr_utf8(cbatch.calibration[1]) == "none"
-        @test weight_value("1/x^3") == -3
+        @test all(weight_value.(["none", "1/√x", "1/x", "1/x²", "x", "x^2", "1/x^3"]) .== [0, -0.5, -1, -2, 1, 2, -3])
+        @test all(weight_repr_utf8.(Number[0, -0.5, -1, -2, 1, 2, -3]) .== ["none", "1/x^0.5", "1/x", "1/x^2", "x", "x^2", "1/x^3"])
     end
     @testset "IO" begin
         global initial_mc_c = ChemistryQuantitativeAnalysis.read(joinpath(datapath, "initial_mc_c.batch"), DataFrame)

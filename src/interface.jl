@@ -53,7 +53,7 @@ Base.pairs(at::AnalysisTable) = pairs(tables(at))
 Base.keys(at::AnalysisTable) = keys(tables(at))
 Base.values(at::AnalysisTable) = values(tables(at))
 Base.haskey(at::AnalysisTable, i) = haskey(tables(at), i)
-Base.iterate(at::AnalysisTable, st = 1) = st > length(at) ? nothing : (first(Base.iterate(tables(at), st)), st + 1)
+Base.iterate(at::AnalysisTable, s...) = Base.iterate(tables(at), s...)
 Base.length(at::AnalysisTable) = length(tables(at))
 Base.copy(at::AnalysisTable) = AnalysisTable(copy(analyteobj(at)), copy(sampleobj(at)), Dictionary(collect(keys(tables(at))), values(tables(at))))
 function Base.getproperty(tbl::AnalysisMethod, p::Symbol)
@@ -65,9 +65,9 @@ function Base.getproperty(tbl::AnalysisMethod, p::Symbol)
         getfield(tbl, :analytetable).analyte[getfield(tbl, :analytetable).isd .>= 0]
     elseif p == :point
         s = getfield(tbl, :signaltable)
-        isnothing(s) ? s : s.sample
+        isnothing(s) ? s : sampleobj(s)
     elseif p == :level
-        getfield(tbl, :conctable).sample
+        sampleobj(getfield(tbl, :conctable))
     else
         getfield(tbl, p)
     end

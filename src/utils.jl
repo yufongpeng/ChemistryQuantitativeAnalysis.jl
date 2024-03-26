@@ -246,6 +246,35 @@ Return theoretical signal of upper limit of quantification.
 """
 signal_uloq(cal::MultipleCalibration) = only(predict(cal.model, Table(; x = [uloq(cal)])))
 
+function blank(cal::MultipleCalibration{A, N}) where {A, N}
+    β = cal.model.model.pp.beta0::Vector{N}
+    if cal.type
+        b = length(β) == 1 ? 0 : first(β)
+    else
+        length(β) == 2 && return 0
+        c, b, a = β
+        a < 0 && return c
+        max(0, b ^ 2 / 4a - b ^ 2 / 2a + c)
+    end
+end
+
+"""
+    loq(cal::MultipleCalibration)
+
+Theoretical limit of quantification (LOQ); concentration of signal adding blank signal and 10 times standard deviation of LLOQ signal.
+
+Blank signal is defined as the lowest signal such that the corresponding concentration is larger than 0. 
+"""
+loq(cal::MultipleCalibration) = only(inv_predict(cal, [blank(cal) + 10 * std(cal.table.y[findfirst(cal.table.include)])]))
+"""
+    lod(cal::MultipleCalibration)
+
+Theoretical limit of quantification (LOQ); concentration of signal adding blank signal and 3.3 times standard deviation of LLOQ signal.
+
+Blank signal is defined as the lowest signal such that the corresponding concentration is larger than 0. 
+"""
+lod(cal::MultipleCalibration) = only(inv_predict(cal, [blank(cal) + 3.3 * std(cal.table.y[findfirst(cal.table.include)])]))
+
 """
     weight_repr(cal::MultipleCalibration)
     weight_repr(weight::Number)
@@ -266,6 +295,8 @@ elseif weight == -2
     "1/x²"
 elseif weight == 0
     "none"
+elseif weight == 1
+    "x"
 elseif weight > 0
     "x^$weight"
 else
@@ -276,12 +307,16 @@ end
 
 Return value of weight from string representation. See "weight_repr".
 """
-weight_value(weight) = if weight == "1/√x"
+weight_value(weight) = if weight == "none"
+    0
+elseif weight == "1/√x"
     -0.5
 elseif weight == "1/x"
     -1
 elseif weight == "1/x²"
     -2
+elseif weight == "x"
+    1
 else
     neg = match(r"1/x\^(\d*)", weight)
     isnothing(neg) ? parse(Float64, first(match(r"x\^(\d*)", weight))) : -parse(Float64, first(neg))
