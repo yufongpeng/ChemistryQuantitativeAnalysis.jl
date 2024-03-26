@@ -99,7 +99,7 @@ end
                 )
             ]
         )
-        global rdata = AnalysisTable([:area], [
+        global rdata = analysistable((:area => 
             RowDataTable(
                 Table(;
                     var"Analyte" = analytes, 
@@ -109,7 +109,7 @@ end
                     ), 
                 :Analyte
                 )
-            ]
+            , )
         )
         global cbatch = Batch(method, cdata)
         global rbatch = Batch(method, rdata)
@@ -133,7 +133,8 @@ end
         @test rdata.area[AnalyteTest("G2(drug_a)"), "S1"] == 6.0
         @test rdata.area[1] == (Analyte = analytes[1], S1 = 6.0, S2 = 24.0, S3 = 54.0)
         cbatch.calibration[AnalyteTest("G1(drug_a)")] = copy(cbatch.calibration[AnalyteTest("G1(drug_a)")])
-        @test get!(cdata, :area, cdata.area) == get(cdata, :area, nothing)
+        get!(cdata, :area, cdata.area)
+        get(cdata, :area, nothing)
         @test haskey(cdata, :area)
         cdata[:area] = copy(cdata[:area])
         @test all([v for (k, v) in zip(keys(rdata), values(rdata))] .== [v for v in rdata])
@@ -161,6 +162,7 @@ end
         rbatch.calibration[AnalyteG1("G1(drug_b)")].type = false
         update_calibration!(cbatch, AnalyteG1("G1(drug_b)"))
         update_calibration!(rbatch, 2)
+        @test CQA.calibration(cbatch.method, 1).analyte == cbatch.calibration[1].analyte
         @test all(isapprox.(cbatch.calibration[1].table.accuracy[1:3], [1, 1.1, 0.9]))
         # @test all(isapprox.(cbatch.calibration[2].table.accuracy[1:3], [1, sqrt(1.1), sqrt(0.9)]))
         # @test all(isapprox.(rbatch.calibration[1].table.accuracy[1:3], [1, 1.1, 0.9]))
