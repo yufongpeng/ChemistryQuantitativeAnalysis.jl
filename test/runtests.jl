@@ -1,4 +1,4 @@
-using ChemistryQuantitativeAnalysis, TypedTables, DataFrames, Dictionaries
+using ChemistryQuantitativeAnalysis, TypedTables, DataFrames, Dictionaries, CSV
 using Test
 import Base: show, convert
 const CQA = ChemistryQuantitativeAnalysis
@@ -65,7 +65,7 @@ end
 
 @testset "ChemistryQuantitativeAnalysis.jl" begin
     @testset "Constructors" begin
-        global conctable = ColumnDataTable(
+        global conctable = SampleDataTable(
             Table(;
                 var"level" = collect(1:7), 
                 var"G1(drug_a)" = conc,
@@ -73,7 +73,7 @@ end
             AnalyteTest,
             :level
         )
-        global signaltable = ColumnDataTable(
+        global signaltable = SampleDataTable(
             Table(;
                 var"point" = reshape([string(a, "_", b) for (a, b) in Iterators.product(1:7, 1:3)], 21), 
                 var"level" = repeat(1:7, 3),
@@ -87,7 +87,7 @@ end
         )
         global method = AnalysisMethod(conctable, signaltable, :area, :level; analyte = analytes, isd = [2, -1, 4, -1], calibration = [1, -1, 3, -1])
         global cdata = AnalysisTable([:area], [
-            ColumnDataTable(
+            SampleDataTable(
                 Table(;
                     var"Sample" = ["S1", "S2", "S3"], 
                     var"G1(drug_a)" = Float64[6, 24, 54],
@@ -100,7 +100,7 @@ end
             ]
         )
         global rdata = analysistable((:area => 
-            RowDataTable(
+            AnalyteDataTable(
                 Table(;
                     var"Analyte" = analytes, 
                     var"S1" = Float64[6, 6, 200, 2],
@@ -114,8 +114,12 @@ end
         global cbatch = Batch(method, cdata)
         global rbatch = Batch(method, rdata)
         global ebatch = Batch(method)
-        @test getanalyte(cdata.area, 1) == getanalyte(rdata.area, 1) == getanalyte(ColumnDataTable(rdata.area, :Sample, Table), 1)
-        @test getsample(cdata.area, 2) == getsample(rdata.area, 2) == getsample(RowDataTable(cdata.area, :Analyte, Table), 2)
+        sdt = SampleDataTable(CSV.read(joinpath(datapath, "area.sdt", "table.txt"), Table; delim = '\t'), :Sample)
+        adt = AnalyteDataTable(CSV.read(joinpath(datapath, "area.adt", "table.txt"), Table; delim = '\t'), :Analyte)
+        global sbatch = Batch(sdt)
+        global abatch = Batch(adt)
+        @test getanalyte(cdata.area, 1) == getanalyte(rdata.area, 1) == getanalyte(SampleDataTable(rdata.area, :Sample, Table), 1)
+        @test getsample(cdata.area, 2) == getsample(rdata.area, 2) == getsample(AnalyteDataTable(cdata.area, :Analyte, Table), 2)
         @test propertynames(cbatch) == (:method, :calibration, :data, :analyte, :isd, :nonisd, :point, :level)
         @test propertynames(cbatch.method) == (:analytetable, :signal, :pointlevel, :conctable, :signaltable, :analyte, :isd, :nonisd, :point, :level)
         @test propertynames(cdata) == (:area, )
@@ -162,6 +166,12 @@ end
         rbatch.calibration[AnalyteG1("G1(drug_b)")].type = false
         update_calibration!(cbatch, AnalyteG1("G1(drug_b)"))
         update_calibration!(rbatch, 2)
+        sbatch.method.analytetable.isd .= [2, -1, 4, -1, 0]
+        sbatch.method.analytetable.calibration .= [1, -1, 3, -1, 5]
+        abatch.method.analytetable.isd .= [2, -1, 4, -1, 0]
+        abatch.method.analytetable.calibration .= [1, -1, 3, -1, 5]
+        init_calibration!(sbatch)
+        init_calibration!(abatch)
         @test CQA.calibration(cbatch.method, 1).analyte == cbatch.calibration[1].analyte
         @test all(isapprox.(cbatch.calibration[1].table.accuracy[1:3], [1, 1.1, 0.9]))
         # @test all(isapprox.(cbatch.calibration[2].table.accuracy[1:3], [1, sqrt(1.1), sqrt(0.9)]))
@@ -211,10 +221,13 @@ end
         global initial_sc_c = ChemistryQuantitativeAnalysis.read(joinpath(datapath, "initial_sc_c.batch"), DataFrame)
         global initial_sc_r = ChemistryQuantitativeAnalysis.read(joinpath(datapath, "initial_sc_r.batch"), DataFrame)
         ChemistryQuantitativeAnalysis.read(joinpath(datapath, "initial_mc_c.batch", "data.at"), DataFrame)
-        ChemistryQuantitativeAnalysis.read(joinpath(datapath, "initial_mc_c.batch", "data.at", "0_area.dt"), DataFrame)
-        ChemistryQuantitativeAnalysis.read(joinpath(datapath, "initial_mc_c.batch", "method.mt"), DataFrame)
+        ChemistryQuantitativeAnalysis.read(joinpath(datapath, "initial_mc_c.batch", "data.at", "0_area.sdt"), DataFrame)
+        ChemistryQuantitativeAnalysis.read(joinpath(datapath, "initial_mc_r.batch", "data.at", "0_area.adt"), DataFrame)
+        ChemistryQuantitativeAnalysis.read(joinpath(datapath, "initial_mc_c.batch", "method.am"), DataFrame)
         ChemistryQuantitativeAnalysis.read(joinpath(datapath, "save_mc_c.batch", "calibration", "1.mcal"), DataFrame)
         ChemistryQuantitativeAnalysis.read(joinpath(datapath, "save_sc_c.batch", "calibration", "1.scal"), DataFrame)
+        update_quantification!(sbatch)
+        update_quantification!(abatch)
         update_quantification!(initial_mc_c)
         update_quantification!(initial_mc_r)
         update_quantification!(initial_sc_c)
@@ -223,7 +236,9 @@ end
         global save_mc_r = ChemistryQuantitativeAnalysis.read(joinpath(datapath, "save_mc_r.batch"), DataFrame)
         global save_sc_c = ChemistryQuantitativeAnalysis.read(joinpath(datapath, "save_sc_c.batch"), DataFrame)
         global save_sc_r = ChemistryQuantitativeAnalysis.read(joinpath(datapath, "save_sc_r.batch"), DataFrame)
+        @test isapprox(CQA.table(initial_mc_c.data.estimated_concentration)[1, 2], collect(CQA.table(sbatch.data.estimated_concentration)[1])[2] * 10)
         @test all(isapprox_nan.(collect(CQA.table(initial_mc_c.data.estimated_concentration)[1, :]), collect(CQA.table(save_mc_c.data.estimated_concentration)[1, :])))
+        @test isapprox(CQA.table(initial_mc_r.data.estimated_concentration)[1, 3], collect(CQA.table(abatch.data.estimated_concentration)[1])[1] * 10)
         @test all(isapprox_nan.(collect(CQA.table(initial_mc_r.data.estimated_concentration)[1, :]), collect(CQA.table(save_mc_r.data.estimated_concentration)[1, :])))
         @test all(isapprox_nan.(collect(CQA.table(initial_sc_c.data.estimated_concentration)[1, :]), collect(CQA.table(save_sc_c.data.estimated_concentration)[1, :])))
         @test all(isapprox_nan.(collect(CQA.table(initial_sc_r.data.estimated_concentration)[1, :]), collect(CQA.table(save_sc_r.data.estimated_concentration)[1, :])))
@@ -247,9 +262,9 @@ end
         @test @test_noerror test_show(save_mc_r.data)
         # @test @test_noerror test_show(save_sc_c.data)
         # @test @test_noerror test_show(save_sc_r.data)
-        mkbatch(joinpath(datapath, "new1.batch"); data_config = Dict(:Type => "R", :Sample => ["S0", "S1", "S2"]), signal_config = Dict(:Type => "R", :Sample => ["C0"]), conc_config = Dict(:Type => "R", :Sample => [1]))
-        mkbatch(joinpath(datapath, "new2.batch"); data_config = Dict(:Analyte => ["A1", "A2"]), signal_config = Dict(:Analyte => ["A1", "A2", "A3"]), conc_config = Dict(:Type => "R", :Sample => [1, 2, 3, 4, 5, 6]))
-        mkbatch(joinpath(datapath, "new3.batch"); data_config = Dict(:Type => "R", :Sample => ["S0", "S1", "S2"]), conc_config = Dict(:Analyte => ["A1", "A2", "A3"]), signal_config = Dict(:Type => "R", :Sample => ["C1", "C2", "C3", "C4", "C5", "C6"]))
+        mkbatch(joinpath(datapath, "new1.batch"); data_table = AnalyteDataTable, signal_table = AnalyteDataTable, conc_table = AnalyteDataTable, data_config = Dict(:Sample => ["S0", "S1", "S2"]), signal_config = Dict(:Sample => ["C0"]), conc_config = Dict(:Sample => [1]))
+        mkbatch(joinpath(datapath, "new2.batch"); conc_table = AnalyteDataTable, data_config = Dict(:Analyte => ["A1", "A2"]), signal_config = Dict(:Analyte => ["A1", "A2", "A3"]), conc_config = Dict(:Sample => [1, 2, 3, 4, 5, 6]))
+        mkbatch(joinpath(datapath, "new3.batch"); data_table = AnalyteDataTable, signal_table = AnalyteDataTable, data_config = Dict(:Sample => ["S0", "S1", "S2"]), conc_config = Dict(:Analyte => ["A1", "A2", "A3"]), signal_config = Dict(:Sample => ["C1", "C2", "C3", "C4", "C5", "C6"]))
         mkbatch(joinpath(datapath, "new4.batch"); method_config = Dict(:signal => "height", :levelname => "L"))
         n1 = ChemistryQuantitativeAnalysis.read(joinpath(datapath, "new1.batch"), DataFrame)
         n2 = ChemistryQuantitativeAnalysis.read(joinpath(datapath, "new2.batch"), DataFrame)

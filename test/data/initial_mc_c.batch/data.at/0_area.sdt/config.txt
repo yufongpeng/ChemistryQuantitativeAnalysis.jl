@@ -1,0 +1,14 @@
+﻿[delim]
+\t
+
+[Analyte]
+Analyte1
+Analyte2
+Analyte3
+Analyte4
+Analyte5
+Analyte6
+Analyte7
+
+[Sample]
+Sample

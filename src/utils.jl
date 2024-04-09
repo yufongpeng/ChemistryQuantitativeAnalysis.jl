@@ -130,17 +130,24 @@ Equivalent to `Symbol.(sampleobj(dt))` or `Symbol.(sampleobj(at))`.
 samplename(dt::AbstractDataTable) = Symbol.(sampleobj(dt))
 samplename(at::AnalysisTable) = Symbol.(sampleobj(at))
 """
-    samplecol(dt::ColumnDataTable) -> Symbol
+    samplecol(dt::SampleDataTable) -> Symbol
 
 Equivalent to `getfield(dt, :samplecol)`.
 """
-samplecol(dt::ColumnDataTable) = getfield(dt, :samplecol)
+samplecol(dt::SampleDataTable) = getfield(dt, :samplecol)
 """
-    analytecol(dt::ColumnDataTable) -> Symbol
+    analytecol(dt::SampleDataTable) -> Symbol
 
 Equivalent to `getfield(dt, :analytecol)`.
 """
-analytecol(dt::RowDataTable) = getfield(dt, :analytecol)
+analytecol(dt::AnalyteDataTable) = getfield(dt, :analytecol)
+"""
+    idcol(dt::AbstractDataTable) -> Symbol
+
+Unified interface for identity column. Equivalent to `samplecol(dt::SampleDataTable)` or `analytecol(dt::SampleDataTable)`.
+"""
+idcol(dt::SampleDataTable) = samplecol(dt)
+idcol(dt::AnalyteDataTable) = analytecol(dt)
 
 """
     findanalyte(dt::AbstractDataTable{A}, analyte::B) where {A, B <: A}
@@ -161,42 +168,42 @@ findsample(dt::AbstractDataTable{A, S}, sample::T) where {A, S, T <: S} = findfi
 findsample(dt::AbstractDataTable, sample::Symbol) = findfirst(==(sample), samplename(dt))
 
 """
-    getanalyte(dt::RowDataTable, id::Int)
-    getanalyte(dt::ColumnDataTable, id::Int)
-    getanalyte(dt::RowDataTable, analyte)
-    getanalyte(dt::ColumnDataTable, analyte)
+    getanalyte(dt::AnalyteDataTable, id::Int)
+    getanalyte(dt::SampleDataTable, id::Int)
+    getanalyte(dt::AnalyteDataTable, analyte)
+    getanalyte(dt::SampleDataTable, analyte)
 
-Get data belonging to `analyte` or `analyteobj(dt)[id]` as a `Vector`. For `RowDataTable`, a new vector is created; mutating this vector will not change the value in `dt`.
+Get data belonging to `analyte` or `analyteobj(dt)[id]` as a `Vector`. For `AnalyteDataTable`, a new vector is created; mutating this vector will not change the value in `dt`.
 """
-getanalyte(dt::RowDataTable{A, S, N}, id::Int) where {A, S, N} = [getproperty(dt, p)[id] for p in samplename(dt)]::Vector{N}
-function getanalyte(dt::RowDataTable{A, S, N}, analyte) where {A, S, N}
+getanalyte(dt::AnalyteDataTable{A, S, N}, id::Int) where {A, S, N} = [getproperty(dt, p)[id] for p in samplename(dt)]::Vector{N}
+function getanalyte(dt::AnalyteDataTable{A, S, N}, analyte) where {A, S, N}
     id = findanalyte(dt, analyte)
     isnothing(id) && throw(ArgumentError("Analyte $analyte is not in the table"))
     [getproperty(dt, p)[id] for p in samplename(dt)]::Vector{N}
 end
-getanalyte(dt::ColumnDataTable{A, S, N}, id::Int) where {A, S, N} = getproperty(dt, analytename(dt)[id])::AbstractVector{N}
-function getanalyte(dt::ColumnDataTable{A, S, N}, analyte) where {A, S, N}
+getanalyte(dt::SampleDataTable{A, S, N}, id::Int) where {A, S, N} = getproperty(dt, analytename(dt)[id])::AbstractVector{N}
+function getanalyte(dt::SampleDataTable{A, S, N}, analyte) where {A, S, N}
     id = findanalyte(dt, analyte)
     isnothing(id) && throw(ArgumentError("Analyte $analyte is not in the table"))
     getproperty(dt, Symbol(analyteobj(dt)[id]))::AbstractVector{N}
 end
 
 """
-    getsample(dt::RowDataTable, id::Int)
-    getsample(dt::ColumnDataTable, id::Int)
-    getsample(dt::RowDataTable, sample)
-    getsample(dt::ColumnDataTable, sample)
+    getsample(dt::AnalyteDataTable, id::Int)
+    getsample(dt::SampleDataTable, id::Int)
+    getsample(dt::AnalyteDataTable, sample)
+    getsample(dt::SampleDataTable, sample)
 
-Get data belonging to `sample` or `sampleobj(dt)[id]` as a `Vector`. For `ColumnDataTable`, a new vector is created; mutating this vector will not change the value in `dt`.
+Get data belonging to `sample` or `sampleobj(dt)[id]` as a `Vector`. For `SampleDataTable`, a new vector is created; mutating this vector will not change the value in `dt`.
 """
-getsample(dt::RowDataTable{A, S, N}, id::Int) where {A, S, N} = getproperty(dt, Symbol(sampleobj(dt)[id]))::AbstractVector{N}
-function getsample(dt::RowDataTable{A, S, N}, sample) where {A, S, N}
+getsample(dt::AnalyteDataTable{A, S, N}, id::Int) where {A, S, N} = getproperty(dt, Symbol(sampleobj(dt)[id]))::AbstractVector{N}
+function getsample(dt::AnalyteDataTable{A, S, N}, sample) where {A, S, N}
     id = findsample(dt, sample)
     isnothing(id) && throw(ArgumentError("Sample $sample is not in the table"))
     getproperty(dt, Symbol(sampleobj(dt)[id]))::AbstractVector{N}
 end
-getsample(dt::ColumnDataTable{A, S, N}, id::Int) where {A, S, N} = [getproperty(dt, p)[id] for p in analytename(dt)]::Vector{N}
-function getsample(dt::ColumnDataTable{A, S, N}, sample) where {A, S, N}
+getsample(dt::SampleDataTable{A, S, N}, id::Int) where {A, S, N} = [getproperty(dt, p)[id] for p in analytename(dt)]::Vector{N}
+function getsample(dt::SampleDataTable{A, S, N}, sample) where {A, S, N}
     id = findsample(dt, sample)
     isnothing(id) && throw(ArgumentError("Sample $sample is not in the table"))
     [getproperty(dt, p)[id] for p in analytename(dt)]::Vector{N}
@@ -207,6 +214,19 @@ function critical_point(cal::MultipleCalibration{A, N}) where {A, N}
     c, b, a = cal.zero ? (0, β...) : β
     -b / 2a
 end
+
+function parse_calibration_name(s; calid = r"Cal_(\d)_(\d*-*\d*)", levelid = 1, dilution = false, f2c = 1, parse_decimal = x -> replace(x, "-" => "."))
+    m = match(calid, string(s))
+    isnothing(m) && return m
+    m = collect(String, m)
+    level = parse(Int, m[levelid])
+    conc = parse(Float64, parse_decimal(m[only(setdiff(eachindex(m), levelid))]))
+    (level, dilution ? f2c ./ conc : f2c .* conc)
+end
+
+table_convert(::Type{D}, data::AbstractDataTable{A, S, N, T}) where {D, A, S, N, T <: D} = data
+table_convert(::Type{D}, data::A) where {D, A <: AbstractDataTable} = 
+    A(analyteobj(data), sampleobj(data), idcol(data), D(table(data)))
 
 """
     dynamic_range(cal::MultipleCalibration)

@@ -33,6 +33,7 @@ Calculate relative signal using `getproperty(at, signal)` as signal data, update
 set_relative_signal(at::AnalysisTable, batch::Batch; signal = batch.method.signal, rel_sig = :relative_signal) = 
     set_relative_signal(at, batch.method; signal, rel_sig)
 function set_relative_signal(at::AnalysisTable, method::AnalysisMethod; signal = method.signal, rel_sig = :relative_signal)
+    signal == rel_sig && return copy(at)
     result = relative_signal(method, at; signal)
     new = copy(at)
     set!(new, rel_sig, result)
@@ -48,6 +49,7 @@ Calculate relative signal using `getproperty(at, signal)` as signal data, update
 set_relative_signal!(at::AnalysisTable, batch::Batch; signal = batch.method.signal, rel_sig = :relative_signal) = 
     set_relative_signal!(at, batch.method; signal, rel_sig)
 function set_relative_signal!(at::AnalysisTable, method::AnalysisMethod; signal = method.signal, rel_sig = :relative_signal)
+    signal == rel_sig && return at
     result = relative_signal(method, at; signal)
     set!(at, rel_sig, result)
     at
@@ -59,7 +61,7 @@ end
 Calculate relative signal using `getproperty(batch.data, signal)` as signal data, update and insert the value into `batch.data` at index `rel_sig`, and return the updated `batch`.
 """
 function update_relative_signal!(batch::Batch{A, M, C, D}; signal = batch.method.signal, rel_sig = :relative_signal) where {A, M, C, D}
-    set_relative_signal!(batch.data, batch.method; signal, rel_sig)
+    signal == rel_sig || set_relative_signal!(batch.data, batch.method; signal, rel_sig)
     batch
 end
 function update_relative_signal!(batch::Batch{A, M, C, Nothing}; signal = batch.method.signal, rel_sig = :relative_signal) where {A, M, C}
@@ -197,6 +199,7 @@ end
 Quantify all analytes using `getproperty(at, signal)` as signal data., update or insert the values into a copy of `at` at index `rel_sig` for relative signal and `est_conc` for concentration, and return the copy.
 """
 function set_quantification(at::AnalysisTable, batch::Batch; signal = batch.method.signal, rel_sig = :relative_signal, est_conc = :estimated_concentration)
+    signal == rel_sig && return set_inv_predict(at, batch; rel_sig, est_conc)
     new = set_relative_signal(at, batch; signal, rel_sig)
     result = inv_predict(batch, new,; rel_sig)
     set!(new, est_conc, result)
@@ -209,7 +212,7 @@ end
 Quantify all analytes, update or insert the values into `at` at index `rel_sig` for relative signal and `est_conc` for concentration, and return `at`.
 """
 function set_quantification!(at::AnalysisTable, batch::Batch; signal = batch.method.signal, rel_sig = :relative_signal, est_conc = :estimated_concentration)
-    set_relative_signal!(at, batch; signal, rel_sig)
+    signal == rel_sig || set_relative_signal!(at, batch; signal, rel_sig)
     set_inv_predict!(at, batch; rel_sig, est_conc)
 end
 
@@ -219,7 +222,7 @@ end
 Quantify all analytes using `getproperty(at, signal)` as signal data, update or insert the values into `batch.data` at index `rel_sig` for relative signal and `est_conc` for concentration, and returns the updated `batch`.
 """
 function update_quantification!(batch::Batch{A, M, C, D}; signal = batch.method.signal, rel_sig = :relative_signal, est_conc = :estimated_concentration) where {A, M, C, D}
-    update_relative_signal!(batch; signal, rel_sig)
+    signal == rel_sig || update_relative_signal!(batch; signal, rel_sig)
     update_inv_predict!(batch; rel_sig, est_conc)
 end
 function update_quantification!(batch::Batch{A, M, C, Nothing}; signal = batch.method.signal, rel_sig = :relative_signal, est_conc = :estimated_concentration) where {A, M, C}

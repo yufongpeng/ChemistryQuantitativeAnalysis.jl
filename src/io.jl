@@ -48,36 +48,68 @@ end
 """
     read_datatable(file::String, T; analytetype = String, sampletype = String, numbertype = Float64, delim = '\\t', levelname = :level) -> AbstractDataTable{analytetype, sampletype, numbertype}
 
-Read ".dt" file into julia as `ColumnDataTable` or `RowDataTable`. `T` is the sink function for tabular data, 
+Read ".sdt" and ".adt" file into julia as `SampleDataTable` and `AnalyteDataTable`, respectively. `T` is the sink function for tabular data, 
 `analytetype` is a concrete type for `analyte`, `sampletype` is a concrete type for `sample`, `numbertype` is the type for numeric data, 
 and `delim` specifies delimiter for tabular data if `config[:delim]` does not exist. `level` is specifically used for AnalysisMethod, indicating the column representing calibration level; this column should be all integers. 
 
 See `ChemistryQuantitativeAnalysis.read` for the requirements of `analytetype` and `sampletype`.
 
-See README.md for the structure of ".dt" file.
+See README.md for the structure of ".sdt" and ".adt" file.
 """
 function read_datatable(file::String, T; analytetype = String, sampletype = String, numbertype = Float64, delim = '\t', levelname = nothing)
-    endswith(file, ".dt") || throw(ArgumentError("The file is not a valid table directory"))
+    endswith(file, ".sdt") ? read_sampledatatable(file, T; analytetype, sampletype, numbertype, delim, levelname) : 
+    endswith(file, ".adt") ? read_analytedatatable(file, T; analytetype, sampletype, numbertype, delim) : 
+    throw(ArgumentError("The file is not a valid table directory"))
+end
+
+
+"""
+    read_sampledatatable(file::String, T; analytetype = String, sampletype = String, numbertype = Float64, delim = '\\t', levelname = :level) -> SampleDataTable{analytetype, sampletype, numbertype}
+
+Read ".sdt" file into julia as `SampleDataTable`. `T` is the sink function for tabular data, 
+`analytetype` is a concrete type for `analyte`, `sampletype` is a concrete type for `sample`, `numbertype` is the type for numeric data, 
+and `delim` specifies delimiter for tabular data if `config[:delim]` does not exist. `level` is specifically used for AnalysisMethod, indicating the column representing calibration level; this column should be all integers. 
+
+See `ChemistryQuantitativeAnalysis.read` for the requirements of `analytetype` and `sampletype`.
+
+See README.md for the structure of ".sdt" file.
+"""
+function read_sampledatatable(file::String, T; analytetype = String, sampletype = String, numbertype = Float64, delim = '\t', levelname = nothing)
+    endswith(file, ".sdt") || throw(ArgumentError("The file is not a valid table directory"))
     config = read_config(joinpath(file, "config.txt"))
     delim = get(config, :delim, delim)
-    if config[:Type] == "R"
-        analyte_name = Symbol(config[:Analyte])
-        sample_name = String.(filter!(!isempty, vectorize(config[:Sample])))
-        tbl = CSV.read(joinpath(file, "table.txt"), T; delim, typemap = Dict(Int => numbertype), types = Dict(analyte_name => analytetype), validate = false)
-        for i in Symbol.(sample_name)
-            replace!(getproperty(tbl, i), missing => 0)
-        end
-        RowDataTable(getproperty(tbl, analyte_name), cqamap(sampletype, sample_name), analyte_name, tbl)
-    else
-        config[:Type] == "C" || throw(ArgumentError("Other datatables are not implemented yet."))
-        sample_name = Symbol(first(split(config[:Sample], "\t")))
-        tbl = CSV.read(joinpath(file, "table.txt"), T; delim, typemap = Dict(Int => numbertype), types = Dict(sample_name => sampletype, levelname => Int), validate = false)
-        analyte_name = String.(filter!(!isempty, vectorize(config[:Analyte])))
-        for i in Symbol.(analyte_name)
-            replace!(getproperty(tbl, i), missing => 0)
-        end
-        ColumnDataTable(cqamap(analytetype, analyte_name), getproperty(tbl, sample_name), sample_name, tbl)
+    sample_name = Symbol(first(split(config[:Sample], "\t")))
+    tbl = CSV.read(joinpath(file, "table.txt"), T; delim, typemap = Dict(Int => numbertype), types = Dict(sample_name => sampletype, levelname => Int), validate = false)
+    analyte_name = String.(filter!(!isempty, vectorize(config[:Analyte])))
+    for i in Symbol.(analyte_name)
+        replace!(getproperty(tbl, i), missing => 0)
     end
+    SampleDataTable(cqamap(analytetype, analyte_name), getproperty(tbl, sample_name), sample_name, tbl)
+end
+
+"""
+    read_analytedatatable(file::String, T; analytetype = String, sampletype = String, numbertype = Float64, delim = '\\t') -> AnalyteDataTable{analytetype, sampletype, numbertype}
+
+Read ".adt" file into julia as `AnalyteDataTable`. `T` is the sink function for tabular data, 
+`analytetype` is a concrete type for `analyte`, `sampletype` is a concrete type for `sample`, `numbertype` is the type for numeric data, 
+and `delim` specifies delimiter for tabular data if `config[:delim]` does not exist.
+
+See `ChemistryQuantitativeAnalysis.read` for the requirements of `analytetype` and `sampletype`.
+
+See README.md for the structure of ".adt" file.
+"""
+function read_analytedatatable(file::String, T; analytetype = String, sampletype = String, numbertype = Float64, delim = '\t')
+    endswith(file, ".adt") || throw(ArgumentError("The file is not a valid table directory"))
+    config = read_config(joinpath(file, "config.txt"))
+    delim = get(config, :delim, delim)
+    analyte_name = Symbol(config[:Analyte])
+    sample_name = String.(filter!(!isempty, vectorize(config[:Sample])))
+    tbl = CSV.read(joinpath(file, "table.txt"), T; delim, typemap = Dict(Int => numbertype), types = Dict(analyte_name => analytetype), validate = false)
+    for i in Symbol.(sample_name)
+        replace!(getproperty(tbl, i), missing => 0)
+    end
+    AnalyteDataTable(getproperty(tbl, analyte_name), cqamap(sampletype, sample_name), analyte_name, tbl)
+
 end
 
 """
@@ -93,34 +125,34 @@ See README.md for the structure of ".at" file.
 """
 function read_analysistable(file::String, T; analytetype = String, sampletype = String, numbertype = Float64, delim = '\t')
     endswith(file, ".at") || throw(ArgumentError("The file is not a valid table directory"))
-    files = filter!(f -> endswith(f, ".dt"), readdir(file))
+    files = filter!(f -> endswith(f, r".[a,s]dt"), readdir(file))
     tables = map(files) do f
         read_datatable(joinpath(file, f), T; analytetype, sampletype, numbertype, delim)
     end
-    AnalysisTable(Symbol.(replace.(files, Ref(".dt" => ""), Ref(r"^\d*_" => ""))), tables)
+    AnalysisTable(Symbol.(replace.(files, Ref(r".[a,s]dt" => ""), Ref(r"^\d*_" => ""))), tables)
 end
 """
     read_method(file::String, T; analytetype = String, sampletype = String, numbertype = Float64, delim = '\\t') -> AnalysisMethod{analytetype, <: Table}
 
-Read ".mt" file into julia as `AnalysisMethod`. `T` is the sink function for tabular data, 
+Read ".am" file into julia as `AnalysisMethod`. `T` is the sink function for tabular data, 
 `analytetype` is a concrete type for `analyte`, `sampletype` is a concrete type for `sample`, `numbertype` is the type for numeric data, 
 and `delim` specifies delimiter for tabular data if `config[:delim]` does not exist. 
     
 See `ChemistryQuantitativeAnalysis.read` for the requirements of `analytetype` and `sampletype`.
 
-See README.md for the structure of ".mt" file.
+See README.md for the structure of ".am" file.
 """
 function read_method(file::String, T; analytetype = String, sampletype = String, numbertype = Float64, delim = '\t')
-    endswith(file, ".mt") || throw(ArgumentError("The file is not a valid table directory"))
+    endswith(file, ".am") || throw(ArgumentError("The file is not a valid method directory"))
     config = read_config(joinpath(file, "config.txt"))
     delim = get(config, :delim, delim)
     signal = Symbol(get(config, :signal, :area))
     analytetable = CSV.read(joinpath(file, "analytetable.txt"), Table)
     analyte = analytetype.(analytetable.analyte)
     isd = replace(analytetable.isd, missing => 0)
-    conctable = read_datatable(joinpath(file, "true_concentration.dt"), T; analytetype, sampletype = Int, numbertype, delim)
+    conctable = read_datatable(joinpath(file, in("true_concentration.sdt", readdir(file)) ? "true_concentration.sdt" : "true_concentration.adt"), T; analytetype, sampletype = Int, numbertype, delim)
     if length(sampleobj(conctable)) > 1
-        signaltable = read_datatable(joinpath(file, "$signal.dt"), T; analytetype, sampletype, numbertype, delim, levelname = get(config, :levelname, nothing))
+        signaltable = read_datatable(joinpath(file, in("$signal.sdt", readdir(file)) ? "$signal.sdt" : "$signal.adt"), T; analytetype, sampletype, numbertype, delim, levelname = get(config, :levelname, nothing))
         if haskey(config, :levelname) && in(Symbol(config[:levelname]), propertynames(signaltable))
             pointlevel = getproperty(signaltable, Symbol(config[:levelname]))
         elseif haskey(config, :pointlevel)
@@ -157,7 +189,7 @@ function read_batch(file::String, T; analytetype = String, sampletype = String, 
     endswith(file, ".batch") || throw(ArgumentError("The file is not a valid batch directory"))
     config = read_config(joinpath(file, "config.txt"))
     delim = get(config, :delim, delim)   
-    method = read_method(joinpath(file, "method.mt"), T; analytetype, sampletype, numbertype, delim)
+    method = read_method(joinpath(file, "method.am"), T; analytetype, sampletype, numbertype, delim)
     if !in("calibration", readdir(file)) || isempty(readdir(joinpath(file, "calibration")))
         if isnothing(method.signaltable)
             cal = [SingleCalibration((analyte, ), first(getanalyte(method.conctable, analyte))) for analyte in analyteobj(method.conctable)]
@@ -232,21 +264,21 @@ function shorten_type_repr(T)
     length(t) > 50 ? replace(t, r"\{.*\}" => "{…}") : t
 end
 
-function print_summary(io::IO, tbl::ColumnDataTable{A, S, N, T}) where {A, S, N, T}
-    print(io, "ColumnDataTable{$A, $S, $N, $(shorten_type_repr(T))} with ", length(analyteobj(tbl)), " analytes and ", length(sampleobj(tbl)), " samples")
+function print_summary(io::IO, tbl::SampleDataTable{A, S, N, T}) where {A, S, N, T}
+    print(io, "SampleDataTable{$A, $S, $N, $(shorten_type_repr(T))} with ", length(analyteobj(tbl)), " analytes and ", length(sampleobj(tbl)), " samples")
 end
 
-function show(io::IO, ::MIME"text/plain", tbl::ColumnDataTable)
+function show(io::IO, ::MIME"text/plain", tbl::SampleDataTable)
     print_summary(io, tbl)
     println(io, ":")
     show(io, MIME"text/plain"(), table(tbl))
 end
 
-function print_summary(io::IO, tbl::RowDataTable{A, S, N, T}) where {A, S, N, T}
-    print(io, "RowDataTable{$A, $S, $N, $(shorten_type_repr(T))} with ", length(analyteobj(tbl)), " analytes and ", length(sampleobj(tbl)), " samples")
+function print_summary(io::IO, tbl::AnalyteDataTable{A, S, N, T}) where {A, S, N, T}
+    print(io, "AnalyteDataTable{$A, $S, $N, $(shorten_type_repr(T))} with ", length(analyteobj(tbl)), " analytes and ", length(sampleobj(tbl)), " samples")
 end
 
-function show(io::IO, ::MIME"text/plain", tbl::RowDataTable)
+function show(io::IO, ::MIME"text/plain", tbl::AnalyteDataTable)
     print_summary(io, tbl)
     println(io, ":")
     show(io, MIME"text/plain"(), table(tbl))
@@ -294,18 +326,21 @@ function show(io::IO, ::MIME"text/plain", tbl::AnalysisMethod)
     show(io, MIME"text/plain"(), isnothing(tbl.signaltable) ? nothing : table(tbl.signaltable))
 end
 
-function write(file::String, tbl::RowDataTable; delim = '\t')
+write_datatable(file::String, tbl::AnalyteDataTable; delim = '\t') = write(file * ".adt", tbl; delim)
+write_datatable(file::String, tbl::SampleDataTable; delim = '\t') = write(file * ".sdt", tbl; delim)
+
+function write(file::String, tbl::AnalyteDataTable; delim = '\t')
     mkpath(file)
     open(joinpath(file, "config.txt"), "w+") do config
-        Base.write(config, "[Type]\nR\n\n[delim]\n", escape_string(string(delim)), "\n\n[Analyte]\n", analytecol(tbl), "\n\n[Sample]\n", join(samplename(tbl), "\n"))
+        Base.write(config, "[delim]\n", escape_string(string(delim)), "\n\n[Analyte]\n", analytecol(tbl), "\n\n[Sample]\n", join(samplename(tbl), "\n"))
     end
     CSV.write(joinpath(file, "table.txt"), table(tbl); delim)
 end
 
-function write(file::String, tbl::ColumnDataTable; delim = '\t')
+function write(file::String, tbl::SampleDataTable; delim = '\t')
     mkpath(file)
     open(joinpath(file, "config.txt"), "w+") do config
-        Base.write(config, "[Type]\nC\n\n[delim]\n", escape_string(string(delim)), "\n\n[Analyte]\n", join(analytename(tbl), "\n"), "\n\n[Sample]\n", samplecol(tbl))
+        Base.write(config, "[delim]\n", escape_string(string(delim)), "\n\n[Analyte]\n", join(analytename(tbl), "\n"), "\n\n[Sample]\n", samplecol(tbl))
     end
     CSV.write(joinpath(file, "table.txt"), table(tbl); delim)
 end
@@ -314,16 +349,16 @@ function write(file::String, tbl::AnalysisTable; delim = '\t')
     mkpath(file)
     rm.(readdir(file; join = true); recursive = true)
     for (i, (k, v)) in enumerate(pairs(tbl))
-        write(joinpath(file, "$(i - 1)_$k.dt"), v; delim)
+        write_datatable(joinpath(file, "$(i - 1)_$k"), v; delim)
     end
 end
 
 function write(file::String, tbl::AnalysisMethod; delim = '\t')
     mkpath(file)
-    write(joinpath(file, "true_concentration.dt"), tbl.conctable; delim)
-    isnothing(tbl.signaltable) || write(joinpath(file, "$(tbl.signal).dt"), tbl.signaltable; delim)
+    write_datatable(joinpath(file, "true_concentration"), tbl.conctable; delim)
+    isnothing(tbl.signaltable) || write_datatable(joinpath(file, "$(tbl.signal)"), tbl.signaltable; delim)
     id = nothing
-    if isa(tbl.signaltable, ColumnDataTable)
+    if isa(tbl.signaltable, SampleDataTable)
         id = findfirst(x -> getproperty(tbl.signaltable, x) == tbl.pointlevel, propertynames(tbl.signaltable))
     end
     open(joinpath(file, "config.txt"), "w+") do config
@@ -352,7 +387,7 @@ end
 """
     ChemistryQuantitativeAnalysis.write(file::String, object; delim = "\\t")
 
-Write `object` into ".scal" for `SingleCalibration`, ".mcal" for `MultipleCalibration`, ".at" for `AnalysisTable`, ".mt" for `AnalysisMethod`, and ".batch" for `Batch`. 
+Write `object` into ".scal" for `SingleCalibration`, ".mcal" for `MultipleCalibration`, ".sdt" for `SampleDataTable`, ".adt" for `AnalyteDataTable`, ".at" for `AnalysisTable`, ".am" for `AnalysisMethod`, and ".batch" for `Batch`. 
 
 `delim` specifies delimiter for tabular data if `config[:delim]` does not exist.
 
@@ -363,7 +398,7 @@ function write(file::String, batch::Batch; delim = '\t')
     open(joinpath(file, "config.txt"), "w+") do config
         Base.write(config, "[delim]\n", escape_string(string(delim)))
     end
-    write(joinpath(file, "method.mt"), batch.method; delim)
+    write(joinpath(file, "method.am"), batch.method; delim)
     mkpath(joinpath(file, "calibration"))
     ft = isnothing(batch.method.signaltable) ? "scal" : "mcal"
     for (i, c) in enumerate(batch.calibration)
@@ -373,37 +408,40 @@ function write(file::String, batch::Batch; delim = '\t')
 end
 
 """
-    ChemistryQuantitativeAnalysis.read(file::String, T; analytetype = String, sampletype = String, numbertype = Float64, delim = '\\t') -> Batch{analytetype}
+    ChemistryQuantitativeAnalysis.read(file::String, T; analytetype = String, sampletype = String, numbertype = Float64, delim = '\\t')
 
-Read ".scal" as `SingleCalibration`, ".mcal" as `MultipleCalibration`, ".at" as `AnalysisTable`, ".mt" as `AnalysisMethod`, and ".batch" as `Batch`. 
+Read ".scal" as `SingleCalibration`, ".mcal" as `MultipleCalibration`, ".sdt" as `SampleDataTable`, ".adt" as `AnalyteDataTable`, ".at" as `AnalysisTable`, ".am" as `AnalysisMethod`, and ".batch" as `Batch`. 
 
 `T` is the sink function for tabular data, 
 `analytetype` is a concrete type for `analyte`, `sampletype` is a concrete type for `sample`, `numbertype` is the type for numeric data, 
 and `delim` specifies delimiter for tabular data if `config[:delim]` does not exist.
 
 For `analytetype` and `sampletype`, `string(cqaconvert(analytetype, x))` and `string(cqaconvert(sampletype, x))` should equal `x` if `x` is a valid string. Additionally, `tryparse` have to be extended for `CSV` parsing:
-* `tryparse(::Type{analytetype}, x::AbstractString)` is neccessary for `RowDataTable`.
-* `tryparse(::Type{sampletype}, x::AbstractString)` is neccessary for `ColumnDataTable`.
+* `tryparse(::Type{analytetype}, x::AbstractString)` is neccessary for `AnalyteDataTable`.
+* `tryparse(::Type{sampletype}, x::AbstractString)` is neccessary for `SampleDataTable`.
 
 See README.md for the structure of ".batch" file.
 """
-function read(file::String, T; analytetype = String, sampletype = String, numbertype = Float64, delim = '\t')
+function read(file::String, T; analytetype = String, sampletype = String, numbertype = Float64, delim = '\t', kwargs...)
     if endswith(file, ".batch")
-        read_batch(file, T; analytetype, sampletype, numbertype, delim)
+        read_batch(file, T; analytetype, sampletype, numbertype, delim, kwargs...)
     elseif endswith(file, ".scal") || endswith(file, ".mcal")
-        read_calibration(file; analytetype, numbertype, delim)
+        read_calibration(file; analytetype, numbertype, delim, kwargs...)
     elseif endswith(file, ".at")
-        read_analysistable(file, T; analytetype, sampletype, numbertype, delim)
-    elseif endswith(file, ".mt")
-        read_method(file, T; analytetype, sampletype, numbertype, delim)
-    elseif endswith(file, ".dt")
-        read_datatable(file, T; analytetype, sampletype, numbertype, delim)
+        read_analysistable(file, T; analytetype, sampletype, numbertype, delim, kwargs...)
+    elseif endswith(file, ".am")
+        read_method(file, T; analytetype, sampletype, numbertype, delim, kwargs...)
+    elseif endswith(file, ".sdt") || endswith(file, ".adt")
+        read_datatable(file, T; analytetype, sampletype, numbertype, delim, kwargs...)
     end
 end
 
 """
     mkbatch(file::String; 
             delim = '\t',
+            data_table = SampleDataTable,
+            signal_table = SampleDataTable,
+            conc_table = SampleDataTable,
             data_config = Dict{Symbol, Any}(), 
             signal_config = Dict{Symbol, Any}(), 
             conc_config = Dict{Symbol, Any}(), 
@@ -412,8 +450,8 @@ end
 
 Create a template directory of a batch. See "README.md" for available keys and values for config.
 
-The default table wrapper is `ColumnDataTable`, which default sample column name is "Sample", and default sample column name for levels is "Level".
-The default analyte column name for `RowDataTable` is "Analyte".
+The default table wrapper is `SampleDataTable`, whose default sample column name is "Sample", and default sample column name for levels is "Level".
+The default analyte column name for `AnalyteDataTable` is "Analyte".
 
 The priorities of default analytes are `conc_config[:Analyte]`, `signal_config[:Analyte]`, `data_config[:Analyte]`, and lastly `["Analyte1", "Analyte2"]`.
 The default samples for data are `["S1", "S2"]`. The default calibration points are `["C1", "C2", "C3", "C4", "C5"]`. The default calibration levels are `[1, 2, 3, 4, 5]`.
@@ -421,6 +459,9 @@ The default samples for data are `["S1", "S2"]`. The default calibration points 
 """
 function mkbatch(file::String; 
                 delim = '\t',
+                data_table = SampleDataTable,
+                signal_table = SampleDataTable,
+                conc_table = SampleDataTable,
                 data_config = Dict{Symbol, Any}(), 
                 signal_config = Dict{Symbol, Any}(), 
                 conc_config = Dict{Symbol, Any}(), 
@@ -432,14 +473,14 @@ function mkbatch(file::String;
     default_point = ["C1", "C2", "C3", "C4", "C5"]
     default_level = [1, 2, 3, 4, 5]
     default_config_c = [
-        Dict(:Type => "C", :delim => delim, :Analyte => default_analyte, :Sample => "Sample"), 
-        Dict(:Type => "C", :delim => delim, :Analyte => default_analyte, :Sample => "Sample"), 
-        Dict(:Type => "C", :delim => delim, :Analyte => default_analyte, :Sample => "Level")
+        Dict(:delim => delim, :Analyte => default_analyte, :Sample => "Sample"), 
+        Dict(:delim => delim, :Analyte => default_analyte, :Sample => "Sample"), 
+        Dict(:delim => delim, :Analyte => default_analyte, :Sample => "Level")
     ]
     default_config_r = [
-        Dict(:Type => "R", :delim => delim, :Analyte => "Analyte", :Sample => default_sample), 
-        Dict(:Type => "R", :delim => delim, :Analyte => "Analyte", :Sample => default_point), 
-        Dict(:Type => "R", :delim => delim, :Analyte => "Analyte", :Sample => default_level)
+        Dict(:delim => delim, :Analyte => "Analyte", :Sample => default_sample), 
+        Dict(:delim => delim, :Analyte => "Analyte", :Sample => default_point), 
+        Dict(:delim => delim, :Analyte => "Analyte", :Sample => default_level)
     ]
     table = Vector{Table}(undef, 3)
     confs = Vector{String}(undef, 3)
@@ -447,12 +488,12 @@ function mkbatch(file::String;
     signal_config = convert(Dict{Symbol, Any}, signal_config)
     conc_config = convert(Dict{Symbol, Any}, conc_config)
     method_config = convert(Dict{Symbol, Any}, method_config)
-    for (i, (config, default_c, default_r)) in enumerate(zip([data_config, signal_config, conc_config], default_config_c, default_config_r))
-        default = get(config, :Type, "C") == "C" ? default_c : default_r
+    for (i, (tt, config, default_c, default_r)) in enumerate(zip([data_table, signal_table, conc_table], [data_config, signal_config, conc_config], default_config_c, default_config_r))
+        default = tt == SampleDataTable ? default_c : default_r
         for (k, v) in default
             get!(config, k, v)
         end
-        if config[:Type] == "C"
+        if tt == SampleDataTable
             #table[i] = string(config[:Sample], config[:delim], join(config[:Analyte], config[:delim]))
             config[:Analyte_merge] = join(config[:Analyte], "\n")
             config[:Sample_merge] = config[:Sample]
@@ -461,32 +502,32 @@ function mkbatch(file::String;
             config[:Sample_merge] = join(config[:Sample], "\n")
             config[:Analyte_merge] = config[:Analyte]
         end
-        confs[i] = string("[Type]\n", config[:Type], "\n\n[delim]\n", escape_string(string(config[:delim])), 
-                                    "\n\n[Analyte]\n", config[:Analyte_merge], 
-                                    "\n\n[Sample]\n", config[:Sample_merge])
+        confs[i] = string("[delim]\n", escape_string(string(config[:delim])), 
+                            "\n\n[Analyte]\n", config[:Analyte_merge], 
+                            "\n\n[Sample]\n", config[:Sample_merge])
     end
-    if data_config[:Type] == "C"
+    if data_table == SampleDataTable
         #table[1] = string(table[1], "\n", join((string(x, data_config[:delim], join(repeat(["1.0"], length(data_config[:Analyte])), data_config[:delim])) for x in default_sample), "\n"))
         table[1] = Table(; Symbol(data_config[:Sample]) => default_sample, (Symbol.(data_config[:Analyte]) .=> Ref(repeat([1.0], length(default_sample))))...)
     else
         table[1] = Table(; Symbol(data_config[:Analyte]) => default_analyte, (Symbol.(data_config[:Sample]) .=> Ref(repeat([1.0], length(default_analyte))))...)
     end
-    if signal_config[:Type] == "R" && conc_config[:Type] == "R"
+    if signal_table == AnalyteDataTable && conc_table == AnalyteDataTable
         default_level = parse.(Int, string.(conc_config[:Sample]))
         default_point = signal_config[:Sample]
         pointlevel = [i > lastindex(default_level) ? default_level[end] : default_level[i] for i in eachindex(default_point)]
-    elseif signal_config[:Type] == "R"
+    elseif signal_table == AnalyteDataTable
         default_point = signal_config[:Sample]
         default_level = collect(eachindex(default_point))
         pointlevel = default_level
-    elseif conc_config[:Type] == "R"
+    elseif conc_table == AnalyteDataTable
         default_level = parse.(Int, string.(conc_config[:Sample]))
         default_point = map(default_level) do s
             string("C", s)            
         end
         pointlevel = default_level
     end
-    default_method = if signal_config[:Type] == "C"
+    default_method = if signal_table == SampleDataTable
         Dict(:signal => "area", :delim => delim, :levelname => "Level")
     else
         Dict(:signal => "area", :delim => delim, :pointlevel => pointlevel)
@@ -500,7 +541,7 @@ function mkbatch(file::String;
             method_config[:pointlevel] = pointlevel
         end
     end
-    if signal_config[:Type] == "C"
+    if signal_table == SampleDataTable
         confms = string("[signal]\n", method_config[:signal], "\n\n[delim]\n", escape_string(string(method_config[:delim])), 
                         "\n\n[levelname]\n", method_config[:levelname])
         table[2] = Table(; Symbol(signal_config[:Sample]) => default_point, Symbol(method_config[:levelname]) => default_level, (Symbol.(signal_config[:Analyte]) .=> Ref(repeat([1.0], length(default_point))))...)
@@ -509,23 +550,25 @@ function mkbatch(file::String;
                         "\n\n[pointlevel]\n", join(method_config[:pointlevel], "\n"))
         table[2] = Table(; Symbol(signal_config[:Analyte]) => default_analyte, (Symbol.(signal_config[:Sample]) .=> Ref(repeat([1.0], length(default_analyte))))...)
     end
-    if conc_config[:Type] == "C"
+    if conc_table == SampleDataTable
         table[3] = Table(; Symbol(conc_config[:Sample]) => default_level, (Symbol.(conc_config[:Analyte]) .=> Ref(repeat([1.0], length(default_level))))...)
     else
         table[3] = Table(; Symbol(conc_config[:Analyte]) => default_analyte, (Symbol.(conc_config[:Sample]) .=> Ref(repeat([1.0], length(default_analyte))))...)
     end
     signal = method_config[:signal]
-    data_name = string(0, "_", signal, ".dt")
+    data_name = string(0, "_", signal, data_table == SampleDataTable ? ".sdt" : ".adt")
     mkpath(joinpath(file, "data.at", data_name))
     write(joinpath(file, "data.at", data_name, "config.txt"), confs[1])
     CSV.write(joinpath(file, "data.at", data_name, "table.txt"), table[1]; delim = data_config[:delim])
-    mkpath(joinpath(file, "method.mt", "true_concentration.dt"))
-    mkpath(joinpath(file, "method.mt", "$signal.dt"))
-    write(joinpath(file, "method.mt", "$signal.dt", "config.txt"), confs[2])
-    CSV.write(joinpath(file, "method.mt", "$signal.dt", "table.txt"), table[2]; delim = signal_config[:delim])
-    write(joinpath(file, "method.mt", "true_concentration.dt", "config.txt"), confs[3])
-    CSV.write(joinpath(file, "method.mt", "true_concentration.dt", "table.txt"), table[3]; delim = conc_config[:delim])
-    CSV.write(joinpath(file, "method.mt", "analytetable.txt"), Table(; analyte = default_analyte, isd = repeat([0], length(default_analyte)), calibration = collect(eachindex(default_analyte))); delim = method_config[:delim])
-    write(joinpath(file, "method.mt", "config.txt"), confms)
+    cp = joinpath(file, "method.am", conc_table == SampleDataTable ? "true_concentration.sdt" : "true_concentration.adt")
+    mkpath(cp)
+    sp = joinpath(file, "method.am", signal_table == SampleDataTable ? "$signal.sdt" : "$signal.adt")
+    mkpath(sp)
+    write(joinpath(sp, "config.txt"), confs[2])
+    CSV.write(joinpath(sp, "table.txt"), table[2]; delim = signal_config[:delim])
+    write(joinpath(cp, "config.txt"), confs[3])
+    CSV.write(joinpath(cp, "table.txt"), table[3]; delim = conc_config[:delim])
+    CSV.write(joinpath(file, "method.am", "analytetable.txt"), Table(; analyte = default_analyte, isd = repeat([0], length(default_analyte)), calibration = collect(eachindex(default_analyte))); delim = method_config[:delim])
+    write(joinpath(file, "method.am", "config.txt"), confms)
     write(joinpath(file, "config.txt"), string("[delim]\n", escape_string(string(delim))))
 end

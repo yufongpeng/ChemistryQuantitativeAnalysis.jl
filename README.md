@@ -5,11 +5,11 @@
 
 `ChemistryQuantitativeAnalysis.jl` is a package for quantitative analysis of chemicals based on tabular data. 
 
-For an interactive frontend, see [`InteractiveQuantification.jl`](https://github.com/yufongpeng/InteractiveQuantification.jl).
+For command line interfaces, see [`juliaquant`](https://github.com/yufongpeng/juliaquant).
 
 ## Tabular data wrapper
-This package provides two wrappers for data, `ColumnDataTable{A, S, N, T}` and `RowDataTable{A, S, N, T}` which are subtypes of `AbstractDataTable{A, S, N, T}`. `ColumnDataTable` indicates that part of columns represent analytes, and all rows reprsent samples. `RowDataTable` indicates that part of columns represent samples, and all rows represent analytes. Both types behave like the underlying `table` object. 
-|Fields|`ColumnDataTable{A, S, N, T}`|`RowDataTable{A, S, N, T}`|
+This package provides two wrappers for data, `SampleDataTable{A, S, N, T}` and `AnalyteDataTable{A, S, N, T}` which are subtypes of `AbstractDataTable{A, S, N, T}`. `SampleDataTable` indicates that part of columns represent analytes, and all rows reprsent samples. `AnalyteDataTable` indicates that part of columns represent samples, and all rows represent analytes. Both types behave like the underlying `table` object. 
+|Fields|`SampleDataTable{A, S, N, T}`|`AnalyteDataTable{A, S, N, T}`|
 |----------|---------------------|------------------|
 |`analytecol`|-|`Symbol`, column name whose elements are analytes.|
 |`samplecol`|`Symbol`, column name whose elements are samples.|-|
@@ -17,17 +17,17 @@ This package provides two wrappers for data, `ColumnDataTable{A, S, N, T}` and `
 |`sample`|`Vector{S}`, samples in user-defined types.|same|
 |`table`|Tabular data of type `T`|same|
 
-`ColumnDataTable{A, S, N, T}` can be constructed in the following ways:
-1. `ColumnDataTable(analytetype::TypeOrFn, samplecol::Symbol, table; analytename = setdiff(propertynames(table), [samplecol]))`
-2. `ColumnDataTable(table, analytetype::TypeOrFn, samplecol::Symbol; analytename = setdiff(propertynames(table), [samplecol]))`
-3. `ColumnDataTable(samplecol::Symbol, table; analytename = setdiff(propertynames(table), [samplecol]))`
-4. `ColumnDataTable(table, samplecol::Symbol; analytename = setdiff(propertynames(table), [samplecol]))`
+`SampleDataTable{A, S, N, T}` can be constructed in the following ways:
+1. `SampleDataTable(analytetype::TypeOrFn, samplecol::Symbol, table; analytename = setdiff(propertynames(table), [samplecol]))`
+2. `SampleDataTable(table, analytetype::TypeOrFn, samplecol::Symbol; analytename = setdiff(propertynames(table), [samplecol]))`
+3. `SampleDataTable(samplecol::Symbol, table; analytename = setdiff(propertynames(table), [samplecol]))`
+4. `SampleDataTable(table, samplecol::Symbol; analytename = setdiff(propertynames(table), [samplecol]))`
 
-`RowDataTable{A, S, N, T}` can be constructed in the following ways:
-1. `RowDataTable(analytecol::Symbol, sampletype::TypeOrFn, table; samplename = setdiff(propertynames(table), [analytecol]))`
-2. `RowDataTable(table, analytecol::Symbol, sampletype::TypeOrFn; samplename = setdiff(propertynames(table), [analytecol]))`
-3. `RowDataTable(analytecol::Symbol, table; samplename = setdiff(propertynames(table), [analytecol]))`
-4. `RowDataTable(table, analytecol::Symbol; samplename = setdiff(propertynames(table), [analytecol]))`
+`AnalyteDataTable{A, S, N, T}` can be constructed in the following ways:
+1. `AnalyteDataTable(analytecol::Symbol, sampletype::TypeOrFn, table; samplename = setdiff(propertynames(table), [analytecol]))`
+2. `AnalyteDataTable(table, analytecol::Symbol, sampletype::TypeOrFn; samplename = setdiff(propertynames(table), [analytecol]))`
+3. `AnalyteDataTable(analytecol::Symbol, table; samplename = setdiff(propertynames(table), [analytecol]))`
+4. `AnalyteDataTable(table, analytecol::Symbol; samplename = setdiff(propertynames(table), [analytecol]))`
 
 `analaytename` and `samplename` will be converted to a vector of string, and then converted to the desired type using `cqaconvert(analytetype, analaytename)` and `cqaconvert(sampletype, samplename)`.
 
@@ -48,11 +48,11 @@ This package provides two wrappers for data, `ColumnDataTable{A, S, N, T}` and `
 
 Constructors of `AnalysisMethod`:
 1. `AnalysisMethod(analytetable::Table, signal::Symbol, pointlevel::Vector{Int}, conctable::AbstractDataTable{A, Int}, signaltable::Union{AbstractDataTable, Nothing})`
-2. `AnalysisMethod(conctable::AbstractDataTable{A, Int}, signaltable::ColumnDataTable, signal::Symbol, levelname::Symbol; kwargs...)`
+2. `AnalysisMethod(conctable::AbstractDataTable{A, Int}, signaltable::SampleDataTable, signal::Symbol, levelname::Symbol; kwargs...)`
 3. `AnalysisMethod(conctable::AbstractDataTable{A, Int}, signaltable::Nothing, signal::Symbol; kwargs...)`
 4. `AnalysisMethod(conctable::AbstractDataTable, signaltable::Union{AbstractDataTable, Nothing}, signal::Symbol, pointlevel::AbstractVector{Int}; kwargs...)`
 
-`kwargs` will be columns in `analytetable`. `levelname` is the column name for `pointlevel` if `signaltable` is a `ColumnDataTable`.
+`kwargs` will be columns in `analytetable`. `levelname` is the column name for `pointlevel` if `signaltable` is a `SampleDataTable`.
 
 ## AnalysisTable
 `AnalysisTable{A, S, T}` is basically a `Dictionary{Symbol, <: AbstractDataTable{T}}` which data can be extracted using proeperty syntax. For example, `at[:area] === at.area`.
@@ -122,19 +122,25 @@ Constructors for `Batch{A, M, C, D}`:
 1. `Batch(method::M, calibration::C, data::D = nothing)`
 2. `Batch(method::AnalysisMethod, data = nothing; type = true, zero = false, weight = 0)`
 3. `Batch(batch::Batch, at::AnalysisTable)`
+4. `Batch(dt::AbstractDataTable; signal::Symbol = :area, calid = r"Cal_(\d)_(\d*-*\d*)", order = "LR", f2c = 1, parse_decimal = x -> replace(x, "-" => "."))`
+
+The last method allows user to use encoded sample names to generate `AnalysisMethod`. Note that the returned batch does not have any calibration curves, which allows user to modify `analytetable`, and then apply `init_calibration!` to start calibrate.
 
 To calculate relative signal, concentration or accuracy and save the result, call `update_relative_signal!`, `update_inv_predict!` (in combination, `update_quantification!`) and `update_accuracy!`, respectively.
+
+## User Interface
+Use the function `ui_init` which activates an environment for ui and run `interactive_calibrate!` on the batch.
 
 ## Reading and writting data to disk
 To use data on disk, user should create a directory in the following structure:
 ```
 batch_name.batch
 ├──config.txt
-├──method.mt
-│  ├──true_concentration.dt
+├──method.am
+│  ├──true_concentration.sdt
 │  │  ├──config.txt
 │  │  └──table.txt
-│  ├──area.dt
+│  ├──area.sdt
 │  │  ├──config.txt
 │  │  └──table.txt
 │  ├──analytetable.txt
@@ -143,9 +149,9 @@ batch_name.batch
 │  ├──1.mcal
 │  └──2.mcal
 └──data.at
-   ├──0_quantity1.dt
-   ├──1_quantity2.dt 
-   └──2_quantity3.dt
+   ├──0_quantity1.sdt
+   ├──1_quantity2.sdt 
+   └──2_quantity3.sdt
 ```
 There is a function `mkbatch` which create a valid batch directory programatically.
 
@@ -164,14 +170,13 @@ The header `delim` determines the default delimiter for `table.txt` in this dire
 
 `data.at` and `calibration` is not necessary for initializing a batch. The former can be added to the batch directly in julia, and the latter will be generated after calibration.
 
-### *.dt
-All `*.dt` files will be read as `ColumnDataTable` or `RowDataTable`. They contain `config.txt` and `table.txt`.
+All `*.sdt` files can be replaced with `*.adt` files.
 
-Config file for `ColumnDataTable` needs the following headers.
+### *.sdt
+All `*.sdt` files will be read as `SampleDataTable`.
+
+Config file needs the following headers.
 ```
-[Type]
-C
-
 [delim]
 \t
 
@@ -183,11 +188,12 @@ analyte_col_name_1
 analyte_col_name_2
 ⋮
 ``` 
-Config file for `RowDataTable` needs the following headers.
-```
-[Type]
-R
 
+### *.adt
+All `*.adt` files will be read as `AnalyteDataTable`.
+
+Config file needs the following headers.
+```
 [delim]
 \t
 
@@ -200,11 +206,11 @@ sample_col_name_2
 ⋮
 ``` 
 
-### *.mt
-It must contain two `*dt` files. `true_concentration.dt` contains true concentration for each analyte and level. The sample names must be integers.
-Another `*.dt` file is signal data for each analyte and calibration point. The file name is determined by `config.txt`.
+### *.am
+It must contain two `.sdt` or `.adt` files. `true_concentration.sdt` or `true_concentration.adt` contains true concentration for each analyte and level. The sample names must be integers.
+Another file is signal data for each analyte and calibration point. The file name is determined by `config.txt`.
 
-Config file for `method.mt` needs the following  headers.
+Config file for `method.am` needs the following  headers.
 ```
 [signal]
 area
@@ -220,11 +226,11 @@ level_for_1st_point
 level_for_2nd_point
 ⋮
 ```
-`signal` specifys which `.dt` file serving as signal data. For the above file, `method.mt/area.dt` will become `method.signaltable`.
+`signal` specifys which `.sdt` or `.adt` file serving as signal data. For the above file, `method.am/area.sdt` or `method.am/area.adt` will become `method.signaltable`.
 
 `pointlevel` maps each point to level which should be integers.
 
-`level` specifys the column representing property `pointlevel` of `AnalysisMethod`. It only works for which `signaltable` is `ColumnDataTable`; otherwise, it falls back to use `pointlevel`.
+`level` specifys the column representing property `pointlevel` of `AnalysisMethod`. It only works for which `signaltable` is `SampleDataTable`; otherwise, it falls back to use `pointlevel`.
 
 `analytetable.txt` needs to contain analyte names, index of their internal standards, and index of of other analytes whose calibration curve is used. The column names are fixed for these three columns.
 ```
@@ -236,7 +242,7 @@ analyte2 isd2  calibration_analyte_id2 other_information2
 The delimiter should be "\t", and the order of columns does not matter.
 
 ### *.at
-It can contain multiple `*.dt`. The file names must start from an integer, `_` and `name.dt`, e.g. `0_area.dt`. The integer is for the order of reading into `AnalysisTable`, and `name` will be the key. The name of signal data is determined in `method.mt/config.txt`.
+It can contain multiple `*.sdt` or `*.adt`. The file names must start from an integer with `_` following the name, e.g. `0_area.sdt`. The integer is for the order of reading into `AnalysisTable`, and `name` will be the key. The name of signal data is determined in `method.am/config.txt`.
 
 ### Reading and writing Batch
 To read a batch into julia, call `ChemistryQuantitativeAnalysis.read`.
@@ -246,8 +252,8 @@ julia> batch = ChemistryQuantitativeAnalysis.read("batch_name.batch", T; table_t
 `T` is the sink function for tabular data; it should create an object following `Tables.jl` interface. `table_type` is `T` parameter in the type signature of `Batch` which determines the underlying table type, `analytetype` is a concrete type for `analyte`, `sampletype` is a concrete type for `sample`, and `delim` specifies delimiter for tabular data if `config[:delim]` does not exist. 
 
 For `analytetype` and `sampletype`, `string(cqaconvert(analytetype, x))` and `string(cqaconvert(sampletype, x))` should equal `x` if `x` is a valid string. Additionally, `tryparse` have to be extended for `CSV` parsing:
-* `tryparse(::Type{analytetype}, x::AbstractString)` is neccessary for `RowDataTable`.
-* `tryparse(::Type{sampletype}, x::AbstractString)` is neccessary for `ColumnDataTable`.
+* `tryparse(::Type{analytetype}, x::AbstractString)` is neccessary for `AnalyteDataTable`.
+* `tryparse(::Type{sampletype}, x::AbstractString)` is neccessary for `SampleDataTable`.
 
 To write batch to disk, call `ChemistryQuantitativeAnalysis.write`. There is a keyword argument `delim` controling delimiter of tables.
 ```julia-repl
@@ -290,7 +296,7 @@ signal1 = vcat(Float64[1, 2, 5, 10, 20, 50, 100], [1, 2, 5, 10, 20, 50, 100] .+ 
 signal2 = vcat(Float64[1, 2, 5, 10, 20, 50, 100] .^ 2, [1, 2, 5, 10, 20, 50, 100] .^ 2 .+ 0.1, [1, 2, 5, 10, 20, 50, 100] .^ 2 .- 0.1)
 
 # Create method
-conctable = ColumnDataTable(
+conctable = SampleDataTable(
    DataFrame(
          "level" => collect(1:7), 
          "G1(drug_a)" => conc,
@@ -298,7 +304,7 @@ conctable = ColumnDataTable(
    :level; 
    analytetype = AnalyteTest
 )
-signaltable = ColumnDataTable(
+signaltable = SampleDataTable(
    DataFrame(
          "point" => reshape([string(a, "_", b) for (a, b) in Iterators.product(1:7, 1:3)], 21), 
          "level" => repeat(1:7, 3),
@@ -313,7 +319,7 @@ method = AnalysisMethod(conctable, signaltable, :area, :point; analyte = analyte
 
 # Create sample data
 cdata = AnalysisTable([:area], [
-   ColumnDataTable(
+   SampleDataTable(
          DataFrame(
             "Sample" => ["S1", "S2", "S3"], 
             "G1(drug_a)" => Float64[6, 24, 54],
@@ -326,7 +332,7 @@ cdata = AnalysisTable([:area], [
    ]
 )
 rdata = AnalysisTable([:area], [
-   RowDataTable(
+   AnalyteDataTable(
          DataFrame(
             "Analyte" => analytes, 
             "S1" => Float64[6, 6, 200, 2],
@@ -368,5 +374,7 @@ getanalyte(cdata.area, 1) # get data of first analyte
 getsample(cdata.area, "S2")
 dynamic_range(cbatch.calibration[1])
 signal_range(rbatch.calibration[2])
+lod(rbatch.calibration[2])
+loq(rbatch.calibration[2])
 formula_repr(cbatch.calibration[2])
 ```

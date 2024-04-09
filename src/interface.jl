@@ -9,18 +9,18 @@ Base.getproperty(dt::AbstractDataTable, property::Symbol) = Base.getproperty(tab
 Base.propertynames(dt::AbstractDataTable) = Base.propertynames(table(dt))
 Base.eltype(dt::AbstractDataTable) = Base.eltype(table(dt))
 Base.length(dt::AbstractDataTable) = size(table(dt), 1)
-Base.iterate(dt::ColumnDataTable, st = 1) = st > length(dt) ? nothing : (first(Base.iterate(table(dt), st)), st + 1)
-Base.iterate(dt::RowDataTable, st = 1) = st > length(dt) ? nothing : (first(Base.iterate(table(dt), st)), st + 1)
+Base.iterate(dt::SampleDataTable, st = 1) = st > length(dt) ? nothing : (first(Base.iterate(table(dt), st)), st + 1)
+Base.iterate(dt::AnalyteDataTable, st = 1) = st > length(dt) ? nothing : (first(Base.iterate(table(dt), st)), st + 1)
 Base.getindex(dt::AbstractDataTable, x...) = Base.getindex(table(dt), x...)
-Base.getindex(dt::ColumnDataTable{A, S}, analyte::B, sample::T) where {A, S, B <: A, T <: S} = getanalyte(dt, analyte)[findsample(dt, sample)]
-Base.getindex(dt::RowDataTable{A, S}, analyte::B, sample::T) where {A, S, B <: A, T <: S} = getsample(dt, sample)[findanalyte(dt, analyte)]
+Base.getindex(dt::SampleDataTable{A, S}, analyte::B, sample::T) where {A, S, B <: A, T <: S} = getanalyte(dt, analyte)[findsample(dt, sample)]
+Base.getindex(dt::AnalyteDataTable{A, S}, analyte::B, sample::T) where {A, S, B <: A, T <: S} = getsample(dt, sample)[findanalyte(dt, analyte)]
 Base.setindex!(dt::AbstractDataTable, value, keys...) = Base.setindex!(table(dt), value, keys...)
-Base.setindex!(dt::ColumnDataTable{A, S, N}, value::N, analyte::B, sample::T) where {A, S, B <: A, T <: S, N} = (setindex!(getanalyte(dt, analyte), value, findsample(dt, sample)); dt)
-Base.setindex!(dt::ColumnDataTable{A, S, N}, value, analyte::B, sample::T) where {A, S, B <: A, T <: S, N} = (setindex!(getanalyte(dt, analyte), convert(N, value), findsample(dt, sample)); dt)
-Base.setindex!(dt::RowDataTable{A, S, N}, value::N, analyte::B, sample::T) where {A, S, B <: A, T <: S, N} = (setindex!(getsample(dt, sample), value, findanalyte(dt, analyte)); dt)
-Base.setindex!(dt::RowDataTable{A, S, N}, value, analyte::B, sample::T) where {A, S, B <: A, T <: S, N} = (setindex!(getsample(dt, sample), convert(N, value), findanalyte(dt, analyte)); dt)
-Base.copy(dt::ColumnDataTable) = ColumnDataTable(copy(analyteobj(dt)), copy(sampleobj(dt)), samplecol(dt), copy(table(dt)))
-Base.copy(dt::RowDataTable) = RowDataTable(copy(analyteobj(dt)), copy(sampleobj(dt)), analytecol(dt), copy(table(dt)))
+Base.setindex!(dt::SampleDataTable{A, S, N}, value::N, analyte::B, sample::T) where {A, S, B <: A, T <: S, N} = (setindex!(getanalyte(dt, analyte), value, findsample(dt, sample)); dt)
+Base.setindex!(dt::SampleDataTable{A, S, N}, value, analyte::B, sample::T) where {A, S, B <: A, T <: S, N} = (setindex!(getanalyte(dt, analyte), convert(N, value), findsample(dt, sample)); dt)
+Base.setindex!(dt::AnalyteDataTable{A, S, N}, value::N, analyte::B, sample::T) where {A, S, B <: A, T <: S, N} = (setindex!(getsample(dt, sample), value, findanalyte(dt, analyte)); dt)
+Base.setindex!(dt::AnalyteDataTable{A, S, N}, value, analyte::B, sample::T) where {A, S, B <: A, T <: S, N} = (setindex!(getsample(dt, sample), convert(N, value), findanalyte(dt, analyte)); dt)
+Base.copy(dt::SampleDataTable) = SampleDataTable(copy(analyteobj(dt)), copy(sampleobj(dt)), samplecol(dt), copy(table(dt)))
+Base.copy(dt::AnalyteDataTable) = AnalyteDataTable(copy(analyteobj(dt)), copy(sampleobj(dt)), analytecol(dt), copy(table(dt)))
 
 function Base.getindex(calibration::AbstractVector{<: AbstractCalibration{A}}, analyte::B) where {A, B <: A}
     id = findfirst(x -> first(x.analyte) == analyte, calibration)
@@ -102,13 +102,13 @@ end
 """
     eachanalyte(dt::AbstractDataTable)
 
-Create an iterator which gets data belonging to each analyte as a `Vector`. For `RowDataTable`, new vectors are created; mutating these vector will not change the value in `dt`.
+Create an iterator which gets data belonging to each analyte as a `Vector`. For `AnalyteDataTable`, new vectors are created; mutating these vector will not change the value in `dt`.
 """
 eachanalyte(dt::AbstractDataTable) = EachAnalyte(dt)
 """
     eachsample(dt::AbstractDataTable)
 
-Create an iterator which gets data belonging to each sample as a `Vector`. For `ColumnDataTable`, new vectors are created; mutating these vector will not change the value in `dt`.
+Create an iterator which gets data belonging to each sample as a `Vector`. For `SampleDataTable`, new vectors are created; mutating these vector will not change the value in `dt`.
 """
 eachsample(dt::AbstractDataTable) = EachSample(dt)
 
@@ -116,7 +116,7 @@ Base.eltype(it::EachAnalyte{<: AbstractDataTable{A, S, N}}) where {A, S, N} = Ab
 Base.eltype(it::EachSample{<: AbstractDataTable{A, S, N}}) where {A, S, N} = AbstractVector{N}
 Base.length(it::EachAnalyte) = Base.length(analyteobj(it.table))
 Base.length(it::EachSample) = Base.length(sampleobj(it.table))
-Base.iterate(it::EachAnalyte{<: ColumnDataTable}, st = 1) = st > length(it) ? nothing : (getproperty(table(it.table), analytename(it.table)[st]), st + 1)
-Base.iterate(it::EachAnalyte{<: RowDataTable}, st = 1) = st > length(it) ? nothing : ([getproperty(table(it.table), p)[st] for p in samplename(it.table)], st + 1)
-Base.iterate(it::EachSample{<: ColumnDataTable}, st = 1) = st > length(it) ? nothing : ([getproperty(table(it.table), p)[st] for p in analytename(it.table)], st + 1)
-Base.iterate(it::EachSample{<: RowDataTable}, st = 1) = st > length(it) ? nothing : (getproperty(table(it.table), samplename(it.table)[st]), st + 1)
+Base.iterate(it::EachAnalyte{<: SampleDataTable}, st = 1) = st > length(it) ? nothing : (getproperty(table(it.table), analytename(it.table)[st]), st + 1)
+Base.iterate(it::EachAnalyte{<: AnalyteDataTable}, st = 1) = st > length(it) ? nothing : ([getproperty(table(it.table), p)[st] for p in samplename(it.table)], st + 1)
+Base.iterate(it::EachSample{<: SampleDataTable}, st = 1) = st > length(it) ? nothing : ([getproperty(table(it.table), p)[st] for p in analytename(it.table)], st + 1)
+Base.iterate(it::EachSample{<: AnalyteDataTable}, st = 1) = st > length(it) ? nothing : (getproperty(table(it.table), samplename(it.table)[st]), st + 1)

@@ -14,13 +14,13 @@ function validate_inv_predict!(cal::MultipleCalibration)
     cal
 end
 
-function fill_result!(dt::ColumnDataTable, result)
+function fill_result!(dt::SampleDataTable, result)
     for (a, c) in zip(eachanalyte(dt), result)
         a .= c
     end
     dt
 end
-function fill_result!(dt::RowDataTable, result)
+function fill_result!(dt::AnalyteDataTable, result)
     for (i, p) in enumerate(eachsample(dt))
         p .= getindex.(result, i)
     end
@@ -88,7 +88,7 @@ function calibration(anisd::Tuple, tbl::Table;
 end
 calibration(batch::Batch{A}, analyte::B; 
                     id = sampleobj(batch.method.signaltable),
-                    isd = nothing,
+                    isd = missing,
                     type = true, 
                     zero = false, 
                     weight = 0
@@ -199,6 +199,18 @@ calibrate!(cal::Vector{<: AbstractCalibration}) = (foreach(calibrate!, cal); cal
 function calibrate!(cal::MultipleCalibration)
     cal.model = calibrate(cal.table, cal.formula, cal.type, cal.zero, cal.weight)
     cal
+end
+
+"""
+    init_calibration!(batch::Batch)
+
+Initiate calibration for a batch with empty `batch.calibration`.
+"""
+function init_calibration!(batch::Batch)
+    for a in batch.nonisd
+        push!(batch.calibration, calibration(batch, a))
+    end
+    batch
 end
 
 """
