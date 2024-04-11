@@ -131,6 +131,17 @@ To calculate relative signal, concentration or accuracy and save the result, cal
 ## User Interface
 Use the function `ui_init` which activates an environment for ui and run `interactive_calibrate!` on the batch.
 
+Two windows will pop out. 
+One is the main GUI.
+![image1](ui/main.png "Main GUI")
+Calibration curve settings, and the apearance can be modified through the interface. There are also widgets for saving figure, calibration settings.
+
+![image2](ui/point.png "Select or delete calibration points")
+Calibration points can be deleted or added back by left click.
+
+Another window is a table containing data for each points.
+![image3](ui/table.png "Detailed data")
+
 ## Reading and writting data to disk
 To use data on disk, user should create a directory in the following structure:
 ```

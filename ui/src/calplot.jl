@@ -1,5 +1,6 @@
 """
-    interactive_calibrate!(batch::Batch;
+    interactive_calibrate!(batch::Batch; 
+                root = pwd(), 
                 lloq_multiplier = 4//3, dev_acc = 0.15,
                 fig_attr = Dict{Symbol, Any}(:resolution => (1350, 900)), 
                 axis_attr = cal -> Dict(:title => string(first(cal.analyte)), :xlabel => "Concentration (nM)", :ylabel => "Abundance", :titlesize => 20), 
@@ -14,13 +15,15 @@ Interactively calibrate signal and concentration.
 
 # Arguments
 * `batch`: `Batch`.
+* `root`: root directory for saving objects.
 * `dev_acc`: allowed accuracy deviation.
 * `lloq_multiplier`: multiplier for `dev_acc` at LLOQ level.
-* `fig_attr`: `Dicti` contains attributes of `Figure`.
+* `fig_attr`: `Dict` contains attributes of `Figure`.
 * `axis_attr`: a function map each calibtation curve to a `Dict` containing its attributes of `Axis`.
 * `plot_attr`: a function map each calibtation curve to a `Dict` containing its attributes of plots (`Line` or `Scatter`).
 """
-function interactive_calibrate!(batch::Batch;
+function interactive_calibrate!(batch::Batch; 
+                root = pwd(), 
                 lloq_multiplier = 4//3, dev_acc = 0.15,
                 fig_attr = Dict{Symbol, Any}(:resolution => (1350, 900)), 
                 axis_attr = cal -> Dict(:title => string(first(cal.analyte)), :xlabel => "Concentration (nM)", :ylabel => "Abundance", :titlesize => 20), 
@@ -37,6 +40,7 @@ function interactive_calibrate!(batch::Batch;
     axis_attrs = map(axis_attr, batch.calibration)
     plot_attrs = map(plot_attr, batch.calibration)
     i = 1
+    info = Window()
     function draw()
         label_analyte = Label(fig, string(first(batch.calibration[i].analyte)); halign = :left, width = 250)
         button_left = Button(fig, label = "<")
@@ -48,7 +52,7 @@ function interactive_calibrate!(batch::Batch;
         default_w = weight_repr(batch.calibration[i])
         menu_wt = Menu(fig, options = ["none", "1/√x", "1/x", "1/x²"], default = default_w)
         menu_zoom = Menu(fig, options = string.(0:length(unique(batch.calibration[i].table.x))), default = "0", tellwidth = false)
-        menu_show = Menu(fig, options = ["Cal", "Sample"], default = "Cal"; halign = :left, tellwidth = false)
+        # menu_show = Menu(fig, options = ["Cal", "Sample"], default = "Cal"; halign = :left, tellwidth = false)
         menu_export = Menu(fig, options = ["Fig", "Cal", "Fig&Cal"], default = "Cal"; halign = :left, tellwidth = false)
         ax = Axis(fig[1, 1]; axis_attrs[i]...)
         sc = scatter!(ax, batch.calibration[i].table.x, batch.calibration[i].table.y; get_point_attr(plot_attrs[i], batch.calibration[i])...)
@@ -64,9 +68,10 @@ function interactive_calibrate!(batch::Batch;
         button_confirm = Button(fig, label = "confirm", halign = :left)    
         textbox_attr = Textbox(fig, placeholder = "attribute", tellwidth = false, halign = :left)
         textbox_value = Textbox(fig, placeholder = "value (julia expression)", tellwidth = false, halign = :left)
-        button_show = Button(fig, label = "show")
+        button_show = Button(fig, label = "Table")
         button_export = Button(fig, label = "export")
-        button_save = Button(fig, label = "save batch"; halign = :left)
+        button_save = Button(fig, label = "Save batch"; halign = :left)
+        button_saveas = Button(fig, label = "Save batch as")
         lzoom = Label(fig, "Zoom")
         ltype = Label(fig, "Type")
         lzero = Label(fig, "Zero")
@@ -74,7 +79,7 @@ function interactive_calibrate!(batch::Batch;
         lps = Label(fig, "Plot setting", halign = :left, tellwidth = false)
         lc = [label_analyte, button_left, button_right, label_r2, label_formula, lzoom, menu_zoom, 
             ltype, menu_type, lzero, menu_zero, lweight, menu_wt, lps, tall, menu_obj, textbox_attr, button_confirm, textbox_value, 
-            menu_show, menu_export, button_show, button_export, button_save]
+            menu_export, button_show, button_export, button_save, button_saveas]
         fig[1, 2] = vgrid!(
             label_analyte, 
             hgrid!(button_left, button_right),
@@ -87,10 +92,9 @@ function interactive_calibrate!(batch::Batch;
             hgrid!(lps, tall),
             menu_obj, 
             hgrid!(textbox_attr, button_confirm),
-            textbox_value,
-            hgrid!(menu_show, button_show), 
-            hgrid!(menu_export, button_export), 
-            button_save;
+            textbox_value, 
+            hgrid!(button_show, menu_export, button_export), 
+            hgrid!(button_save, button_saveas);
             tellheight = false
         )
         xr = dynamic_range(batch.calibration[i])
@@ -98,6 +102,7 @@ function interactive_calibrate!(batch::Batch;
         yr = signal_range(batch.calibration[i]) .* ((1 - dev_acc * lloq_multiplier), (1 + dev_acc))
         yr = yr .+ (yr[2] - yr[1]) .* (-0.05, 0.05)
         limits!(ax, xr, yr)
+        body!(info, viewinfo(batch.calibration[i], batch.data, batch.method; lloq_multiplier, dev_acc))
         #display(view_sample(sample; lloq = batch.calibration[i].table.x[findfirst(batch.calibration[i].table.include)], uloq = batch.calibration[i].table.x[findlast(batch.calibration[i].table.include)], lloq_multiplier, dev_acc))
         # Main.vscodedisplay(batch.calibration[i].table[batch.calibration[i].table.include])
         # fig[1, 3] = vgrid!(map(s -> Label(fig, s; halign = :left), split(sprint(showtable, batch.calibration[i].table), "\n"))...; tellheight = false, width = 250)
@@ -108,12 +113,13 @@ function interactive_calibrate!(batch::Batch;
             label_r2.text = "R² = $(round(r2(batch.calibration[i].model); sigdigits = 4))"
             label_formula.text = formula_repr(batch.calibration[i])
             #sample.x̂ .= inv_predict(batch.calibration[i], sample)
+            body!(info, viewinfo(batch.calibration[i], batch.data, batch.method; lloq_multiplier, dev_acc))
         end
         function update_analyte!()
             for x in lc
                 delete!(x)
             end
-            delete!(ax)    
+            delete!(ax)
             draw()
         end
         on(button_left.clicks) do s
@@ -219,21 +225,20 @@ function interactive_calibrate!(batch::Batch;
             end
         end
         on(button_show.clicks) do s
-            if menu_show.selection[] == "Cal"
-                display(view_cal(batch.calibration[i].table; lloq_multiplier, dev_acc))
-            else
-                display(view_sample(batch.data, first(batch.calibration[i].analyte); lloq = batch.calibration[i].table.x[findfirst(batch.calibration[i].table.include)], uloq = batch.calibration[i].table.x[findlast(batch.calibration[i].table.include)], lloq_multiplier, dev_acc))
+            if !active(info) 
+                info = Window()
+                body!(info, viewinfo(batch.calibration[i], batch.data, batch.method; lloq_multiplier, dev_acc))
             end
-            #Main.vscodedisplay(batch.calibration[i].table[batch.calibration[i].table.include])
+                #Main.vscodedisplay(batch.calibration[i].table[batch.calibration[i].table.include])
         end
         on(button_export.clicks) do s
             if menu_export.selection[] == "Fig" || menu_export.selection[] == "Fig&Cal"
-                save_dialog("Save as", nothing, ["*.png"]; start_folder = pwd()) do f
+                save_dialog("Save figure as", nothing, ["*.png"]; start_folder = root) do f
                     f == "" || save(f, fig; update = false)
                 end
             end
             if menu_export.selection[] == "Cal" || menu_export.selection[] == "Fig&Cal"
-                save_dialog("Save as", nothing, ["*.csv"]; start_folder = pwd()) do f
+                save_dialog("Save calibration as", nothing, ["*.csv"]; start_folder = root) do f
                     f == "" || CSV.write(f, Table(; formula = [formula_repr_utf8(batch.calibration[i])], weight = [weight_repr_utf8(batch.calibration[i])], LLOQ = [format_number(lloq(batch.calibration[i]))], ULOQ = [format_number(uloq(batch.calibration[i]))],  r_squared = [format_number(r2(batch.calibration[i].model))]))
                 end
             end
@@ -256,14 +261,24 @@ function interactive_calibrate!(batch::Batch;
             end
             =#
         end
-        on(button_save.clicks) do s
-            save_dialog("Save as", nothing, ["*.batch"]; start_folder = pwd()) do f
+        on(button_saveas.clicks) do s
+            save_dialog("Save as", nothing, ["*.batch"]; start_folder = root) do f
                 f == "" || ChemistryQuantitativeAnalysis.write(f, batch)
+            end
+        end
+        on(button_save.clicks) do s
+            if endswith(root, ".batch")
+                ask_dialog("Save batch?\n$root") && ChemistryQuantitativeAnalysis.write(root, batch)
+            else
+                save_dialog("Save as", nothing, ["*.batch"]; start_folder = root) do f
+                    f == "" || ChemistryQuantitativeAnalysis.write(f, batch)
+                end
             end
         end
     end
     draw()
-    fig
+    wait(display(fig))
+    close(info)
 end
 
 #get_point_attr(plot_attr::Dict, incl::Bool) = NamedTuple(k => incl ? v[1] : v[2] for (k, v) in get!(plot_attr, :scatter, Dict(:color => [:blue, :red])))
