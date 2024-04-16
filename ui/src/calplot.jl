@@ -81,7 +81,7 @@ function interactive_calibrate!(batch::Batch;
         textbox_value = Textbox(fig, placeholder = "value (julia expression)", tellwidth = false, halign = :left)
         button_show = Button(fig, label = "Table")
         button_export = Button(fig, label = "export")
-        button_save = Button(fig, label = "Save batch"; halign = :left)
+        button_save = Button(fig, label = "Save batch "; halign = :left)
         button_saveas = Button(fig, label = "Save batch as")
         lzoom = Label(fig, "Zoom")
         ltype = Label(fig, "Type")
@@ -123,6 +123,7 @@ function interactive_calibrate!(batch::Batch;
             ln.input_args[2][] = predict(batch.calibration[i].model, xrange)
             label_r2.text = "R² = $(round(r2(batch.calibration[i].model); sigdigits = 4))"
             label_formula.text = formula_repr(batch.calibration[i])
+            button_save.label = "Save batch "
             #sample.x̂ .= inv_predict(batch.calibration[i], sample)
             body!(info, viewinfo(batch.calibration[i], batch.data, batch.method; rel_sig, est_conc, lloq_multiplier, dev_acc))
         end
@@ -171,7 +172,7 @@ function interactive_calibrate!(batch::Batch;
             update!()
         end
         on(menu_wt.selection) do s
-            batch.calibration[i].weight = s == "none" ? 0 : weight_value(s) # CQA bug
+            batch.calibration[i].weight = weight_value(s)
             update!()
         end
         on(menu_zoom.selection) do s
@@ -274,15 +275,16 @@ function interactive_calibrate!(batch::Batch;
         end
         on(button_saveas.clicks) do s
             save_dialog("Save as", nothing, ["*.batch"]; start_folder = root) do f
-                f == "" || ChemistryQuantitativeAnalysis.write(f, batch)
+                f == "" || (ChemistryQuantitativeAnalysis.write(f, batch); root = f)
             end
         end
         on(button_save.clicks) do s
             if endswith(root, ".batch")
-                ask_dialog("Save batch?\n$root") && ChemistryQuantitativeAnalysis.write(root, batch)
+                ChemistryQuantitativeAnalysis.write(root, batch)
+                button_save.label = "Batch saved"
             else
                 save_dialog("Save as", nothing, ["*.batch"]; start_folder = root) do f
-                    f == "" || ChemistryQuantitativeAnalysis.write(f, batch)
+                    f == "" || (ChemistryQuantitativeAnalysis.write(f, batch); root = f)
                 end
             end
         end
