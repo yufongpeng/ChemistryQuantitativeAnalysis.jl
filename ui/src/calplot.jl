@@ -1,5 +1,8 @@
 """
     interactive_calibrate!(batch::Batch; 
+                signal = batch.method.signal,
+                rel_sig = :relative_signal,
+                est_conc = :estimated_concentration, 
                 root = pwd(), 
                 lloq_multiplier = 4//3, dev_acc = 0.15,
                 fig_attr = Dict{Symbol, Any}(:resolution => (1350, 900)), 
@@ -15,6 +18,9 @@ Interactively calibrate signal and concentration.
 
 # Arguments
 * `batch`: `Batch`.
+* `signal`: `Symbol`, signal data property.
+* `rel_sig`: `Symbol`, relative signal data property.
+* `est_conc`: `Symbol`, estimated concentration data property.
 * `root`: root directory for saving objects.
 * `dev_acc`: allowed accuracy deviation.
 * `lloq_multiplier`: multiplier for `dev_acc` at LLOQ level.
@@ -23,6 +29,9 @@ Interactively calibrate signal and concentration.
 * `plot_attr`: a function map each calibtation curve to a `Dict` containing its attributes of plots (`Line` or `Scatter`).
 """
 function interactive_calibrate!(batch::Batch; 
+                signal = batch.method.signal,
+                rel_sig = :relative_signal,
+                est_conc = :estimated_concentration, 
                 root = pwd(), 
                 lloq_multiplier = 4//3, dev_acc = 0.15,
                 fig_attr = Dict{Symbol, Any}(:resolution => (1350, 900)), 
@@ -36,6 +45,8 @@ function interactive_calibrate!(batch::Batch;
                                                 ), 
                                 :line => Dict(:color => :chartreuse))
                 )
+    isempty(batch.calibration) && init_calibration!(batch)
+    update_quantification!(batch; signal, rel_sig, est_conc)
     fig = Figure(; fig_attr...)
     axis_attrs = map(axis_attr, batch.calibration)
     plot_attrs = map(plot_attr, batch.calibration)
@@ -102,7 +113,7 @@ function interactive_calibrate!(batch::Batch;
         yr = signal_range(batch.calibration[i]) .* ((1 - dev_acc * lloq_multiplier), (1 + dev_acc))
         yr = yr .+ (yr[2] - yr[1]) .* (-0.05, 0.05)
         limits!(ax, xr, yr)
-        body!(info, viewinfo(batch.calibration[i], batch.data, batch.method; lloq_multiplier, dev_acc))
+        body!(info, viewinfo(batch.calibration[i], batch.data, batch.method; rel_sig, est_conc, lloq_multiplier, dev_acc))
         #display(view_sample(sample; lloq = batch.calibration[i].table.x[findfirst(batch.calibration[i].table.include)], uloq = batch.calibration[i].table.x[findlast(batch.calibration[i].table.include)], lloq_multiplier, dev_acc))
         # Main.vscodedisplay(batch.calibration[i].table[batch.calibration[i].table.include])
         # fig[1, 3] = vgrid!(map(s -> Label(fig, s; halign = :left), split(sprint(showtable, batch.calibration[i].table), "\n"))...; tellheight = false, width = 250)
@@ -113,7 +124,7 @@ function interactive_calibrate!(batch::Batch;
             label_r2.text = "R² = $(round(r2(batch.calibration[i].model); sigdigits = 4))"
             label_formula.text = formula_repr(batch.calibration[i])
             #sample.x̂ .= inv_predict(batch.calibration[i], sample)
-            body!(info, viewinfo(batch.calibration[i], batch.data, batch.method; lloq_multiplier, dev_acc))
+            body!(info, viewinfo(batch.calibration[i], batch.data, batch.method; rel_sig, est_conc, lloq_multiplier, dev_acc))
         end
         function update_analyte!()
             for x in lc
@@ -227,7 +238,7 @@ function interactive_calibrate!(batch::Batch;
         on(button_show.clicks) do s
             if !active(info) 
                 info = Window()
-                body!(info, viewinfo(batch.calibration[i], batch.data, batch.method; lloq_multiplier, dev_acc))
+                body!(info, viewinfo(batch.calibration[i], batch.data, batch.method; rel_sig, est_conc, lloq_multiplier, dev_acc))
             end
                 #Main.vscodedisplay(batch.calibration[i].table[batch.calibration[i].table.include])
         end

@@ -1,4 +1,6 @@
 function read_config(file::String)
+    d = dirname(file)
+    in(basename(file), readdir(isempty(d) ? pwd() : d)) || throw(Base.IOError(string("read(", file, "): no such file or directory (ENOENT)"), -4058))
     config = Dictionary{Symbol, Any}()
     lasttag = nothing
     for i in eachline(file)
@@ -35,6 +37,8 @@ See `ChemistryQuantitativeAnalysis.read` for the requirement of `analytetype`.
 See README.md for the structure of ".mcal" and ".scal" file.
 """
 function read_calibration(file::String; analytetype = String, numbertype = Float64, delim = '\t')
+    d = dirname(file)
+    in(basename(file), readdir(isempty(d) ? pwd() : d)) || throw(Base.IOError(string("read(", file, "): no such file or directory (ENOENT)"), -4058))
     endswith(file, ".mcal") || endswith(file, ".scal") || throw(ArgumentError("The file is not a valid calibration directory"))
     numbertype = Float64 # Bug of GLM
     config = read_config(joinpath(file, "config.txt"))
@@ -76,6 +80,8 @@ See README.md for the structure of ".sdt" file.
 """
 function read_sampledatatable(file::String, T; analytetype = String, sampletype = String, numbertype = Float64, delim = '\t', levelname = nothing)
     endswith(file, ".sdt") || throw(ArgumentError("The file is not a valid table directory"))
+    d = dirname(file)
+    in(basename(file), readdir(isempty(d) ? pwd() : d)) || throw(Base.IOError(string("read(", file, "): no such file or directory (ENOENT)"), -4058))
     config = read_config(joinpath(file, "config.txt"))
     delim = get(config, :delim, delim)
     sample_name = Symbol(first(split(config[:Sample], "\t")))
@@ -100,6 +106,8 @@ See README.md for the structure of ".adt" file.
 """
 function read_analytedatatable(file::String, T; analytetype = String, sampletype = String, numbertype = Float64, delim = '\t')
     endswith(file, ".adt") || throw(ArgumentError("The file is not a valid table directory"))
+    d = dirname(file)
+    in(basename(file), readdir(isempty(d) ? pwd() : d)) || throw(Base.IOError(string("read(", file, "): no such file or directory (ENOENT)"), -4058))
     config = read_config(joinpath(file, "config.txt"))
     delim = get(config, :delim, delim)
     analyte_name = Symbol(config[:Analyte])
@@ -125,6 +133,8 @@ See README.md for the structure of ".at" file.
 """
 function read_analysistable(file::String, T; analytetype = String, sampletype = String, numbertype = Float64, delim = '\t')
     endswith(file, ".at") || throw(ArgumentError("The file is not a valid table directory"))
+    d = dirname(file)
+    in(basename(file), readdir(isempty(d) ? pwd() : d)) || throw(Base.IOError(string("read(", file, "): no such file or directory (ENOENT)"), -4058))
     files = filter!(f -> endswith(f, r".[a,s]dt"), readdir(file))
     tables = map(files) do f
         read_datatable(joinpath(file, f), T; analytetype, sampletype, numbertype, delim)
@@ -144,6 +154,8 @@ See README.md for the structure of ".am" file.
 """
 function read_method(file::String, T; analytetype = String, sampletype = String, numbertype = Float64, delim = '\t')
     endswith(file, ".am") || throw(ArgumentError("The file is not a valid method directory"))
+    d = dirname(file)
+    in(basename(file), readdir(isempty(d) ? pwd() : d)) || throw(Base.IOError(string("read(", file, "): no such file or directory (ENOENT)"), -4058))
     config = read_config(joinpath(file, "config.txt"))
     delim = get(config, :delim, delim)
     signal = Symbol(get(config, :signal, :area))
@@ -187,6 +199,8 @@ See README.md for the structure of ".batch" file.
 """
 function read_batch(file::String, T; analytetype = String, sampletype = String, numbertype = Float64, delim = '\t')
     endswith(file, ".batch") || throw(ArgumentError("The file is not a valid batch directory"))
+    d = dirname(file)
+    in(basename(file), readdir(isempty(d) ? pwd() : d)) || throw(Base.IOError(string("read(", file, "): no such file or directory (ENOENT)"), -4058))
     config = read_config(joinpath(file, "config.txt"))
     delim = get(config, :delim, delim)   
     method = read_method(joinpath(file, "method.am"), T; analytetype, sampletype, numbertype, delim)

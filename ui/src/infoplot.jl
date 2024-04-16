@@ -1,4 +1,7 @@
-function viewinfo(cal::MultipleCalibration, at, method::AnalysisMethod; lloq_multiplier = 4//3, dev_acc = 0.15)
+function viewinfo(cal::MultipleCalibration, at, method::AnalysisMethod; 
+                rel_sig = :relative_signal,
+                est_conc = :estimated_concentration, 
+                lloq_multiplier = 4//3, dev_acc = 0.15)
     tbl = cal.table
     color1 = [i ? "honeydew" : "darkseagreen" for i in tbl.include]
     loq_level = tbl.level[findfirst(tbl.include)]
@@ -38,8 +41,8 @@ function viewinfo(cal::MultipleCalibration, at, method::AnalysisMethod; lloq_mul
     color2 = deepcopy(color1)
     for j in js
         analyte = method.analyte[j]
-        ay = getanalyte(at.relative_signal, analyte)
-        ax = getanalyte(at.estimated_concentration, analyte)
+        ay = getanalyte(getproperty(at, rel_sig), analyte)
+        ax = getanalyte(getproperty(at, est_conc), analyte)
         push!(cs[1], analyte)
         push!(color1, "rgb(235, 193, 238)")
         push!(color2, "rgb(235, 193, 238)")
@@ -53,7 +56,7 @@ function viewinfo(cal::MultipleCalibration, at, method::AnalysisMethod; lloq_mul
         append!(cs[4], repeat([""], length(sampleobj(at))))
         append!(cs[5], round.(ax; sigdigits = 4))
         append!(cs[6], repeat([""], length(sampleobj(at))))
-        c2 = [(i >= lloq * (1 - dev_acc * lloq_multiplier) && i <= uloq * (1 + dev_acc)) ? "honeydew" : "lightpink" for i in ax]
+        c2 = [(i >= lloq && i <= uloq) ? "honeydew" : "lightpink" for i in ax]
         append!(color1, repeat(["honeydew"], length(sampleobj(at))))
         append!(color2, c2)
         append!(color3, repeat(["honeydew"], length(sampleobj(at))))

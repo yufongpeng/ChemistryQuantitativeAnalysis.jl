@@ -207,6 +207,7 @@ end
 Initiate calibration for a batch with empty `batch.calibration`.
 """
 function init_calibration!(batch::Batch)
+    empty!(batch.calibration)
     for a in batch.nonisd
         push!(batch.calibration, calibration(batch, a))
     end
