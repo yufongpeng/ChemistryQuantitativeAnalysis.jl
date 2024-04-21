@@ -443,12 +443,14 @@ function Batch(dt::AbstractDataTable;
         parse_calibration_name(s; calid, levelid, dilution, f2c, parse_decimal)
     end
     aj = analyteobj(dt)
+    id = idcol(dt)
+    sj = sampleobj(dt)
     if dt isa SampleDataTable
-        sampledata = SampleDataTable(aj, sampleobj(dt)[isnothing.(calname)], idcol(dt), tbl[isnothing.(calname)])
-        signaltable = SampleDataTable(aj, sampleobj(dt)[(!isnothing).(calname)], idcol(dt), tbl[(!isnothing).(calname)])
+        sampledata = SampleDataTable(aj, sj[isnothing.(calname)], id, tbl[isnothing.(calname)])
+        signaltable = SampleDataTable(aj, sj[(!isnothing).(calname)], id, tbl[(!isnothing).(calname)])
     else
-        sampledata = AnalyteDataTable(analyteobj(dt), sampleobj(dt)[isnothing.(calname)], idcol(dt), getproperties(tbl, tuple(samplename(dt)[isnothing.(calname)]...)))
-        signaltable = AnalyteDataTable(analyteobj(dt), sampleobj(dt)[(!isnothing).(calname)], idcol(dt), getproperties(tbl, tuple(samplename(dt)[(!isnothing).(calname)]...)))
+        sampledata = AnalyteDataTable(aj, sj[isnothing.(calname)], id, getproperties(tbl, tuple(samplename(dt)[isnothing.(calname)]...)))
+        signaltable = AnalyteDataTable(aj, sj[(!isnothing).(calname)], id, getproperties(tbl, tuple(samplename(dt)[(!isnothing).(calname)]...)))
     end
     filter!(!isnothing, calname)
     pointlevel = map(first, calname)
@@ -458,7 +460,7 @@ function Batch(dt::AbstractDataTable;
     if dt isa SampleDataTable
         conctable = SampleDataTable(Table(; Level = levels, (analytename(dt) .=> (collect(i) for i in zip(concs...)))...), :Level)
     else
-        conctable = AnalyteDataTable(Table(; (idcol(dt) => analyteobj(dt), )..., (Symbol.(levels) .=> map(x -> repeat([0], length(levels)) .+ x, concs))...), idcol(dt), Int)
+        conctable = AnalyteDataTable(Table(; (id => aj, )..., (Symbol.(levels) .=> map(x -> repeat([0], length(aj)) .+ x, concs))...), id, Int)
     end
     analytetable = Table(; analyte = aj, isd = zeros(Int, length(aj)), calibration = collect(1:length(aj)))
     Batch(AnalysisMethod(analytetable, signal, pointlevel, conctable, signaltable), MultipleCalibration{eltype(analyteobj(dt))}[], analysistable((signal => sampledata, )))
