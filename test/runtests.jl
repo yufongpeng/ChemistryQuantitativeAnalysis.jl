@@ -63,6 +63,8 @@ macro test_noerror(x)
     end
 end
 
+!isempty(ARGS) && ARGS[1] == "--ui" && ui_init()
+
 @testset "ChemistryQuantitativeAnalysis.jl" begin
     @testset "Constructors" begin
         global conctable = SampleDataTable(
@@ -275,5 +277,10 @@ end
         @test length(unique(n2.calibration[1].table.level[n2.calibration[1].table.include])) == 6
         @test analyteobj(n3.data) == ["A1", "A2", "A3"]
         @test :L in propertynames(n4.method.signaltable)
+    end
+    if !isempty(ARGS) && ARGS[1] == "--ui"
+        @testset "UI" begin
+            interactive_calibrate!(initial_mc_c; timeout = 60)
+        end
     end
 end

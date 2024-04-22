@@ -1,11 +1,13 @@
 """
     interactive_calibrate!(batch::Batch; 
+                async = false,
+                timeout = -1,
                 signal = batch.method.signal,
                 rel_sig = :relative_signal,
                 est_conc = :estimated_concentration, 
                 root = pwd(), 
                 lloq_multiplier = 4//3, dev_acc = 0.15,
-                fig_attr = Dict{Symbol, Any}(:resolution => (1350, 900)), 
+                fig_attr = Dict{Symbol, Any}(:size => (1350, 750)), 
                 axis_attr = cal -> Dict(:title => string(first(cal.analyte)), :xlabel => "Concentration (nM)", :ylabel => "Abundance", :titlesize => 20), 
                 plot_attr = cal -> Dict(
                                 :scatter => Dict(
@@ -18,6 +20,8 @@ Interactively calibrate signal and concentration.
 
 # Arguments
 * `batch`: `Batch`.
+* `async`: `Bool`, run gui asynchronously.
+* `timeout`: `Number`, maximum wait time before closing the gui. -1 inidicates no limit.
 * `signal`: `Symbol`, signal data property.
 * `rel_sig`: `Symbol`, relative signal data property.
 * `est_conc`: `Symbol`, estimated concentration data property.
@@ -29,12 +33,14 @@ Interactively calibrate signal and concentration.
 * `plot_attr`: a function map each calibtation curve to a `Dict` containing its attributes of plots (`Line` or `Scatter`).
 """
 function interactive_calibrate!(batch::Batch; 
+                async = false,
+                timeout = -1,
                 signal = batch.method.signal,
                 rel_sig = :relative_signal,
                 est_conc = :estimated_concentration, 
                 root = pwd(), 
                 lloq_multiplier = 4//3, dev_acc = 0.15,
-                fig_attr = Dict{Symbol, Any}(:resolution => (1350, 900)), 
+                fig_attr = Dict{Symbol, Any}(:size => (1350, 750)), 
                 axis_attr = cal -> Dict(:title => string(first(cal.analyte)), :xlabel => "Concentration (nM)", :ylabel => "Abundance", :titlesize => 20), 
                 plot_attr = cal -> Dict(
                                 :scatter => Dict(
@@ -120,7 +126,7 @@ function interactive_calibrate!(batch::Batch;
         function update!()
             update_calibration!(batch.calibration[i], batch.method)
             update_quantification!(batch)
-            ln.input_args[2][] = predict(batch.calibration[i].model, xrange)
+            ln.args[2][] = predict(batch.calibration[i].model, xrange)
             label_r2.text = "R² = $(round(r2(batch.calibration[i].model); sigdigits = 4))"
             label_formula.text = formula_repr(batch.calibration[i])
             button_save.label = "Save batch "
@@ -290,8 +296,30 @@ function interactive_calibrate!(batch::Batch;
         end
     end
     draw()
-    wait(display(fig))
-    close(info)
+    f = display(fig)
+    if async
+        if timeout > 0
+            t = Task(() -> begin
+                        timedwait(() -> !f.window_open[], timeout)
+                        close(f)
+                        close(info)
+                    end)
+        else
+            t = Task(() -> begin
+                        wait(f)
+                        close(info)
+                    end)
+        end
+        schedule(t)
+    elseif timeout > 0
+        timedwait(() -> !f.window_open[], timeout)
+        close(f)
+        close(info)
+    else
+        wait(f)
+        close(info)
+    end
+    return
 end
 
 #get_point_attr(plot_attr::Dict, incl::Bool) = NamedTuple(k => incl ? v[1] : v[2] for (k, v) in get!(plot_attr, :scatter, Dict(:color => [:blue, :red])))

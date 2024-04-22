@@ -142,6 +142,8 @@ Calibration points can be deleted or added back by left click.
 Another window is a table containing data for each points.
 ![image3](ui/table.png "Detailed data")
 
+By default, this function blocks the calling task (REPL) until the gui is closed. To run it asynchronously, set keyword argument `async` true.
+
 ## Reading and writting data to disk
 To use data on disk, user should create a directory in the following structure:
 ```
