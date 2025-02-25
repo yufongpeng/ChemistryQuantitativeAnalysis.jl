@@ -281,6 +281,7 @@ end
     if !isempty(ARGS) && ARGS[1] == "--ui"
         @testset "UI" begin
             interactive_calibrate!(initial_mc_c; timeout = 60)
+            interactive_calibrate!(initial_mc_c; async = true, timeout = 10)
         end
     end
 end

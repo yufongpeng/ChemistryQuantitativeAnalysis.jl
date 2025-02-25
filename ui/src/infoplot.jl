@@ -12,7 +12,7 @@ function viewinfo(cal::MultipleCalibration, at, method::AnalysisMethod;
             [i ? (abs(j - 1) <= dev_acc ? "honeydew" : "lightpink") : "darkseagreen" for (i, j) in zip(ft.include, ft.accuracy)]
             )
     isnothing(at) && return begin
-        Plotly.plot(
+        PlotlyJS.plot(
             table(
                 header = attr(values = ["Sample", "Level", "Y", "X", "Predicted X", "Accuracy"],
                             line_color = "darkgreen",
@@ -61,7 +61,7 @@ function viewinfo(cal::MultipleCalibration, at, method::AnalysisMethod;
         append!(color2, c2)
         append!(color3, repeat(["honeydew"], length(sampleobj(at))))
     end
-    Plotly.plot(
+    PlotlyJS.plot(
             table(
                 header = attr(values = ["Sample", "Level", "Y", "X", "Predicted X", "Accuracy"],
                             line_color = "darkgreen",
