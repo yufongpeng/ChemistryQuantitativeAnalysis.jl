@@ -12,9 +12,8 @@ export SampleDataTable, AnalyteDataTable,
     isdof, isisd, 
     findanalyte, getanalyte, findsample, getsample, eachanalyte, eachsample,
     dynamic_range, lloq, uloq, signal_range, signal_lloq, signal_uloq, lod, loq, 
-    formula_repr, weight_repr, weight_value, formula_repr_utf8, weight_repr_utf8, format_number, mkbatch, 
-    typedmap, 
-    ui_init
+    formula_repr, weight_repr, weight_value, formula_repr_ascii, weight_repr_ascii, format_number, mkbatch, 
+    typedmap
 
 import Base: getproperty, propertynames, show, write, eltype, length, iterate, 
         getindex, setindex!, insert!, get!, delete!, get, 
@@ -501,6 +500,7 @@ AnalyteDataTable(analytecol::Symbol, tbl::SampleDataTable) =
     AnalyteDataTable(tbl, analytecol)
 
 function ui_init()
+    Base.depwarn("Graphical user interface is deprecated, please use package ChemistryQuantitativeAnalysisUI.jl", :ui_init; force = true)
     Pkg.activate(joinpath(@__DIR__(), "..", "ui"))
     @eval Main include(joinpath(@__DIR__(), "..", "ui", "src", "ui.jl"))
     @info "Use `interactive_calibrate!` to initiate a ui for a batch."

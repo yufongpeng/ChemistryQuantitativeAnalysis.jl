@@ -63,8 +63,6 @@ macro test_noerror(x)
     end
 end
 
-!isempty(ARGS) && ARGS[1] == "--ui" && ui_init()
-
 @testset "ChemistryQuantitativeAnalysis.jl" begin
     @testset "Constructors" begin
         global conctable = SampleDataTable(
@@ -213,10 +211,10 @@ end
         @test analytename(cdata) == analytename(cdata.area)
         @test all(isapprox.(dynamic_range(cbatch.calibration[1]), (1, 100)))
         @test all(isapprox.(signal_range(rbatch.calibration[2]), (signal_lloq(cbatch.calibration[2]), signal_uloq(cbatch.calibration[2]))))
-        @test endswith(formula_repr_utf8(cbatch.calibration[2]), "x^2")
-        @test weight_repr_utf8(cbatch.calibration[1]) == "none"
+        @test endswith(formula_repr_ascii(cbatch.calibration[2]), "x^2")
+        @test weight_repr_ascii(cbatch.calibration[1]) == "none"
         @test all(weight_value.(["none", "1/√x", "1/x", "1/x²", "x", "x^2", "1/x^3"]) .== [0, -0.5, -1, -2, 1, 2, -3])
-        @test all(weight_repr_utf8.(Number[0, -0.5, -1, -2, 1, 2, -3]) .== ["none", "1/x^0.5", "1/x", "1/x^2", "x", "x^2", "1/x^3"])
+        @test all(weight_repr_ascii.(Number[0, -0.5, -1, -2, 1, 2, -3]) .== ["none", "1/x^0.5", "1/x", "1/x^2", "x", "x^2", "1/x^3"])
     end
     @testset "IO" begin
         global initial_mc_c = ChemistryQuantitativeAnalysis.read(joinpath(datapath, "initial_mc_c.batch"), DataFrame)
@@ -277,11 +275,5 @@ end
         @test length(unique(n2.calibration[1].table.level[n2.calibration[1].table.include])) == 6
         @test analyteobj(n3.data) == ["A1", "A2", "A3"]
         @test :L in propertynames(n4.method.signaltable)
-    end
-    if !isempty(ARGS) && ARGS[1] == "--ui"
-        @testset "UI" begin
-            interactive_calibrate!(initial_mc_c; timeout = 60)
-            interactive_calibrate!(initial_mc_c; async = true, timeout = 10)
-        end
     end
 end

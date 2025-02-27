@@ -159,7 +159,11 @@ function interactive_calibrate!(batch::Batch;
                 plot, id = pick(ax)
                 if id != 0 && plot == sc
                     if event.button == Mouse.left
-                        batch.calibration[i].table.include[id] = !batch.calibration[i].table.include[id]
+                        ro = batch.calibration[i].table[id]
+                        ids = findall(x -> x.x == ro.x && isapprox(x.y, ro.y), batch.calibration[i].table)
+                        for id in ids
+                            batch.calibration[i].table.include[id] = !batch.calibration[i].table.include[id]
+                        end
                         delete!(ax, sc)
                         sc = scatter!(ax, batch.calibration[i].table.x, batch.calibration[i].table.y; get_point_attr(plot_attrs[i], batch.calibration[i])...)
                         DataInspector(sc)

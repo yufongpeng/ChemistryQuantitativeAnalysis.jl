@@ -5,7 +5,9 @@
 
 `ChemistryQuantitativeAnalysis.jl` is a package for quantitative analysis of chemicals based on tabular data. 
 
-For command line interfaces, see [`juliaquant`](https://github.com/yufongpeng/juliaquant).
+Graphical user interface is available for adjusting calibration curve. See [`ChemistryQuantitativeAnalysisUI.jl`](https://github.com/yufongpeng/ChemistryQuantitativeAnalysisUI.jl).
+
+Command line interfaces are implemented in [`juliaquant`](https://github.com/yufongpeng/juliaquant) for non-programmers.
 
 ## Tabular data wrapper
 This package provides two wrappers for data, `SampleDataTable{A, S, N, T}` and `AnalyteDataTable{A, S, N, T}` which are subtypes of `AbstractDataTable{A, S, N, T}`. `SampleDataTable` indicates that part of columns represent analytes, and all rows reprsent samples. `AnalyteDataTable` indicates that part of columns represent samples, and all rows represent analytes. Both types behave like the underlying `table` object. 
@@ -128,22 +130,6 @@ The last method allows user to use encoded sample names to generate `AnalysisMet
 
 To calculate relative signal, concentration or accuracy and save the result, call `update_relative_signal!`, `update_inv_predict!` (in combination, `update_quantification!`) and `update_accuracy!`, respectively.
 
-## User Interface
-Use the function `ui_init` which activates an environment for ui and run `interactive_calibrate!` on the batch.
-
-Two windows will pop out. 
-One is the main GUI.
-![image1](ui/main.png "Main GUI")
-Calibration curve settings, and the apearance can be modified through the interface. There are also widgets for saving figure, calibration settings.
-
-![image2](ui/point.png "Select or delete calibration points")
-Calibration points can be deleted or added back by left click.
-
-Another window is a table containing data for each points.
-![image3](ui/table.png "Detailed data")
-
-By default, this function blocks the calling task (REPL) until the gui is closed. To run it asynchronously, set keyword argument `async` true.
-
 ## Reading and writting data to disk
 To use data on disk, user should create a directory in the following structure:
 ```
@@ -264,7 +250,7 @@ julia> batch = ChemistryQuantitativeAnalysis.read("batch_name.batch", T; table_t
 ```
 `T` is the sink function for tabular data; it should create an object following `Tables.jl` interface. `table_type` is `T` parameter in the type signature of `Batch` which determines the underlying table type, `analytetype` is a concrete type for `analyte`, `sampletype` is a concrete type for `sample`, and `delim` specifies delimiter for tabular data if `config[:delim]` does not exist. 
 
-For `analytetype` and `sampletype`, `string(cqaconvert(analytetype, x))` and `string(cqaconvert(sampletype, x))` should equal `x` if `x` is a valid string. Additionally, `tryparse` have to be extended for `CSV` parsing:
+For any `x` of type `analytetype` or `sampletype`, `x` equals `cqaconvert(type, string(x)))`. Additionally, `tryparse` have to be extended for `CSV` parsing:
 * `tryparse(::Type{analytetype}, x::AbstractString)` is neccessary for `AnalyteDataTable`.
 * `tryparse(::Type{sampletype}, x::AbstractString)` is neccessary for `SampleDataTable`.
 

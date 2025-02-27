@@ -9,7 +9,7 @@ Return
 * `fn(x)` if `fn` is a `Function`.
 * `T(x)` otherwise.
 
-Note that `string(cqaconvert(T, x))` should equal `x` for a valid string `x`, i.e. `string` and `x -> cqaconvert(T, x)` are inverse functions.
+Note that for any `x` of type `T`, `x == cqaconvert(T, string(x)))`.
 """
 cqaconvert(::Type{T}, x) where T = T(x)::T
 cqaconvert(::Type{T}, x::T) where T = x
@@ -364,20 +364,22 @@ function formula_repr(cal::MultipleCalibration; digits = nothing, sigdigits = 4)
     end
 end
 
+@deprecate formula_repr_utf8(x; digits, sigdigits) formula_repr_ascii(x; digits, sigdigits) false
+@deprecate weight_repr_utf8(x) weight_repr_ascii(x) false
 """
-    formula_repr_utf8(cal::AbstractCalibration)
+    formula_repr_ascii(cal::AbstractCalibration; digits = nothing, sigdigits = 4)
 
 Return string representation of formula of `cal` for text file output.
 """
-formula_repr_utf8(cal::AbstractCalibration) = replace(formula_repr(cal), "x²" => "x^2")
+formula_repr_ascii(cal::AbstractCalibration; digits = nothing, sigdigits = 4) = replace(formula_repr(cal; digits, sigdigits), "x²" => "x^2")
 """
-    weight_repr_utf8(cal::AbstractCalibration)
-    weight_repr_utf8(weight::Number)
+    weight_repr_ascii(cal::AbstractCalibration)
+    weight_repr_ascii(weight::Number)
 
 Return string representation of `cal.weight` or `weight` for text file output.
 """
-weight_repr_utf8(cal::AbstractCalibration) = replace(weight_repr(cal), "x²" => "x^2", "√x" => "x^0.5")
-weight_repr_utf8(weight::Number) = replace(weight_repr(weight), "x²" => "x^2", "√x" => "x^0.5")
+weight_repr_ascii(cal::AbstractCalibration) = replace(weight_repr(cal), "x²" => "x^2", "√x" => "x^0.5")
+weight_repr_ascii(weight::Number) = replace(weight_repr(weight), "x²" => "x^2", "√x" => "x^0.5")
 """
     format_number(x; digits = nothing, sigdigits = 4)
 

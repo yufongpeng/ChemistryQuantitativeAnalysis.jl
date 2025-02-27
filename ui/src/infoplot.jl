@@ -11,7 +11,7 @@ function viewinfo(cal::MultipleCalibration, at, method::AnalysisMethod;
             [i ? (abs(j - 1) <= lloq_multiplier * dev_acc ? "honeydew" : "lightpink") : "darkseagreen" for (i, j) in zip(lt.include, lt.accuracy)],
             [i ? (abs(j - 1) <= dev_acc ? "honeydew" : "lightpink") : "darkseagreen" for (i, j) in zip(ft.include, ft.accuracy)]
             )
-    isnothing(at) && return begin
+    (isnothing(at) || isempty(at)) && return begin
         PlotlyJS.plot(
             table(
                 header = attr(values = ["Sample", "Level", "Y", "X", "Predicted X", "Accuracy"],

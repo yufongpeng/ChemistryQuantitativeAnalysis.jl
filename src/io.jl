@@ -430,7 +430,8 @@ Read ".scal" as `SingleCalibration`, ".mcal" as `MultipleCalibration`, ".sdt" as
 `analytetype` is a concrete type for `analyte`, `sampletype` is a concrete type for `sample`, `numbertype` is the type for numeric data, 
 and `delim` specifies delimiter for tabular data if `config[:delim]` does not exist.
 
-For `analytetype` and `sampletype`, `string(cqaconvert(analytetype, x))` and `string(cqaconvert(sampletype, x))` should equal `x` if `x` is a valid string. Additionally, `tryparse` have to be extended for `CSV` parsing:
+For any `x` of type `analytetype` or `sampletype`, `x == cqaconvert(type, string(x)))`. 
+Additionally, `tryparse` have to be extended for `CSV` parsing:
 * `tryparse(::Type{analytetype}, x::AbstractString)` is neccessary for `AnalyteDataTable`.
 * `tryparse(::Type{sampletype}, x::AbstractString)` is neccessary for `SampleDataTable`.
 
