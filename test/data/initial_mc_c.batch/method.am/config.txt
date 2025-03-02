@@ -1,6 +1,18 @@
 [signal]
 area
 
+[rel_sig]
+relative_signal
+
+[est_conc]
+estimated_concentration
+
+[true_conc]
+true_concentration
+
+[acc]
+accuracy
+
 [delim]
 \t
 

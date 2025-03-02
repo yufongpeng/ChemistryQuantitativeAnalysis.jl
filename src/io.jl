@@ -159,10 +159,14 @@ function read_method(file::String, T; analytetype = String, sampletype = String,
     config = read_config(joinpath(file, "config.txt"))
     delim = get(config, :delim, delim)
     signal = Symbol(get(config, :signal, :area))
+    rel_sig = Symbol(get(config, :rel_sig, :relative_signal))
+    est_conc = Symbol(get(config, :est_conc, :estimated_concentration))
+    true_conc = Symbol(get(config, :true_conc, :true_concentration))
+    acc = Symbol(get(config, :acc, :accuracy))
     analytetable = CSV.read(joinpath(file, "analytetable.txt"), Table)
     analyte = analytetype.(analytetable.analyte)
     isd = replace(analytetable.isd, missing => 0)
-    conctable = read_datatable(joinpath(file, in("true_concentration.sdt", readdir(file)) ? "true_concentration.sdt" : "true_concentration.adt"), T; analytetype, sampletype = Int, numbertype, delim)
+    conctable = read_datatable(joinpath(file, in("$true_conc.sdt", readdir(file)) ? "$true_conc.sdt" : "$true_conc.adt"), T; analytetype, sampletype = Int, numbertype, delim)
     if length(sampleobj(conctable)) > 1
         signaltable = read_datatable(joinpath(file, in("$signal.sdt", readdir(file)) ? "$signal.sdt" : "$signal.adt"), T; analytetype, sampletype, numbertype, delim, levelname = get(config, :levelname, nothing))
         if haskey(config, :levelname) && in(Symbol(config[:levelname]), propertynames(signaltable))
@@ -184,7 +188,7 @@ function read_method(file::String, T; analytetype = String, sampletype = String,
         pointlevel = [1]
         calibration = isd
     end
-    AnalysisMethod(Table(analytetable; analyte, isd, calibration), signal, pointlevel, conctable, signaltable)
+    AnalysisMethod(Table(analytetable; analyte, isd, calibration), signal, rel_sig, est_conc, true_conc, acc, pointlevel, conctable, signaltable)
 end
 """
     read_batch(file::String, T; analytetype = String, sampletype = String, numbertype = Float64, delim = '\\t') -> Batch{analytetype}
@@ -338,6 +342,8 @@ function show(io::IO, ::MIME"text/plain", tbl::AnalysisMethod)
     show(io, MIME"text/plain"(), table(tbl.conctable))
     print(io, "\n\n∘ Signal: \n")
     show(io, MIME"text/plain"(), isnothing(tbl.signaltable) ? nothing : table(tbl.signaltable))
+    print(io, "\n\n∘ Data keys: \n")
+    print(io,  join([tbl.signal, tbl.rel_sig, tbl.est_conc, tbl.true_conc, tbl.acc], ", "), "\n")
 end
 
 write_datatable(file::String, tbl::AnalyteDataTable; delim = '\t') = write(file * ".adt", tbl; delim)
@@ -369,15 +375,17 @@ end
 
 function write(file::String, tbl::AnalysisMethod; delim = '\t')
     mkpath(file)
-    write_datatable(joinpath(file, "true_concentration"), tbl.conctable; delim)
+    write_datatable(joinpath(file, "$(tbl.true_conc)"), tbl.conctable; delim)
     isnothing(tbl.signaltable) || write_datatable(joinpath(file, "$(tbl.signal)"), tbl.signaltable; delim)
     id = nothing
     if isa(tbl.signaltable, SampleDataTable)
         id = findfirst(x -> getproperty(tbl.signaltable, x) == tbl.pointlevel, propertynames(tbl.signaltable))
     end
     open(joinpath(file, "config.txt"), "w+") do config
-        isnothing(id) ? Base.write(config, "[signal]\n", tbl.signal, "\n\n[delim]\n", escape_string(string(delim)), "\n\n[pointlevel]\n", join(tbl.pointlevel, "\n")) : 
-            Base.write(config, "[signal]\n", tbl.signal, "\n\n[delim]\n", escape_string(string(delim)), "\n\n[levelname]\n", propertynames(tbl.signaltable)[id])
+        isnothing(id) ? Base.write(config, "[signal]\n", tbl.signal, "\n\n[rel_sig]\n", tbl.rel_sig, "\n\n[est_conc]\n", tbl.est_conc, 
+            "\n\n[true_conc]\n", tbl.true_conc, "\n\n[acc]\n", tbl.acc, "\n\n[delim]\n", escape_string(string(delim)), "\n\n[pointlevel]\n", join(tbl.pointlevel, "\n")) : 
+            Base.write(config, "[signal]\n", tbl.signal, "\n\n[rel_sig]\n", tbl.rel_sig, "\n\n[est_conc]\n", tbl.est_conc, "\n\n[true_conc]\n", 
+                        tbl.true_conc, "\n\n[acc]\n", tbl.acc, "\n\n[delim]\n", escape_string(string(delim)), "\n\n[levelname]\n", propertynames(tbl.signaltable)[id])
     end
     CSV.write(joinpath(file, "analytetable.txt"), tbl.analytetable; delim)
 end
@@ -543,9 +551,9 @@ function mkbatch(file::String;
         pointlevel = default_level
     end
     default_method = if signal_table == SampleDataTable
-        Dict(:signal => "area", :delim => delim, :levelname => "Level")
+        Dict(:signal => "area", :rel_sig => "relative_signal", :est_conc => "estimated_concentration", :true_conc => "true_concentration", :acc => "accuracy", :delim => delim, :levelname => "Level")
     else
-        Dict(:signal => "area", :delim => delim, :pointlevel => pointlevel)
+        Dict(:signal => "area", :rel_sig => "relative_signal", :est_conc => "estimated_concentration", :true_conc => "true_concentration", :acc => "accuracy", :delim => delim, :pointlevel => pointlevel)
     end
     for (k, v) in default_method
         get!(method_config, k, v)
@@ -557,11 +565,13 @@ function mkbatch(file::String;
         end
     end
     if signal_table == SampleDataTable
-        confms = string("[signal]\n", method_config[:signal], "\n\n[delim]\n", escape_string(string(method_config[:delim])), 
+        confms = string("[signal]\n", method_config[:signal], "\n\n[rel_sig]\n", method_config[:rel_sig], "\n\n[est_conc]\n", method_config[:est_conc], 
+                        "\n\n[true_conc]\n", method_config[:true_conc], "\n\n[acc]\n", method_config[:acc], "\n\n[delim]\n", escape_string(string(method_config[:delim])), 
                         "\n\n[levelname]\n", method_config[:levelname])
         table[2] = Table(; Symbol(signal_config[:Sample]) => default_point, Symbol(method_config[:levelname]) => default_level, (Symbol.(signal_config[:Analyte]) .=> Ref(repeat([1.0], length(default_point))))...)
     else
-        confms = string("[signal]\n", method_config[:signal], "\n\n[delim]\n", escape_string(string(method_config[:delim])), 
+        confms = string("[signal]\n", method_config[:signal], "\n\n[rel_sig]\n", method_config[:rel_sig], "\n\n[est_conc]\n", method_config[:est_conc], 
+                        "\n\n[true_conc]\n", method_config[:true_conc], "\n\n[acc]\n", method_config[:acc], "\n\n[delim]\n", escape_string(string(method_config[:delim])), 
                         "\n\n[pointlevel]\n", join(method_config[:pointlevel], "\n"))
         table[2] = Table(; Symbol(signal_config[:Analyte]) => default_analyte, (Symbol.(signal_config[:Sample]) .=> Ref(repeat([1.0], length(default_analyte))))...)
     end
@@ -571,11 +581,12 @@ function mkbatch(file::String;
         table[3] = Table(; Symbol(conc_config[:Analyte]) => default_analyte, (Symbol.(conc_config[:Sample]) .=> Ref(repeat([1.0], length(default_analyte))))...)
     end
     signal = method_config[:signal]
+    true_conc = method_config[:true_conc]
     data_name = string(0, "_", signal, data_table == SampleDataTable ? ".sdt" : ".adt")
     mkpath(joinpath(file, "data.at", data_name))
     write(joinpath(file, "data.at", data_name, "config.txt"), confs[1])
     CSV.write(joinpath(file, "data.at", data_name, "table.txt"), table[1]; delim = data_config[:delim])
-    cp = joinpath(file, "method.am", conc_table == SampleDataTable ? "true_concentration.sdt" : "true_concentration.adt")
+    cp = joinpath(file, "method.am", conc_table == SampleDataTable ? "$true_conc.sdt" : "$true_conc.adt")
     mkpath(cp)
     sp = joinpath(file, "method.am", signal_table == SampleDataTable ? "$signal.sdt" : "$signal.adt")
     mkpath(sp)

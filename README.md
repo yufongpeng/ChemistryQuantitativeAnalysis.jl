@@ -38,7 +38,11 @@ This package provides two wrappers for data, `SampleDataTable{A, S, N, T}` and `
 |Property|Description|
 |----------|---------|
 |`analytetable`|`M <: Table` with at least 3 columns, `analytes` identical to property `analytes`, `isd`, matching each analyte to index of its internal standard, and `calibration` matching each analyte to index of other analyte for fitting its calibration curve. `-1` indicates the analyte itself is internal standard, and `0` indicates no internal standard. For example, a row `(analytes = AnalyteX, isd = 2, calibration = 3)` means that internal standard of `AnalyteX` is the second analyte, and it will be quantified using calibration curve of the third analyte.|
-|`signal`|`Symbol`, propertyname for extracting signal data from an `AnalysisTable`|
+|`signal`|`Symbol`, type and key name of experimental acquisition data.|
+|`rel_sig`|`Symbol`, key name of  relative signal.|
+|`est_conc`|`Symbol`, key name of  estimated concentration.|
+|`true_conc`|`Symbol`, key name of  true concentration.|
+|`acc`|`Symbol`, key name of  accuracy.|
 |`pointlevel`|`Vector{Int}` matching each point to level. It can be empty if there is only one level in `conctable`.|
 |`conctable`|`C <: AbstractDataTable{A, Int}` containing concentration data for each level. Sample names must be symbol or string of integers for multiple levels. One level indicates using `SingleCalibration`.|
 |`signaltable`|`D <: AbstractDataTable{A, S}` containig signal for each point. It can be `nothing` if signal data is unecessary.|
@@ -49,12 +53,19 @@ This package provides two wrappers for data, `SampleDataTable{A, S, N, T}` and `
 |`level`|`AbstractVector{Int}`, calibration levels, identical to `conctable.samples`.|
 
 Constructors of `AnalysisMethod`:
-1. `AnalysisMethod(analytetable::Table, signal::Symbol, pointlevel::Vector{Int}, conctable::AbstractDataTable{A, Int}, signaltable::Union{AbstractDataTable, Nothing})`
-2. `AnalysisMethod(conctable::AbstractDataTable{A, Int}, signaltable::SampleDataTable, signal::Symbol, levelname::Symbol; kwargs...)`
-3. `AnalysisMethod(conctable::AbstractDataTable{A, Int}, signaltable::Nothing, signal::Symbol; kwargs...)`
-4. `AnalysisMethod(conctable::AbstractDataTable, signaltable::Union{AbstractDataTable, Nothing}, signal::Symbol, pointlevel::AbstractVector{Int}; kwargs...)`
+1. `AnalysisMethod(analytetable::Table, signal::Symbol, rel_sig::Symbol, est_conc::Symbol, true_conc::Symbol, acc::Symbol, pointlevel::Vector{Int}, conctable::AbstractDataTable{A, Int}, signaltable::Union{AbstractDataTable, Nothing})`
+2. `AnalysisMethod(conctable::AbstractDataTable, signaltable::SampleDataTable, signal, levelname; kwargs...)`
+3. `AnalysisMethod(conctable::AbstractDataTable, signaltable::Nothing; kwargs...)`
+4. `AnalysisMethod(conctable::AbstractDataTable, signaltable::Union{AbstractDataTable, Nothing}, signal, pointlevel::AbstractVector{Int}; kwargs...)`
 
-`kwargs` will be columns in `analytetable`. `levelname` is the column name for `pointlevel` if `signaltable` is a `SampleDataTable`.
+Keyword arguments
+* `rel_sig`: key name of relative signa. It defaults to `:relative_signal`.
+* `est_conc`: key name of estimated concentration. It defaults to `:estimated_concentration`.
+* `true_conc`: key name of true concentration. It defaults to `:true_concentration`. 
+* `acc`: key name of accuracy. It defaults to `:accuracy`.
+* Other keyword arguments will be columns in `analytetable`; when `analyte`, `isd` and `calibration` are not provided, it will use analyte in `conctable`. 
+
+`levelname` is the column name for `pointlevel` if `signaltable` is a `SampleDataTable`.
 
 ## AnalysisTable
 `AnalysisTable{A, S, T}` is basically a `Dictionary{Symbol, <: AbstractDataTable{T}}` which data can be extracted using proeperty syntax. For example, `at[:area] === at.area`.
@@ -64,7 +75,7 @@ Constructors of `AnalysisMethod`:
 |`sample`|`Vector{S}`, samples in user-defined types.|
 |`tables`|`Dictionary{Symbol, <: AbstractDataTable{T}}`, a dictionary mapping data type to datatable.|
 
-The key for signal data is determined by `method.signal`. Default names for relative signal, true concentration, estimated concentration and accuracy are `relative_signal`, `true_concentration`, `estimated_concentration` and `accuracy`.
+The key names are determined by an `AnalysisMethod`. 
 
 `AnalysisTable{A, S, T}` can be constructed in the following ways:
 1. `AnalysisTable(keys::AbstractVector{Symbol}, tables::AbstractVector{<: AbstractDataTable{A, S}})`
@@ -124,9 +135,9 @@ Constructors for `Batch{A, M, C, D}`:
 1. `Batch(method::M, calibration::C, data::D = nothing)`
 2. `Batch(method::AnalysisMethod, data = nothing; type = true, zero = false, weight = 0)`
 3. `Batch(batch::Batch, at::AnalysisTable)`
-4. `Batch(dt::AbstractDataTable; signal::Symbol = :area, calid = r"Cal_(\d)_(\d*-*\d*)", order = "LR", f2c = 1, parse_decimal = x -> replace(x, "-" => "."))`
+4. `Batch(dt::AbstractDataTable; signal = :area, rel_sig = :relative_signal, est_conc = :estimated_concentration, true_conc = :true_concentration, acc = :accuracy, calid = r"Cal_(\d)_(\d*-*\d*)", order = "LR", f2c = 1, parse_decimal = x -> replace(x, "-" => "."))`
 
-The last method allows user to use encoded sample names to generate `AnalysisMethod`. Note that the returned batch does not have any calibration curves, which allows user to modify `analytetable`, and then apply `init_calibration!` to start calibrate.
+The last method allows user to use encoded sample names to generate `AnalysisMethod`. Note that the returned batch does not have any calibration curves, which allows user to modify `analytetable`, and then apply `init_calibration!` to start calibration.
 
 To calculate relative signal, concentration or accuracy and save the result, call `update_relative_signal!`, `update_inv_predict!` (in combination, `update_quantification!`) and `update_accuracy!`, respectively.
 
@@ -152,7 +163,7 @@ batch_name.batch
    ├──1_quantity2.sdt 
    └──2_quantity3.sdt
 ```
-There is a function `mkbatch` which create a valid batch directory programatically.
+There is a function `mkbatch` which creates a valid batch directory programatically.
 
 Config files have the following general forms
 ```
@@ -165,7 +176,7 @@ value2
 value3
 ⋮
 ```
-The header `delim` determines the default delimiter for `table.txt` in this directory and subdirectories.
+The first config file contains a header `delim` which determines the default delimiter for `table.txt` in this directory and subdirectories.
 
 `data.at` and `calibration` is not necessary for initializing a batch. The former can be added to the batch directly in julia, and the latter will be generated after calibration.
 
@@ -206,13 +217,25 @@ sample_col_name_2
 ``` 
 
 ### *.am
-It must contain two `.sdt` or `.adt` files. `true_concentration.sdt` or `true_concentration.adt` contains true concentration for each analyte and level. The sample names must be integers.
+It must contain two `.sdt` or `.adt` files. A file must contain true concentration for each analyte and level. The sample names must be integers.
 Another file is signal data for each analyte and calibration point. The file name is determined by `config.txt`.
 
-Config file for `method.am` needs the following  headers.
+Config file for `method.am` needs the following headers.
 ```
 [signal]
 area
+
+[rel_sig]
+relative_signal
+
+[est_conc]
+estimated_concentration
+
+[true_conc]
+true_concentration
+
+[acc]
+accuracy
 
 [delim]
 \t
@@ -225,11 +248,12 @@ level_for_1st_point
 level_for_2nd_point
 ⋮
 ```
-`signal` specifys which `.sdt` or `.adt` file serving as signal data. For the above file, `method.am/area.sdt` or `method.am/area.adt` will become `method.signaltable`.
+`signal`, `rel_sig`, `est_conc`, `true_conc`, and `acc` specifys which `.sdt` or `.adt` files containing corresponding data in the method directory or ascociated `**.at` directory. 
+For the above file, `method.am/area.sdt` or `method.am/area.adt` will become `method.signaltable`; `method.am/true_concentration.sdt` or `method.am/true_concentration.adt` will become `method.conctable`.
 
 `pointlevel` maps each point to level which should be integers.
 
-`level` specifys the column representing property `pointlevel` of `AnalysisMethod`. It only works for which `signaltable` is `SampleDataTable`; otherwise, it falls back to use `pointlevel`.
+`levelname` specifys the column representing property `pointlevel` of `AnalysisMethod`. It only works for which `signaltable` is `SampleDataTable`; otherwise, it falls back to use `pointlevel`.
 
 `analytetable.txt` needs to contain analyte names, index of their internal standards, and index of of other analytes whose calibration curve is used. The column names are fixed for these three columns.
 ```
@@ -241,14 +265,14 @@ analyte2 isd2  calibration_analyte_id2 other_information2
 The delimiter should be "\t", and the order of columns does not matter.
 
 ### *.at
-It can contain multiple `*.sdt` or `*.adt`. The file names must start from an integer with `_` following the name, e.g. `0_area.sdt`. The integer is for the order of reading into `AnalysisTable`, and `name` will be the key. The name of signal data is determined in `method.am/config.txt`.
+It can contain multiple `*.sdt` or `*.adt`. The file names must start from an integer with `_` following the name, e.g. `0_area.sdt`. The integer is for the order of reading into `AnalysisTable`, and `name` will be the key. The name of data is determined in `method.am/config.txt`.
 
 ### Reading and writing Batch
 To read a batch into julia, call `ChemistryQuantitativeAnalysis.read`.
 ```julia-repl
-julia> batch = ChemistryQuantitativeAnalysis.read("batch_name.batch", T; table_type, analytetype, delim)
+julia> batch = ChemistryQuantitativeAnalysis.read("batch_name.batch", T; table_type, analytetype,sampletype, numbertype, delim)
 ```
-`T` is the sink function for tabular data; it should create an object following `Tables.jl` interface. `table_type` is `T` parameter in the type signature of `Batch` which determines the underlying table type, `analytetype` is a concrete type for `analyte`, `sampletype` is a concrete type for `sample`, and `delim` specifies delimiter for tabular data if `config[:delim]` does not exist. 
+`T` is the sink function for tabular data; it should create an object following `Tables.jl` interface. `table_type` is `T` parameter in the type signature of `Batch` which determines the underlying table type, `analytetype` is a concrete type for `analyte`, `sampletype` is a concrete type for `sample`, `numbertype` is a cincrete type for numeric data, and `delim` specifies delimiter for tabular data if `config[:delim]` does not exist. 
 
 For any `x` of type `analytetype` or `sampletype`, `x` equals `cqaconvert(type, string(x)))`. Additionally, `tryparse` have to be extended for `CSV` parsing:
 * `tryparse(::Type{analytetype}, x::AbstractString)` is neccessary for `AnalyteDataTable`.

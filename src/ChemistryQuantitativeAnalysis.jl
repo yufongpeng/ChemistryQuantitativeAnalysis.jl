@@ -209,7 +209,11 @@ A type containing analytes settings, and source calibration data. `A` determines
     * `analyte`: `AbstractVector{A}`, analytes in user-defined types.
     * `isd`: `AbstractVector{Int}`, index of internal standard. `0` means no internal standard, and `-1` means the analyte itself is a internal standard.
     * `calibration`: index of analyte for calibration curve. `-1` means the analyte itself is a internal standard, so it will not be put into any calibration curve.
-* `signal`: `Symbol`, data type for quantification, e.g. `:area`.
+* `signal`: `Symbol`, type and key name of experimental acquisition data, e.g. `:area`.
+* `rel_sig`: `Symbol`, key name of relative signal.
+* `est_conc`: `Symbol`, key name of estimated concentration.
+* `true_conc`: `Symbol`, key name of true concentration.
+* `acc`: `Symbol`, key name of accuracy.
 * `pointlevel`: `Vector{Int}` matching each point to level. It can be empty if there is only one level in `conctable`.
 * `conctable`: `C <: AbstractDataTable{<: A, Int}` containing concentration data for each level. Samples must integers. One level indicates using `SingleCalibration`.
 * `signaltable`: `D <: AbstractDataTable{A}` containig signal for each point. It can be `nothing` if signal data is unecessary.
@@ -224,12 +228,20 @@ A type containing analytes settings, and source calibration data. `A` determines
 struct AnalysisMethod{A, M <: Table, C <: AbstractDataTable, D <: Union{AbstractDataTable, Nothing}}
     analytetable::M
     signal::Symbol
+    rel_sig::Symbol
+    est_conc::Symbol
+    true_conc::Symbol
+    acc::Symbol
     pointlevel::Vector{Int}
     conctable::C
     signaltable::D
     function AnalysisMethod(
                     analytetable::M,
                     signal::Symbol,
+                    rel_sig::Symbol,
+                    est_conc::Symbol,
+                    true_conc::Symbol,
+                    acc::Symbol,
                     pointlevel::AbstractVector{Int}, 
                     conctable::AbstractDataTable{B, Int}, 
                     signaltable::AbstractDataTable{C, S}
@@ -250,11 +262,15 @@ struct AnalysisMethod{A, M <: Table, C <: AbstractDataTable, D <: Union{Abstract
                 a in analyteobj(signaltable) || throw(ArgumentError("Analyte `$a` is not in the `signatable`."))
             end
         end
-        new{A, M, typeof(conctable), typeof(signaltable)}(analytetable, signal, convert(Vector{Int}, pointlevel), conctable, signaltable)
+        new{A, M, typeof(conctable), typeof(signaltable)}(analytetable, signal, rel_sig, est_conc, true_conc, acc, convert(Vector{Int}, pointlevel), conctable, signaltable)
     end
     function AnalysisMethod(
                     analytetable::M,
                     signal::Symbol,
+                    rel_sig::Symbol,
+                    est_conc::Symbol,
+                    true_conc::Symbol,
+                    acc::Symbol,
                     pointlevel::AbstractVector{Int}, 
                     conctable::AbstractDataTable{B, Int}, 
                     signaltable::Nothing
@@ -268,32 +284,58 @@ struct AnalysisMethod{A, M <: Table, C <: AbstractDataTable, D <: Union{Abstract
         for a in analyteobj(conctable)
             a in analytetable.analyte || throw(ArgumentError("Analyte `$a` is not in the `analytetable`."))
         end
-        new{A, M, typeof(conctable), Nothing}(analytetable, signal, convert(Vector{Int}, pointlevel), conctable, signaltable)
+        new{A, M, typeof(conctable), Nothing}(analytetable, signal, rel_sig, est_conc, true_conc, acc, convert(Vector{Int}, pointlevel), conctable, signaltable)
     end
 end
 
 """
-    AnalysisMethod(conctable::AbstractDataTable{A, Int}, signaltable::SampleDataTable, signal::Symbol, levelname::Symbol; kwargs...)
-    AnalysisMethod(conctable::AbstractDataTable{A, Int}, signaltable::Nothing, signal::Symbol; kwargs...)
-    AnalysisMethod(conctable::AbstractDataTable, signaltable::Union{AbstractDataTable, Nothing}, signal::Symbol, pointlevel::AbstractVector{Int}; kwargs...)
+    AnalysisMethod(
+        conctable::AbstractDataTable, 
+        signaltable::Union{AbstractDataTable, Nothing}, 
+        signal, 
+        pointlevel = Int[]; 
+        signal = :area, 
+        rel_sig = :relative_signal, 
+        est_conc = :estimated_concentration, 
+        true_conc = :true_concentration, 
+        kwargs...
+    )
 
-Convenient contructors for `AnalysisMethod` which make constructing a `Table` optional. `kwargs` will be columns in `analytetable`; when `analyte`, `isd` and `calibration` are not provided, it will use analyte in `conctable`. 
-    
-`levelname` is the column name for `pointlevel`. See `AnalysisMethod` for details of other arguments.
+Convenient contructors for `AnalysisMethod` which make constructing a `Table` optional.
+
+`signal` data type for quantification. `levelname` is the column name for `pointlevel`. See `AnalysisMethod` for details of other arguments.
+
+# Keyword arguments
+* `rel_sig`: key name of relative signal. 
+* `est_conc`: key name of estimated concentration. 
+* `true_conc`: key name of true concentration. 
+* `acc`: key name of accuracy. 
+* Other keyword arguments will be columns in `analytetable`; when `analyte`, `isd` and `calibration` are not provided, it will use analyte in `conctable`. 
 """
-AnalysisMethod(conctable::AbstractDataTable{A, Int}, signaltable::SampleDataTable, signal::Symbol, levelname::Symbol; kwargs...) where A = 
-    AnalysisMethod(conctable, signaltable, signal, getproperty(signaltable, levelname)::AbstractVector{Int}; kwargs...)
-AnalysisMethod(conctable::AbstractDataTable{A, Int}, signaltable::Nothing, signal::Symbol; kwargs...) where A = AnalysisMethod(conctable, signaltable, signal, Int[]; kwargs...)
-function AnalysisMethod(conctable::AbstractDataTable, 
-                    signaltable::Union{AbstractDataTable, Nothing},
-                    signal::Symbol,
-                    pointlevel::AbstractVector{Int}; kwargs...
-            )
+function AnalysisMethod(
+        conctable::AbstractDataTable, 
+        signaltable::Union{AbstractDataTable, Nothing},
+        signal,
+        pointlevel = nothing; 
+        rel_sig = :relative_signal,
+        est_conc = :estimated_concentration,
+        true_conc = :true_concentration, 
+        acc = :accuracy, 
+        kwargs...
+    )
+    signal = Symbol(signal)
+    rel_sig = Symbol(rel_sig)
+    est_conc = Symbol(est_conc)
+    true_conc = Symbol(true_conc)
+    acc = Symbol(acc)
+    if !isa(pointlevel, AbstractVector{<: Integer})
+        pointlevel = getproperty(signaltable, Symbol(pointlevel))
+    end
     analyte = get(kwargs, :analyte, analyteobj(conctable))
     isd = get(kwargs, :isd, zeros(Int, length(analyteobj(conctable))))
     calibration = get(kwargs, :calibration, collect(eachindex(analyteobj(conctable))))
     analytetable = Table(; analyte, isd, calibration, kwargs...)    
-    AnalysisMethod(analytetable, signal, pointlevel, conctable, signaltable)
+    AnalysisMethod(analytetable, signal, rel_sig, est_conc, true_conc, acc, pointlevel, conctable, signaltable)
 end
 
 """
@@ -410,7 +452,11 @@ Construct a new batch from an old batch and a `AnalysisTable` as new data.
 Batch(batch::Batch, at::AnalysisTable) = Batch(batch.method, batch.calibration, at)
 """
     Batch(dt::AbstractDataTable; 
-        signal::Symbol = :area, 
+        signal = :area, 
+        rel_sig = :relative_signal, 
+        est_conc = :estimated_concentration, 
+        true_conc = :true_concentration, 
+        acc = :accuracy, 
         calid = r"Cal_(\\d)_(\\d*-*\\d*)", 
         order = "LR", 
         f2c = 1,
@@ -422,7 +468,11 @@ Construct a batch from data. All analytes are considered as normal analytes, so 
 * `dt`: data containing both calibration curves and samples.
 
 # Keyword Arguments
-* `signal`: `Symbol`, data type for quantification, e.g. `:area`.
+* `signal`: type and key name of experimental acquisition data, e.g. `:area`.
+* `rel_sig`: key name of relative signal.
+* `est_conc`: key name of estimated concentration.
+* `true_conc`: key name of true concentration.
+* `acc`: key name of accuracy.
 * `calid`: `Regex`, identifier for calibration data; level and concentration related factors (ratio of concentration or dilution factor) should be captured. 
 The former should be able to be parsed as integer directly; the latter should be able to be parsed as floating number after applying `parse_decimal`.
 * `order`: `String`, represents the order and identity of captured string; `L` is level, `R` is ratio of concentration, `D` is dilution factor (df).
@@ -430,11 +480,20 @@ The former should be able to be parsed as integer directly; the latter should be
 * `parse_decimal`: `Function`, converts a string into another string which can be parsed as floating number.
 """
 function Batch(dt::AbstractDataTable; 
-                signal::Symbol = :area, 
+                signal = :area, 
+                rel_sig = :relative_signal, 
+                est_conc = :estimated_concentration, 
+                true_conc = :true_concentration, 
+                acc = :accuracy, 
                 calid = r"Cal_(\d)_(\d*-*\d*)", 
                 order = "LR", 
                 f2c = 1,
                 parse_decimal = x -> replace(x, "-" => "."))
+    signal = Symbol(signal)
+    rel_sig = Symbol(rel_sig)
+    est_conc = Symbol(est_conc)
+    true_conc = Symbol(true_conc)
+    acc = Symbol(acc)
     dilution = occursin("D", order)
     levelid = findfirst(==("L"), split(order, ""))
     tbl = Table(table(dt))
@@ -462,7 +521,7 @@ function Batch(dt::AbstractDataTable;
         conctable = AnalyteDataTable(Table(; (id => aj, )..., (Symbol.(levels) .=> map(x -> repeat([0], length(aj)) .+ x, concs))...), id, Int)
     end
     analytetable = Table(; analyte = aj, isd = zeros(Int, length(aj)), calibration = collect(1:length(aj)))
-    Batch(AnalysisMethod(analytetable, signal, pointlevel, conctable, signaltable), MultipleCalibration{eltype(analyteobj(dt))}[], analysistable((signal => sampledata, )))
+    Batch(AnalysisMethod(analytetable, signal, rel_sig, est_conc, true_conc, acc, pointlevel, conctable, signaltable), MultipleCalibration{eltype(analyteobj(dt))}[], analysistable((signal => sampledata, )))
 end
 
 include("interface.jl")
@@ -498,12 +557,5 @@ AnalyteDataTable(analytecol::Symbol, tablesink::TypeOrFn, tbl::SampleDataTable) 
     AnalyteDataTable(tbl, analytecol, tablesink)
 AnalyteDataTable(analytecol::Symbol, tbl::SampleDataTable) = 
     AnalyteDataTable(tbl, analytecol)
-
-function ui_init()
-    Base.depwarn("Graphical user interface is deprecated, please use package ChemistryQuantitativeAnalysisUI.jl", :ui_init; force = true)
-    Pkg.activate(joinpath(@__DIR__(), "..", "ui"))
-    @eval Main include(joinpath(@__DIR__(), "..", "ui", "src", "ui.jl"))
-    @info "Use `interactive_calibrate!` to initiate a ui for a batch."
-end
 
 end

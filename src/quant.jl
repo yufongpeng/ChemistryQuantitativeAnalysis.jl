@@ -25,14 +25,14 @@ end
 relative_signal(batch::Batch, dt::AbstractDataTable) = relative_signal(batch.method, dt)
 
 """
-    set_relative_signal(at::AbstractDataTable, batch::Batch; signal = batch.method.signal, rel_sig = :relative_signal)
-    set_relative_signal(at::AnalysisTable, method::AnalysisMethod; signal = method.signal, rel_sig = :relative_signal)
+    set_relative_signal(at::AbstractDataTable, batch::Batch; signal = batch.method.signal, rel_sig = batch.method.rel_sig)
+    set_relative_signal(at::AnalysisTable, method::AnalysisMethod; signal = method.signal, rel_sig = method.rel_sig)
 
 Calculate relative signal using `getproperty(at, signal)` as signal data, update or insert the value into a copy of `at` at index `rel_sig`, and return the copy.
 """
-set_relative_signal(at::AnalysisTable, batch::Batch; signal = batch.method.signal, rel_sig = :relative_signal) = 
+set_relative_signal(at::AnalysisTable, batch::Batch; signal = batch.method.signal, rel_sig = batch.method.rel_sig) = 
     set_relative_signal(at, batch.method; signal, rel_sig)
-function set_relative_signal(at::AnalysisTable, method::AnalysisMethod; signal = method.signal, rel_sig = :relative_signal)
+function set_relative_signal(at::AnalysisTable, method::AnalysisMethod; signal = method.signal, rel_sig = method.rel_sig)
     signal == rel_sig && return copy(at)
     result = relative_signal(method, at; signal)
     new = copy(at)
@@ -41,14 +41,14 @@ function set_relative_signal(at::AnalysisTable, method::AnalysisMethod; signal =
 end
 
 """
-    set_relative_signal!(at::AnalysisTable, batch::Batch; signal = batch.method.signal, rel_sig = :relative_signal)
-    set_relative_signal!(at::AnalysisTable, method::AnalysisMethod; signal = method.signal, rel_sig = :relative_signal)
+    set_relative_signal!(at::AnalysisTable, batch::Batch; signal = batch.method.signal, rel_sig = batch.method.rel_sig)
+    set_relative_signal!(at::AnalysisTable, method::AnalysisMethod; signal = method.signal, rel_sig = method.rel_sig)
 
 Calculate relative signal using `getproperty(at, signal)` as signal data, update and insert the value into `at` at index `rel_sig`, and return `at`.
 """
-set_relative_signal!(at::AnalysisTable, batch::Batch; signal = batch.method.signal, rel_sig = :relative_signal) = 
+set_relative_signal!(at::AnalysisTable, batch::Batch; signal = batch.method.signal, rel_sig = batch.method.rel_sig) = 
     set_relative_signal!(at, batch.method; signal, rel_sig)
-function set_relative_signal!(at::AnalysisTable, method::AnalysisMethod; signal = method.signal, rel_sig = :relative_signal)
+function set_relative_signal!(at::AnalysisTable, method::AnalysisMethod; signal = method.signal, rel_sig = method.rel_sig)
     signal == rel_sig && return at
     result = relative_signal(method, at; signal)
     set!(at, rel_sig, result)
@@ -60,21 +60,21 @@ end
 
 Calculate relative signal using `getproperty(batch.data, signal)` as signal data, update and insert the value into `batch.data` at index `rel_sig`, and return the updated `batch`.
 """
-function update_relative_signal!(batch::Batch{A, M, C, D}; signal = batch.method.signal, rel_sig = :relative_signal) where {A, M, C, D}
+function update_relative_signal!(batch::Batch{A, M, C, D}; signal = batch.method.signal, rel_sig = batch.method.rel_sig) where {A, M, C, D}
     signal == rel_sig || set_relative_signal!(batch.data, batch.method; signal, rel_sig)
     batch
 end
-function update_relative_signal!(batch::Batch{A, M, C, Nothing}; signal = batch.method.signal, rel_sig = :relative_signal) where {A, M, C}
+function update_relative_signal!(batch::Batch{A, M, C, Nothing}; signal = batch.method.signal, rel_sig = batch.method.rel_sig) where {A, M, C}
     @warn "There is no data!"
     batch
 end
 """
-    inv_predict(batch::Batch, at::AnalysisTable; rel_sig = :relative_signal)
+    inv_predict(batch::Batch, at::AnalysisTable; rel_sig = batch.method.rel_sig)
     inv_predict(batch::Batch, dt::AbstractDataTable)
 
 Inversely predict concentration based on relative signal data, `getproperty(at, rel_sig)` or `dt`, and return the result as `AbstractDataTable`.
 """
-inv_predict(batch::Batch, at::AnalysisTable; rel_sig = :relative_signal) = 
+inv_predict(batch::Batch, at::AnalysisTable; rel_sig = batch.method.rel_sig) = 
     inv_predict(batch, getproperty(at, rel_sig))
 
 function inv_predict(batch::Batch, dt::AbstractDataTable{A, S, N}) where {A, S, N}
@@ -118,11 +118,11 @@ end
 inv_predict(cal::SingleCalibration, y::AbstractArray) = y .* cal.conc
 
 """
-    set_inv_predict(at::AnalysisTable, batch::Batch; rel_sig = :relative_signal, est_conc = :estimated_concentration)
+    set_inv_predict(at::AnalysisTable, batch::Batch; rel_sig = batch.method.rel_sig, est_conc = batch.method.est_conc)
 
 Inversely predict concantration using `getproperty(at, rel_sig)` as relstive signal data, update or insert the value into a copy of `at` at index `est_conc`, and return the copy.
 """
-function set_inv_predict(at::AnalysisTable, batch::Batch; rel_sig = :relative_signal, est_conc = :estimated_concentration)
+function set_inv_predict(at::AnalysisTable, batch::Batch; rel_sig = batch.method.rel_sig, est_conc = batch.method.est_conc)
     result = inv_predict(batch, at; rel_sig)
     new = copy(at)
     set!(new, est_conc, result)
@@ -130,25 +130,25 @@ function set_inv_predict(at::AnalysisTable, batch::Batch; rel_sig = :relative_si
 end
 
 """
-    set_inv_predict!(at::AnalysisTable, batch::Batch; rel_sig = :relative_signal, est_conc = :estimated_concentration)
+    set_inv_predict!(at::AnalysisTable, batch::Batch; rel_sig = batch.method.rel_sig, est_conc = batch.method.est_conc)
 
 Inversely predict concantration using `getproperty(at, rel_sig)` as relstive signal data, update or insert the value into `at` at index `est_conc`, and return `at`.
 """
-function set_inv_predict!(at::AnalysisTable, batch::Batch; rel_sig = :relative_signal, est_conc = :estimated_concentration)
+function set_inv_predict!(at::AnalysisTable, batch::Batch; rel_sig = batch.method.rel_sig, est_conc = batch.method.est_conc)
     set!(at, est_conc, inv_predict(batch, at; rel_sig))
     at
 end
 
 """
-    update_inv_predict!(batch::Batch; rel_sig = :relative_signal, est_conc = :estimated_concentration)
+    update_inv_predict!(batch::Batch; rel_sig = batch.method.rel_sig, est_conc = batch.method.est_conc)
 
 Inversely predict concentration using `getproperty(batch.data, rel_sig)` or `dt` as relstive signal data, update or insert the value into `batch.data` at index `est_conc` and returns the updated `batch`.
 """
-function update_inv_predict!(batch::Batch{A, M, C, D}; rel_sig = :relative_signal, est_conc = :estimated_concentration) where {A, M, C, D}
+function update_inv_predict!(batch::Batch{A, M, C, D}; rel_sig = batch.method.rel_sig, est_conc = batch.method.est_conc) where {A, M, C, D}
     set!(batch.data, est_conc, inv_predict(batch, batch.data; rel_sig))
     batch
 end
-function update_inv_predict!(batch::Batch{A, M, C, Nothing}; rel_sig = :relative_signal, est_conc = :estimated_concentration) where {A, M, C}
+function update_inv_predict!(batch::Batch{A, M, C, Nothing}; rel_sig = batch.method.rel_sig, est_conc = batch.method.est_conc) where {A, M, C}
     @warn "There is no data!"
     batch
 end
@@ -194,11 +194,11 @@ function quantification(cal::AbstractCalibration, dt::AbstractDataTable{A, S, N}
 end
 
 """
-    set_quantification(at::AnalysisTable, batch::Batch; signal = batch.method.signal, rel_sig = :relative_signal, est_conc = :estimated_concentration)
+    set_quantification(at::AnalysisTable, batch::Batch; signal = batch.method.signal, rel_sig = batch.method.rel_sig, est_conc = batch.method.est_conc)
 
 Quantify all analytes using `getproperty(at, signal)` as signal data., update or insert the values into a copy of `at` at index `rel_sig` for relative signal and `est_conc` for concentration, and return the copy.
 """
-function set_quantification(at::AnalysisTable, batch::Batch; signal = batch.method.signal, rel_sig = :relative_signal, est_conc = :estimated_concentration)
+function set_quantification(at::AnalysisTable, batch::Batch; signal = batch.method.signal, rel_sig = batch.method.rel_sig, est_conc = batch.method.est_conc)
     signal == rel_sig && return set_inv_predict(at, batch; rel_sig, est_conc)
     new = set_relative_signal(at, batch; signal, rel_sig)
     result = inv_predict(batch, new,; rel_sig)
@@ -207,25 +207,25 @@ function set_quantification(at::AnalysisTable, batch::Batch; signal = batch.meth
 end
 
 """
-    set_quantification!(at::AnalysisTable, batch::Batch; signal = batch.method.signal, rel_sig = :relative_signal, est_conc = :estimated_concentration)
+    set_quantification!(at::AnalysisTable, batch::Batch; signal = batch.method.signal, rel_sig = batch.method.rel_sig, est_conc = batch.method.est_conc)
 
 Quantify all analytes, update or insert the values into `at` at index `rel_sig` for relative signal and `est_conc` for concentration, and return `at`.
 """
-function set_quantification!(at::AnalysisTable, batch::Batch; signal = batch.method.signal, rel_sig = :relative_signal, est_conc = :estimated_concentration)
+function set_quantification!(at::AnalysisTable, batch::Batch; signal = batch.method.signal, rel_sig = batch.method.rel_sig, est_conc = batch.method.est_conc)
     signal == rel_sig || set_relative_signal!(at, batch; signal, rel_sig)
     set_inv_predict!(at, batch; rel_sig, est_conc)
 end
 
 """
-    update_quantification!(batch::Batch; signal = batch.method.signal, rel_sig = :relative_signal, est_conc = :estimated_concentration)
+    update_quantification!(batch::Batch; signal = batch.method.signal, rel_sig = batch.method.rel_sig, est_conc = batch.method.est_conc)
 
 Quantify all analytes using `getproperty(at, signal)` as signal data, update or insert the values into `batch.data` at index `rel_sig` for relative signal and `est_conc` for concentration, and returns the updated `batch`.
 """
-function update_quantification!(batch::Batch{A, M, C, D}; signal = batch.method.signal, rel_sig = :relative_signal, est_conc = :estimated_concentration) where {A, M, C, D}
+function update_quantification!(batch::Batch{A, M, C, D}; signal = batch.method.signal, rel_sig = batch.method.rel_sig, est_conc = batch.method.est_conc) where {A, M, C, D}
     signal == rel_sig || update_relative_signal!(batch; signal, rel_sig)
     update_inv_predict!(batch; rel_sig, est_conc)
 end
-function update_quantification!(batch::Batch{A, M, C, Nothing}; signal = batch.method.signal, rel_sig = :relative_signal, est_conc = :estimated_concentration) where {A, M, C}
+function update_quantification!(batch::Batch{A, M, C, Nothing}; signal = batch.method.signal, rel_sig = batch.method.rel_sig, est_conc = batch.method.est_conc) where {A, M, C}
     @warn "There is no data!"
     batch
 end
@@ -241,6 +241,12 @@ Calculate accuracy and return the values as `AbstractDataTable` or `Vector`. `tb
 accuracy(at::AnalysisTable; true_conc = :true_concentration, est_conc = :estimated_concentration) = 
     accuracy(getproperty(at, est_conc), getproperty(at, true_conc))
 
+accuracy(at::AnalysisTable, method::AnalysisMethod; true_conc = method.true_conc, est_conc = method.est_conc) = 
+    accuracy(getproperty(at, est_conc), getproperty(at, true_conc))
+
+accuracy(at::AnalysisTable, batch::Batch; true_conc = batch.method.true_conc, est_conc = batch.method.est_conc) = 
+    accuracy(getproperty(at, est_conc), getproperty(at, true_conc))
+
 function accuracy(dtp::AbstractDataTable{A, S, N}, dtt::AbstractDataTable) where {A, S, N}
     cs = length(analyteobj(dtp)) > 10 ? ThreadsX.map(analyteobj(dtp)) do analyte
         convert(Vector{N}, accuracy(getanalyte(dtp, analyte), getanalyte(dtt, analyte)))::Vector{N}
@@ -254,41 +260,48 @@ accuracy(cal::SingleCalibration, tbl) = accuracy(inv_predict(cal, tbl.y), tbl.x)
 accuracy(x̂::AbstractVector, x::AbstractVector) = @. x̂ / x
 
 """
-    set_accuracy(at::AnalysisTable; true_conc = :true_concentration, est_conc = :estimated_concentration, acc = :accuracy)
+    set_accuracy(at::AnalysisTable, method::AnalysisMethod; true_conc = method.true_conc, est_conc = method.est_conc, acc = method.acc)
+    set_accuracy(at::AnalysisTable, batch::Batch; true_conc = batch.method.true_conc, est_conc = batch.method.est_conc, acc = batch.method.acc)
 
 Calculate accuracy, update or insert the values into a copy of `at` at index `acc`, and return the copy. 
 using `getproperty(at, true_conc)` as true concentration and `getproperty(at, est_conc)` as estimated concentration.
 """
-function set_accuracy(at::AnalysisTable; true_conc = :true_concentration, est_conc = :estimated_concentration, acc = :accuracy)
+function set_accuracy(at::AnalysisTable, method::AnalysisMethod; true_conc = method.true_conc, est_conc = method.est_conc, acc = method.acc)
     result = accuracy(at; true_conc, est_conc)
     new = AnalysisTable(analyteobj(at), sampleobj(at), Dictionary(tables(at)))
     set!(new, acc, result)
     new
 end
+set_accuracy(at::AnalysisTable, batch::Batch; true_conc = batch.method.true_conc, est_conc = batch.method.est_conc, acc = batch.method.acc) = 
+    set_accuracy(at, batch.method; true_conc, est_conc, acc)
 
 """
-    set_accuracy!(at::AnalysisTable; true_conc = :true_concentration, est_conc = :estimated_concentration, acc = :accuracy)
+    set_accuracy!(at::AnalysisTable, method::AnalysisMethod; true_conc = method.true_conc, est_conc = method.est_conc, acc = method.acc)
+    set_accuracy!(at::AnalysisTable, batch::Batch; true_conc = batch.method.true_conc, est_conc = batch.method.est_conc, acc = batch.method.acc)
 
 Calculate accuracy, update or insert the values into `at` at index `acc`, and return the object 
 using `getproperty(at, true_conc)` as true concentration and `getproperty(at, est_conc)` as estimated concentration.
 """
-function set_accuracy!(at::AnalysisTable; true_conc = :true_concentration, est_conc = :estimated_concentration, acc = :accuracy)
+function set_accuracy!(at::AnalysisTable, method::AnalysisMethod; true_conc = method.true_conc, est_conc = method.est_conc, acc = method.acc)
     set!(at, acc, accuracy(at; true_conc, est_conc))
     at
 end
 
+set_accuracy!(at::AnalysisTable, batch::Batch; true_conc = batch.method.true_conc, est_conc = batch.method.est_conc, acc = batch.method.acc) = 
+    set_accuracy!(at, batch.method; true_conc, est_conc, acc)
+
 """
-    update_accuracy!(batch::Batch; true_conc = :true_concentration, est_conc = :estimated_concentration, acc = :accuracy)
+    update_accuracy!(batch::Batch; true_conc = batch.method.true_conc, est_conc = batch.method.est_conc, acc = batch.method.acc)
 
 Calculate accuracy, and update or insert the values into `batch.data` or a copy of `batch.data` at index `acc`, and returns the updated `batch`.
 Use `getproperty(batch.data, true_conc)` as true concentration and `getproperty(batch.data, est_conc)` as estimated concentration. 
 This function assigns `at` to `batch.data` 
 """
-function update_accuracy!(batch::Batch{A, M, C, D}; true_conc = :true_concentration, est_conc = :estimated_concentration, acc = :accuracy) where {A, M, C, D}
-    set!(batch.data, acc, accuracy(batch.data; true_conc, est_conc))
+function update_accuracy!(batch::Batch{A, M, C, D}; true_conc = batch.method.true_conc, est_conc = batch.method.est_conc, acc = batch.method.acc) where {A, M, C, D}
+    set_accuracy!(batch.data, batch; true_conc, est_conc, acc)
     batch
 end
-function update_accuracy!(batch::Batch{A, M, C, Nothing}; true_conc = :true_concentration, est_conc = :estimated_concentration, acc = :accuracy) where {A, M, C}
+function update_accuracy!(batch::Batch{A, M, C, Nothing}; true_conc = batch.method.true_conc, est_conc = batch.method.est_conc, acc = batch.method.acc) where {A, M, C}
     @warn "There is no data!"
     batch
 end

@@ -122,7 +122,7 @@ end
         @test getanalyte(cdata.area, 1) == getanalyte(rdata.area, 1) == getanalyte(SampleDataTable(rdata.area, :Sample, Table), 1)
         @test getsample(cdata.area, 2) == getsample(rdata.area, 2) == getsample(AnalyteDataTable(cdata.area, :Analyte, Table), 2)
         @test propertynames(cbatch) == (:method, :calibration, :data, :analyte, :isd, :nonisd, :point, :level)
-        @test propertynames(cbatch.method) == (:analytetable, :signal, :pointlevel, :conctable, :signaltable, :analyte, :isd, :nonisd, :point, :level)
+        @test propertynames(cbatch.method) == (:analytetable, :signal,  :rel_sig, :est_conc, :true_conc, :acc, :pointlevel, :conctable, :signaltable, :analyte, :isd, :nonisd, :point, :level)
         @test propertynames(cdata) == (:area, )
         @test propertynames(cdata.area) == (:Sample, Symbol.(analytes)...)
         @test propertynames(rdata.area) == (:Analyte, Symbol.(["S1", "S2", "S3"])...)
@@ -200,7 +200,7 @@ end
         # @test all(isapprox.(set_inv_predict(cbatch.data, cbatch).estimated_concentration.var"G1(drug_b)", cbatch.data.estimated_concentration.var"G1(drug_b)"))
         set!(cbatch.data, :true_concentration, deepcopy(cbatch.data.estimated_concentration))
         @test all(isapprox.(update_accuracy!(cbatch).data.accuracy.var"G1(drug_b)", [1.0, 1.0, 1.0]))
-        @test all(isapprox.(set_accuracy!(cbatch.data).accuracy.var"G1(drug_b)", [1.0, 1.0, 1.0]))
+        @test all(isapprox.(set_accuracy(cbatch.data, cbatch).accuracy.var"G1(drug_b)", [1.0, 1.0, 1.0]))
     end
     @testset "Utils" begin
         @test getanalyte(cdata.area, AnalyteG1("G1(drug_b)")) == getanalyte(cdata.area, Symbol("G1(drug_b)"))

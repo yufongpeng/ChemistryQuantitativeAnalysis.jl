@@ -72,7 +72,7 @@ function Base.getproperty(tbl::AnalysisMethod, p::Symbol)
         getfield(tbl, p)
     end
 end
-Base.propertynames(tbl::AnalysisMethod) = (:analytetable, :signal, :pointlevel, :conctable, :signaltable, :analyte, :isd, :nonisd, :point, :level)
+Base.propertynames(tbl::AnalysisMethod) = (:analytetable, :signal, :rel_sig, :est_conc, :true_conc, :acc, :pointlevel, :conctable, :signaltable, :analyte, :isd, :nonisd, :point, :level)
 
 function Base.getproperty(batch::Batch, p::Symbol)
     if p == :analyte
