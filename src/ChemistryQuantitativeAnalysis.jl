@@ -459,6 +459,8 @@ Batch(batch::Batch, at::AnalysisTable) = Batch(batch.method, batch.calibration, 
         acc = :accuracy, 
         calid = r"Cal_(\\d)_(\\d*-*\\d*)", 
         order = "LR", 
+        ratio = nothing, 
+        df = nothing, 
         f2c = 1,
         parse_decimal = x -> replace(x, "-" => "."))
 
@@ -473,9 +475,12 @@ Construct a batch from data. All analytes are considered as normal analytes, so 
 * `est_conc`: key name of estimated concentration.
 * `true_conc`: key name of true concentration.
 * `acc`: key name of accuracy.
-* `calid`: `Regex`, identifier for calibration data; level and concentration related factors (ratio of concentration or dilution factor) should be captured. 
-The former should be able to be parsed as integer directly; the latter should be able to be parsed as floating number after applying `parse_decimal`.
+* `calid`: identifier for calibration point. It has two possible values.
+    * `Regex`, level and concentration related factors (ratio of concentration or dilution factor) should be captured. The former should be able to be parsed as integer directly; the latter should be able to be parsed as floating number after applying `parse_decimal`. 
+    * `Vector`, assign each sample with number (calibration level), `missing` or `nothing` (normal samples). 
 * `order`: `String`, represents the order and identity of captured string; `L` is level, `R` is ratio of concentration, `D` is dilution factor (df).
+* `ratio`: ratio of concantrations of each level. `nothing` indicates using captured values. 
+* `df`: dilution factors of each level. `nothing` indicates using captured values. 
 * `f2c`: `Number` or vector of numbers; concentration equals to f2c * ratio or f2c / df. When a vector is provided, each element represents `f2c` value of each analyte.
 * `parse_decimal`: `Function`, converts a string into another string which can be parsed as floating number.
 """
@@ -487,6 +492,8 @@ function Batch(dt::AbstractDataTable;
                 acc = :accuracy, 
                 calid = r"Cal_(\d)_(\d*-*\d*)", 
                 order = "LR", 
+                ratio = nothing, 
+                df = nothing, 
                 f2c = 1,
                 parse_decimal = x -> replace(x, "-" => "."))
     signal = Symbol(signal)
@@ -494,27 +501,19 @@ function Batch(dt::AbstractDataTable;
     est_conc = Symbol(est_conc)
     true_conc = Symbol(true_conc)
     acc = Symbol(acc)
-    dilution = occursin("D", order)
-    levelid = findfirst(==("L"), split(order, ""))
-    tbl = Table(table(dt))
-    calname = map(samplename(dt)) do s
-        parse_calibration_name(s; calid, levelid, dilution, f2c, parse_decimal)
-    end
+    idc, pointlevel, levels, concs = parse_calibration_level_name(dt, calid, order, ratio, df, f2c, parse_decimal)
     aj = analyteobj(dt)
     id = idcol(dt)
     sj = sampleobj(dt)
+    ids = setdiff(eachindex(sj), idc)
+    tbl = table(dt)
     if dt isa SampleDataTable
-        sampledata = SampleDataTable(aj, sj[isnothing.(calname)], id, tbl[isnothing.(calname)])
-        signaltable = SampleDataTable(aj, sj[(!isnothing).(calname)], id, tbl[(!isnothing).(calname)])
+        sampledata = SampleDataTable(aj, sj[ids], id, tbl[ids])
+        signaltable = SampleDataTable(aj, sj[idc], id, tbl[idc])
     else
-        sampledata = AnalyteDataTable(aj, sj[isnothing.(calname)], id, getproperties(tbl, tuple(samplename(dt)[isnothing.(calname)]...)))
-        signaltable = AnalyteDataTable(aj, sj[(!isnothing).(calname)], id, getproperties(tbl, tuple(samplename(dt)[(!isnothing).(calname)]...)))
+        sampledata = AnalyteDataTable(aj, sj[ids], id, getproperties(tbl, tuple(samplename(dt)[ids]...)))
+        signaltable = AnalyteDataTable(aj, sj[idc], id, getproperties(tbl, tuple(samplename(dt)[idc]...)))
     end
-    filter!(!isnothing, calname)
-    pointlevel = map(first, calname)
-    unique!(calname)
-    levels = map(first, calname)
-    concs = map(last, calname)
     if dt isa SampleDataTable
         conctable = SampleDataTable(Table(; Level = levels, (analytename(dt) .=> (collect(i) for i in zip(concs...)))...), :Level)
     else

@@ -215,14 +215,59 @@ function critical_point(cal::MultipleCalibration{A, N}) where {A, N}
     -b / 2a
 end
 
-function parse_calibration_name(s; calid = r"Cal_(\d)_(\d*-*\d*)", levelid = 1, dilution = false, f2c = 1, parse_decimal = x -> replace(x, "-" => "."))
-    m = match(calid, string(s))
-    isnothing(m) && return m
-    m = collect(String, m)
-    level = parse(Int, m[levelid])
-    conc = parse(Float64, parse_decimal(m[only(setdiff(eachindex(m), levelid))]))
-    (level, dilution ? f2c ./ conc : f2c .* conc)
+function parse_calibration_level_name(dt::AbstractDataTable, calid::Regex, order, ratio, df, f2c, parse_decimal)
+    so = split(order, "")
+    dilutionid = findfirst(==("D"), so)
+    ratioid = findfirst(==("R"), so)
+    levelid = findfirst(==("L"), so)
+    cs = map(samplename(dt)) do s
+            m = match(calid, string(s))
+            isnothing(m) ? nothing : collect(String, m)
+    end
+    isnothing(levelid) && throw(ArgumentError("No valid level id."))
+    clevel = map(s -> isnothing(s) ? nothing : parse(Int, s[levelid]), cs)
+    id = findall(!isnothing, clevel)
+    pointlevel = convert(Vector{Int}, clevel[id])
+    levels = unique(pointlevel)
+    idx = [findfirst(==(x), clevel) for x in levels]
+    if !isnothing(ratio)
+        concs = map(s -> s .* f2c, ratio)
+    elseif !isnothing(df)
+        concs = map(s -> f2c ./ s, df)
+    elseif !isnothing(ratioid)
+        concs = map(s -> parse(Float64, parse_decimal(s[ratioid])) .* f2c, cs[idx])
+    elseif !isnothing(dilutionid)
+        concs = map(s -> f2c ./ parse(Float64, parse_decimal(s[dilutionid])), cs[idx])
+    else
+        throw(ArgumentError("No valid ratios or dilution factors are obtained."))
+    end
+    id, pointlevel, levels, concs
 end
+
+
+function parse_calibration_level_name(dt::AbstractDataTable, calid, order, ratio, df, f2c, parse_decimal)
+    clevel = replace(calid, missing => nothing)
+    id = findall(!isnothing, clevel)
+    pointlevel = convert(Vector{Int}, clevel[id])
+    levels = unique(pointlevel)
+    if !isnothing(ratio)
+        concs = map(s -> s .* f2c, ratio)
+    elseif !isnothing(df)
+        concs = map(s -> f2c ./ s, df)
+    else
+        throw(ArgumentError("No valid ratios or dilution factors are obtained."))
+    end
+    id, pointlevel, levels, concs
+end
+
+# function parse_calibration_name(s, r, d, calid, levelid, ratioid, dilutionid, f2c, parse_decimal)
+#     m = match(calid, string(s))
+#     isnothing(m) && return missing
+#     m = collect(String, m)
+#     level = parse(Int, m[levelid])
+#     conc = parse(Float64, parse_decimal(m[only(setdiff(eachindex(m), levelid))]))
+#     (level, dilution ? f2c ./ conc : f2c .* conc)
+# end
 
 table_convert(::Type{D}, data::AbstractDataTable{A, S, N, T}) where {D, A, S, N, T <: D} = data
 table_convert(::Type{D}, data::A) where {D, A <: AbstractDataTable} = 

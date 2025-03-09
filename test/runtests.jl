@@ -117,7 +117,7 @@ end
         sdt = SampleDataTable(CSV.read(joinpath(datapath, "area.sdt", "table.txt"), Table; delim = '\t'), :Sample)
         adt = AnalyteDataTable(CSV.read(joinpath(datapath, "area.adt", "table.txt"), Table; delim = '\t'), :Analyte)
         global sbatch = Batch(sdt; f2c = [1, 1, 1, 1, 1])
-        global abatch = Batch(adt; f2c = [1, 1, 1, 1, 1])
+        global abatch = Batch(adt; calid = vcat(repeat(1:6; inner = 3), repeat([missing], 50)), ratio = [0.1, 0.2, 0.5, 1, 2, 5], f2c = [1, 1, 1, 1, 1])
         @test all(isapprox.(sbatch.method.conctable.Analyte1, collect(abatch.method.conctable[1])[2:end]))
         @test getanalyte(cdata.area, 1) == getanalyte(rdata.area, 1) == getanalyte(SampleDataTable(rdata.area, :Sample, Table), 1)
         @test getsample(cdata.area, 2) == getsample(rdata.area, 2) == getsample(AnalyteDataTable(cdata.area, :Analyte, Table), 2)
