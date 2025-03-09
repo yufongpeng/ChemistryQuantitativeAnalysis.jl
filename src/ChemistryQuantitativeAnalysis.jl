@@ -506,7 +506,7 @@ function Batch(dt::AbstractDataTable;
     id = idcol(dt)
     sj = sampleobj(dt)
     ids = setdiff(eachindex(sj), idc)
-    tbl = table(dt)
+    tbl = Table(table(dt))
     if dt isa SampleDataTable
         sampledata = SampleDataTable(aj, sj[ids], id, tbl[ids])
         signaltable = SampleDataTable(aj, sj[idc], id, tbl[idc])
