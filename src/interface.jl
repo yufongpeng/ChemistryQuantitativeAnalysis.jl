@@ -22,19 +22,8 @@ Base.setindex!(dt::AnalyteDataTable{A, S, N}, value, analyte::B, sample::T) wher
 Base.copy(dt::SampleDataTable) = SampleDataTable(copy(analyteobj(dt)), copy(sampleobj(dt)), samplecol(dt), copy(table(dt)))
 Base.copy(dt::AnalyteDataTable) = AnalyteDataTable(copy(analyteobj(dt)), copy(sampleobj(dt)), analytecol(dt), copy(table(dt)))
 
-function Base.getindex(calibration::AbstractVector{<: AbstractCalibration{A}}, analyte::B) where {A, B <: A}
-    id = findfirst(x -> first(x.analyte) == analyte, calibration)
-    isnothing(id) && throw(ArgumentError("Analyte $analyte does not have a calibration curve."))
-    calibration[id]
-end
-function Base.setindex!(calibration::AbstractVector{<: AbstractCalibration{A}}, v::S, analyte::B) where {A, B <: A, S <: AbstractCalibration{B}}
-    id = findfirst(x -> first(x.analyte) == analyte, calibration)
-    isnothing(id) && throw(ArgumentError("Analyte $analyte does not have a calibration curve."))
-    calibration[id] = v
-    calibration
-end
-Base.copy(cal::MultipleCalibration) = MultipleCalibration(cal.analyte, cal.type, cal.zero, cal.weight, cal.formula, cal.table, cal.model)
-Base.copy(cal::SingleCalibration) = SingleCalibration(cal.analyte, cal.conc)
+Base.copy(cal::ExternalCalibrator) = ExternalCalibrator(cal.analyte, cal.isd, cal.table, cal.model, cal.machine)
+Base.copy(cal::InternalCalibrator) = InternalCalibrator(cal.analyte, cal.conc)
 
 Base.isassigned(at::AnalysisTable, i::Symbol) = Base.isassigned(tables(at), i)
 Dictionaries.isinsertable(at::AnalysisTable) = true
@@ -63,6 +52,8 @@ function Base.getproperty(tbl::AnalysisMethod, p::Symbol)
         getfield(tbl, :analytetable).analyte[getfield(tbl, :analytetable).isd .< 0]
     elseif p == :nonisd
         getfield(tbl, :analytetable).analyte[getfield(tbl, :analytetable).isd .>= 0]
+    elseif p == :std
+        getfield(tbl, :analytetable).analyte[unique(filter(>(0), getfield(tbl, :analytetable).std))]
     elseif p == :point
         s = getfield(tbl, :signaltable)
         isnothing(s) ? s : sampleobj(s)
@@ -72,7 +63,7 @@ function Base.getproperty(tbl::AnalysisMethod, p::Symbol)
         getfield(tbl, p)
     end
 end
-Base.propertynames(tbl::AnalysisMethod) = (:analytetable, :signal, :rel_sig, :est_conc, :true_conc, :acc, :pointlevel, :conctable, :signaltable, :analyte, :isd, :nonisd, :point, :level)
+Base.propertynames(tbl::AnalysisMethod) = (:analytetable, :signal, :rel_sig, :est_conc, :nom_conc, :acc, :pointlevel, :conctable, :signaltable, :analyte, :isd, :nonisd, :std, :point, :level)
 
 function Base.getproperty(batch::Batch, p::Symbol)
     if p == :analyte
@@ -81,6 +72,8 @@ function Base.getproperty(batch::Batch, p::Symbol)
         getfield(batch, :method).isd
     elseif p == :nonisd
         getfield(batch, :method).nonisd
+    elseif p == :std
+        getfield(batch, :method).std
     elseif p == :point
         getfield(batch, :method).point
     elseif p == :level
@@ -89,7 +82,7 @@ function Base.getproperty(batch::Batch, p::Symbol)
         getfield(batch, p)
     end
 end
-Base.propertynames(batch::Batch) = (:method, :calibration, :data, :analyte, :isd, :nonisd, :point, :level)
+Base.propertynames(batch::Batch) = (:method, :calibrator, :data, :analyte, :isd, :nonisd, :std, :point, :level)
 
 struct EachAnalyte{T}
     table::T

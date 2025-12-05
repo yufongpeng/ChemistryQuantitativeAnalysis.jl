@@ -1,4 +1,4 @@
-analyte	isd	calibration
+analyte	isd	std
 Analyte1	2	2
 Analyte2	-1	-1
 Analyte3	4	4

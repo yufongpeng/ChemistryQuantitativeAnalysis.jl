@@ -3,16 +3,24 @@ module ChemistryQuantitativeAnalysis
 using GLM, CSV, TypedTables, LinearAlgebra, Dictionaries, ThreadsX, Tables, Pkg
 export SampleDataTable, AnalyteDataTable, 
     AnalysisTable, analysistable, AnalysisMethod, Batch, 
-    MultipleCalibration, SingleCalibration, calibration, init_calibration!, update_calibration!,
+    CalibrationModel,
+    ProportionalCalibrator,
+    LinearCalibrator,
+    QuadraticProportionalCalibrator,
+    QuadraticCalibrator,
+    LogarithmicCalibrator,
+    ExponentialCalibrator,
+    PowerCalibrator,
+    ExternalCalibrator, InternalCalibrator, calibrate, calibrate!, init_calibrate!, recalibrate!, retrieve_method!, set_isd!, set_std!, replace_std!,
     analyteobj, sampleobj, analytename, samplename, analytecol, samplecol,
-    inv_predict, set_inv_predict, set_inv_predict!, update_inv_predict!,
-    relative_signal, set_relative_signal, set_relative_signal!, update_relative_signal!,
-    quantification, set_quantification, set_quantification!, update_quantification!,
-    accuracy, set_accuracy, set_accuracy!, update_accuracy!,
-    isdof, isisd, 
-    findanalyte, getanalyte, findsample, getsample, eachanalyte, eachsample,
-    dynamic_range, lloq, uloq, signal_range, signal_lloq, signal_uloq, lod, loq, 
-    formula_repr, weight_repr, weight_value, formula_repr_ascii, weight_repr_ascii, format_number, mkbatch, 
+    inv_predict, set_inv_predict, set_inv_predict!, quantify_inv_predict!,
+    relative_signal, set_relative_signal, set_relative_signal!, quantify_relative_signal!,
+    quantify, set_quantify, set_quantify!, quantify!,
+    accuracy, set_accuracy, set_accuracy!, validate!,
+    stdof, isdof, isisd, 
+    findanalyte, getanalyte, findsample, getsample, findcalibrator, getcalibrator, setcalibrator!, eachanalyte, eachsample,
+    dynamic_range, lloq, uloq, signal_range, signal_lloq, signal_uloq, signal_lob, signal_lod, signal_loq, 
+    formula_repr, formula_repr_ascii, weight_repr, weight_repr_ascii, format_number, mkbatch, 
     typedmap
 
 import Base: getproperty, propertynames, show, write, eltype, length, iterate, 
@@ -21,8 +29,9 @@ import Base: getproperty, propertynames, show, write, eltype, length, iterate,
         copy
 import Dictionaries: set!, unset!, isinsertable, issettable
 import Tables: istable, rowaccess, rows, columnaccess, columns
-    
-abstract type AbstractCalibration{A, N} end
+
+@deprecate AbstractCalibration AbstractCalibrator
+abstract type AbstractCalibrator{A, N} end
 abstract type AbstractDataTable{A, S, N, T} end
 # abstract type AbstractAnalysisTable{A, T, S} end
 const TypeOrFn = Union{<: Type, <: Function}
@@ -208,20 +217,21 @@ A type containing analytes settings, and source calibration data. `A` determines
 * `analytetable`: `M` contaning three columns.
     * `analyte`: `AbstractVector{A}`, analytes in user-defined types.
     * `isd`: `AbstractVector{Int}`, index of internal standard. `0` means no internal standard, and `-1` means the analyte itself is a internal standard.
-    * `calibration`: index of analyte for calibration curve. `-1` means the analyte itself is a internal standard, so it will not be put into any calibration curve.
+    * `std`: index of analyte as calibration standard (internal or external). `0` means no standard.
 * `signal`: `Symbol`, type and key name of experimental acquisition data, e.g. `:area`.
 * `rel_sig`: `Symbol`, key name of relative signal.
 * `est_conc`: `Symbol`, key name of estimated concentration.
-* `true_conc`: `Symbol`, key name of true concentration.
+* `nom_conc`: `Symbol`, key name of nominal concentration.
 * `acc`: `Symbol`, key name of accuracy.
 * `pointlevel`: `Vector{Int}` matching each point to level. It can be empty if there is only one level in `conctable`.
-* `conctable`: `C <: AbstractDataTable{<: A, Int}` containing concentration data for each level. Samples must integers. One level indicates using `SingleCalibration`.
+* `conctable`: `C <: AbstractDataTable{<: A, Int}` containing concentration data for each level. Samples must integers. 
 * `signaltable`: `D <: AbstractDataTable{A}` containig signal for each point. It can be `nothing` if signal data is unecessary.
 
 # Properties
 * `analyte`: `AbstractVector{A}`, analytes in user-defined types, identical to `analytetable.analyte`.
 * `isd`: `AbstractVector{A}`, analytes which are internal standards.
 * `nonisd`: `AbstractVector{A}`, analytes which are not internal standards.
+* `std`: `AbstractVector{A}`, analytes which are calibration standards.
 * `point`: `AbstractVector{S}`, calibration points, identical to `sampleobj(signaltable)`. If `signaltable` is `nothing`, this value is `nothing` too.
 * `level`: `AbstractVector{Int}`, calibration levels, identical to `sampleobj(conctable)`.
 """
@@ -230,7 +240,7 @@ struct AnalysisMethod{A, M <: Table, C <: AbstractDataTable, D <: Union{Abstract
     signal::Symbol
     rel_sig::Symbol
     est_conc::Symbol
-    true_conc::Symbol
+    nom_conc::Symbol
     acc::Symbol
     pointlevel::Vector{Int}
     conctable::C
@@ -240,7 +250,7 @@ struct AnalysisMethod{A, M <: Table, C <: AbstractDataTable, D <: Union{Abstract
                     signal::Symbol,
                     rel_sig::Symbol,
                     est_conc::Symbol,
-                    true_conc::Symbol,
+                    nom_conc::Symbol,
                     acc::Symbol,
                     pointlevel::AbstractVector{Int}, 
                     conctable::AbstractDataTable{B, Int}, 
@@ -249,7 +259,7 @@ struct AnalysisMethod{A, M <: Table, C <: AbstractDataTable, D <: Union{Abstract
         cp = propertynames(analytetable)
         :analyte in cp || throw(ArgumentError("Column `:analyte` is required in `analytetable"))
         :isd in cp || throw(ArgumentError("Column `:isd` is required in `analytetable"))
-        :calibration in cp || throw(ArgumentError("Column `:calibration` is required in `analytetable"))
+        :std in cp || throw(ArgumentError("Column `:std` is required in `analytetable"))
         A = eltype(analytetable.analyte)
         B <: A || throw(ArgumentError("Analyte type of conctable $B should be a subtype of $A"))
         C <: A || throw(ArgumentError("Analyte type of signaltable $C should be a subtype of $A"))
@@ -262,14 +272,14 @@ struct AnalysisMethod{A, M <: Table, C <: AbstractDataTable, D <: Union{Abstract
                 a in analyteobj(signaltable) || throw(ArgumentError("Analyte `$a` is not in the `signatable`."))
             end
         end
-        new{A, M, typeof(conctable), typeof(signaltable)}(analytetable, signal, rel_sig, est_conc, true_conc, acc, convert(Vector{Int}, pointlevel), conctable, signaltable)
+        new{A, M, typeof(conctable), typeof(signaltable)}(analytetable, signal, rel_sig, est_conc, nom_conc, acc, convert(Vector{Int}, pointlevel), conctable, signaltable)
     end
     function AnalysisMethod(
                     analytetable::M,
                     signal::Symbol,
                     rel_sig::Symbol,
                     est_conc::Symbol,
-                    true_conc::Symbol,
+                    nom_conc::Symbol,
                     acc::Symbol,
                     pointlevel::AbstractVector{Int}, 
                     conctable::AbstractDataTable{B, Int}, 
@@ -278,13 +288,13 @@ struct AnalysisMethod{A, M <: Table, C <: AbstractDataTable, D <: Union{Abstract
         cp = propertynames(analytetable)
         :analyte in cp || throw(ArgumentError("Column `:analyte` is required in `analytetable"))
         :isd in cp || throw(ArgumentError("Column `:isd` is required in `analytetable"))
-        :calibration in cp || throw(ArgumentError("Column `:calibration` is required in `analytetable"))
+        :std in cp || throw(ArgumentError("Column `:std` is required in `analytetable"))
         A = eltype(analytetable.analyte)
         B <: A || throw(ArgumentError("Analyte type of conctable should be a subtype of $A"))
         for a in analyteobj(conctable)
             a in analytetable.analyte || throw(ArgumentError("Analyte `$a` is not in the `analytetable`."))
         end
-        new{A, M, typeof(conctable), Nothing}(analytetable, signal, rel_sig, est_conc, true_conc, acc, convert(Vector{Int}, pointlevel), conctable, signaltable)
+        new{A, M, typeof(conctable), Nothing}(analytetable, signal, rel_sig, est_conc, nom_conc, acc, convert(Vector{Int}, pointlevel), conctable, signaltable)
     end
 end
 
@@ -297,7 +307,7 @@ end
         signal = :area, 
         rel_sig = :relative_signal, 
         est_conc = :estimated_concentration, 
-        true_conc = :true_concentration, 
+        nom_conc = :nominal_concentration, 
         kwargs...
     )
 
@@ -308,9 +318,9 @@ Convenient contructors for `AnalysisMethod` which make constructing a `Table` op
 # Keyword arguments
 * `rel_sig`: key name of relative signal. 
 * `est_conc`: key name of estimated concentration. 
-* `true_conc`: key name of true concentration. 
+* `nom_conc`: key name of nominal concentration. 
 * `acc`: key name of accuracy. 
-* Other keyword arguments will be columns in `analytetable`; when `analyte`, `isd` and `calibration` are not provided, it will use analyte in `conctable`. 
+* Other keyword arguments will be columns in `analytetable`; when `analyte`, `isd` and `std` are not provided, it will use analyte in `conctable`. 
 """
 function AnalysisMethod(
         conctable::AbstractDataTable, 
@@ -319,36 +329,67 @@ function AnalysisMethod(
         pointlevel = nothing; 
         rel_sig = :relative_signal,
         est_conc = :estimated_concentration,
-        true_conc = :true_concentration, 
+        nom_conc = :nominal_concentration, 
         acc = :accuracy, 
         kwargs...
     )
     signal = Symbol(signal)
     rel_sig = Symbol(rel_sig)
     est_conc = Symbol(est_conc)
-    true_conc = Symbol(true_conc)
+    nom_conc = Symbol(nom_conc)
     acc = Symbol(acc)
     if !isa(pointlevel, AbstractVector{<: Integer})
         pointlevel = getproperty(signaltable, Symbol(pointlevel))
     end
     analyte = get(kwargs, :analyte, analyteobj(conctable))
     isd = get(kwargs, :isd, zeros(Int, length(analyteobj(conctable))))
-    calibration = get(kwargs, :calibration, collect(eachindex(analyteobj(conctable))))
-    analytetable = Table(; analyte, isd, calibration, kwargs...)    
-    AnalysisMethod(analytetable, signal, rel_sig, est_conc, true_conc, acc, pointlevel, conctable, signaltable)
+    std = get(kwargs, :std, collect(eachindex(analyteobj(conctable))))
+    analytetable = Table(; analyte, isd, std, kwargs...)    
+    AnalysisMethod(analytetable, signal, rel_sig, est_conc, nom_conc, acc, pointlevel, conctable, signaltable)
 end
 
+abstract type AbstractCalibrationModel{T} end 
+abstract type CurveType end 
+struct Proportional <: CurveType end
+struct Linear <: CurveType end
+struct QuadraticProportional <: CurveType end
+struct Quadratic <: CurveType end
+struct Logarithmic <: CurveType end
+struct Exponential <: CurveType end
+struct Power <: CurveType end
+
 """
-    MultipleCalibration{A, N, T <: Table} <: AbstractCalibration{A, N}
+    CalibrationModel{T <: CurveType} 
 
-A mutable type holding all data and settings for a calibration curve. `A` determines analyte type, and `N` determines numeric type. Only `Float64` is supported because of issue of `GLM`.
 
-# Fields
-* `analyte`: `Tuple{A, Any}`. First element is the analyte being quantified, and the second element is its internal standard for which `nothing` indicates no internal standard.
 * `type`: `Bool` determines whether fitting a linear line (`true`) or quadratic curve (`false`).
 * `zero`: `Bool` determines whether forcing the curve crossing (0, 0) (`true`) or ignoring it (`false`).
 * `weight`: `Float64` represents the exponential applying to each element of `x` as a weighting vector.
 * `formula`: `FormulaTerm`, the formula for fitting calibration curve.
+"""
+mutable struct CalibrationModel{T <: CurveType} <: AbstractCalibrationModel{T}
+    formula::FormulaTerm
+    wnm::String 
+    wfn::Function
+end
+
+const ProportionalCalibrator = CalibrationModel{Proportional}
+const LinearCalibrator = CalibrationModel{Linear}
+const QuadraticProportionalCalibrator = CalibrationModel{QuadraticProportional}
+const QuadraticCalibrator = CalibrationModel{Quadratic}
+const LogarithmicCalibrator = CalibrationModel{Logarithmic}
+const ExponentialCalibrator = CalibrationModel{Exponential}
+const PowerCalibrator = CalibrationModel{Power}
+
+@deprecate MultipleCalibration ExternalCalibrator
+"""
+    ExternalCalibrator{A, N, T <: Table} <: AbstractCalibrator{A, N}
+
+A mutable type holding all data and settings for an external calibration curve. `A` determines analyte type, and `N` determines numeric type. Only `Float64` is supported because of issue of `GLM`.
+
+# Fields
+* `analyte`: `Tuple{A, Any}`. First element is the analyte being quantified, and the second element is its internal standard for which `nothing` indicates no internal standard.
+* `isd`
 * `table`: `TypedTable.Table`, the cleaned up calibration data, containing 7 columns.
     * `id`: Point name
     * `level`: The index of concentration level. The larger, the higher concentraion it represents.
@@ -357,90 +398,80 @@ A mutable type holding all data and settings for a calibration curve. `A` determ
     * `x̂`: Predicted concentration
     * `accuracy`: Accuracy, i.e. `x̂/x`.
     * `include`: Whether this point is included or not
-* `model`: `GLM` object.
+* `calibrationmachine`: `AbstractCalibrationMachine` object.
 """
-mutable struct MultipleCalibration{A, N, T <: Table} <: AbstractCalibration{A, N}
-    analyte::Tuple{A, Any}
-    type::Bool
-    zero::Bool
-    weight::N
-    formula::FormulaTerm
+mutable struct ExternalCalibrator{A, N, T <: Table} <: AbstractCalibrator{A, N}
+    analyte::A
+    isd
     table::T
-    model
-    function MultipleCalibration(analyte::Tuple{A, B}, type, zero, weight, formula, table::T, model) where {A, T, B}
+    model::CalibrationModel
+    machine
+    function ExternalCalibrator(analyte::A, isd, table::T, model, machine) where {A, T}
         N = eltype(table.x)
         N == eltype(table.y) || throw(ArgumentError(string("Element of column x is `", N, "`, while element of column y is `", eltype(table.y), "`.")))
         N == eltype(table.x̂) || throw(ArgumentError(string("Element of column x is `", N, "`, while element of column x̂ is `", eltype(table.x̂), "`.")))
         N == eltype(table.accuracy) || throw(ArgumentError(string("Element of column x is `", N, "`, while element of column accuracy is `", eltype(table.accuracy), "`.")))
-        new{A, N, T}(analyte, type, zero, N(weight), formula, table, model)
+        new{A, N, T}(analyte, isd, table, model, machine)
     end
 end
 
+@deprecate SingleCalibration InternalCalibrator
 """
-    SingleCalibration{A, N} <: AbstractCalibration{A, N}
+    InternalCalibrator{A, N} <: AbstractCalibrator{A, N}
 
-A mutable type holding all data for single point calibration.
+A mutable type holding all data for internal calibration with a single level.
 
 # Fields
-* `analyte`: `Tuple{A}` is the analyte with known concentration (internal standard).
+* `analyte`: `A` is the analyte with known concentration (internal standard).
 * `conc`: `Float64`, concentration of analyte.
 """
-mutable struct SingleCalibration{A, N} <: AbstractCalibration{A, N}
-    analyte::Tuple{A}
+mutable struct InternalCalibrator{A, N} <: AbstractCalibrator{A, N}
+    analyte::A
     conc::N
 end
 
 """
-    Batch{A, M <: AnalysisMethod{A}, C <: AbstractVector{<: AbstractCalibration{<: A}}, D <: Union{AnalysisTable{<: A}, Nothing}}
+    Batch{A, M <: AnalysisMethod{A}, C <: AbstractVector{<: AbstractCalibrator{<: A}}, D <: Union{AnalysisTable{<: A}, Nothing}}
 
 A type representing a batch for quantitative analysis. `A` determines analyte type, and `T` determines table type.
 
 # Fields
 * `method`: `M`, method.
-* `calibration`: `C`, calibration curves.
+* `calibrator`: `C`, calibrators.
 * `data`: `D`, data for analysis, .
 
 # Properties
 * `analyte`: `AbstractVector{A}`, analytes in user-defined types, identical to `method.analyte`.
 * `isd`: `AbstractVector{<: A}`, analytes which are internal standards, identical to `method.isd`.
 * `nonisd`: `AbstractVector{<: A}`, analytes which are not internal standards, identical to `method.nonisd`.
+* `std`: `AbstractVector{A}`, analytes which are calibration standards, identical to `method.std`.
 * `point`: `AbstractVector` or `Nothing`, calibration points, identical to `method.point`.
 * `level`: `AbstractVector{Int}`, calibration levels, identical to `method.level`.
 
 # Constructors
-* `Batch(method, calibration, data = nothing)`
+* `Batch(method, calibrator, data = nothing)`
 """
-struct Batch{A, M <: AnalysisMethod{A}, C <: AbstractVector{<: AbstractCalibration{<: A}}, D <: Union{AnalysisTable{<: A}, Nothing}}
+struct Batch{A, M <: AnalysisMethod{A}, C <: AbstractVector{<: AbstractCalibrator}, D <: Union{AnalysisTable{<: A}, Nothing}}
     method::M
-    calibration::C
+    calibrator::C
     data::D
-    Batch(method::M, calibration::C, data::D) where {A, M <: AnalysisMethod{A}, C <: AbstractVector{<: AbstractCalibration{<: A}}, D <: AnalysisTable{<: A}} = new{A, M, C, D}(method, calibration, data)
-    Batch(method::M, calibration::C, data::Nothing) where {A, M <: AnalysisMethod{A}, C <: AbstractVector{<: AbstractCalibration{<: A}}} = new{A, M, C, Nothing}(method, calibration, data)
-    Batch(method::M, calibration::C) where {A, M <: AnalysisMethod{A}, C <: AbstractVector{<: AbstractCalibration{<: A}}} = new{A, M, C, Nothing}(method, calibration, nothing)
+    Batch(method::M, calibrator::C, data::D) where {A, M <: AnalysisMethod{A}, C <: AbstractVector{<: AbstractCalibrator}, D <: AnalysisTable{<: A}} = new{A, M, C, D}(method, calibrator, data)
+    Batch(method::M, calibrator::C, data::Nothing) where {A, M <: AnalysisMethod{A}, C <: AbstractVector{<: AbstractCalibrator}} = new{A, M, C, Nothing}(method, calibrator, data)
+    Batch(method::M, calibrator::C) where {A, M <: AnalysisMethod{A}, C <: AbstractVector{<: AbstractCalibrator}} = new{A, M, C, Nothing}(method, calibrator, nothing)
 end
 
 """
     Batch(method::AnalysisMethod, data = nothing; type = true, zero = false, weight = 0)
 
-Construct a `Batch` from `method`, and optionally `data` with specified calibration parameters. See "MultipleCalibration" for detail description of keyword arguments.
+Construct a `Batch` from `method`, and optionally `data` with specified calibrator parameters. See "ExternalCalibrator" for detail description of keyword arguments.
 """
-function Batch(method::AnalysisMethod{A}, data = nothing;
-                type = true, 
-                zero = false, 
-                weight = 0
-            ) where A
+function Batch(method::AnalysisMethod{A}, data = nothing) where A
     Batch(
         method,
-        if length(sampleobj(method.conctable)) > 1 
-            map(analyteobj(method.conctable)) do analyte
-                calibration(method, analyte; type, zero, weight)
-            end
-        else
-            map(analyteobj(method.conctable)) do analyte
-                SingleCalibration((analyte, ), first(getanalyte(method.conctable, analyte)))
-            end
-        end
-        ,
+        (AbstractCalibrator{T} where {T <: A})[],
+        # map(analyteobj(method.conctable)) do analyte
+        #     calibrate(method, analyte; model, kwargs...)
+        # end,
         data
     )
 end
@@ -449,13 +480,13 @@ end
 
 Construct a new batch from an old batch and a `AnalysisTable` as new data.
 """
-Batch(batch::Batch, at::AnalysisTable) = Batch(batch.method, batch.calibration, at)
+Batch(batch::Batch, at::AnalysisTable) = Batch(batch.method, batch.calibrator, at)
 """
     Batch(dt::AbstractDataTable; 
         signal = :area, 
         rel_sig = :relative_signal, 
         est_conc = :estimated_concentration, 
-        true_conc = :true_concentration, 
+        nom_conc = :nominal_concentration, 
         acc = :accuracy, 
         calid = r"Cal_(\\d)_(\\d*-*\\d*)", 
         order = "LR", 
@@ -473,7 +504,7 @@ Construct a batch from data. All analytes are considered as normal analytes, so 
 * `signal`: type and key name of experimental acquisition data, e.g. `:area`.
 * `rel_sig`: key name of relative signal.
 * `est_conc`: key name of estimated concentration.
-* `true_conc`: key name of true concentration.
+* `nom_conc`: key name of nominal concentration.
 * `acc`: key name of accuracy.
 * `calid`: identifier for calibration point. It has two possible values.
     * `Regex`, level and concentration related factors (ratio of concentration or dilution factor) should be captured. The former should be able to be parsed as integer directly; the latter should be able to be parsed as floating number after applying `parse_decimal`. 
@@ -488,7 +519,7 @@ function Batch(dt::AbstractDataTable;
                 signal = :area, 
                 rel_sig = :relative_signal, 
                 est_conc = :estimated_concentration, 
-                true_conc = :true_concentration, 
+                nom_conc = :nominal_concentration, 
                 acc = :accuracy, 
                 calid = r"Cal_(\d)_(\d*-*\d*)", 
                 order = "LR", 
@@ -499,7 +530,7 @@ function Batch(dt::AbstractDataTable;
     signal = Symbol(signal)
     rel_sig = Symbol(rel_sig)
     est_conc = Symbol(est_conc)
-    true_conc = Symbol(true_conc)
+    nom_conc = Symbol(nom_conc)
     acc = Symbol(acc)
     idc, pointlevel, levels, concs = parse_calibration_level_name(dt, calid, order, ratio, df, f2c, parse_decimal)
     aj = analyteobj(dt)
@@ -519,8 +550,8 @@ function Batch(dt::AbstractDataTable;
     else
         conctable = AnalyteDataTable(Table(; (id => aj, )..., (Symbol.(levels) .=> map(x -> repeat([0], length(aj)) .+ x, concs))...), id, Int)
     end
-    analytetable = Table(; analyte = aj, isd = zeros(Int, length(aj)), calibration = collect(1:length(aj)))
-    Batch(AnalysisMethod(analytetable, signal, rel_sig, est_conc, true_conc, acc, pointlevel, conctable, signaltable), MultipleCalibration{eltype(analyteobj(dt))}[], analysistable((signal => sampledata, )))
+    analytetable = Table(; analyte = aj, isd = zeros(Int, length(aj)), std = collect(1:length(aj)))
+    Batch(AnalysisMethod(analytetable, signal, rel_sig, est_conc, nom_conc, acc, pointlevel, conctable, signaltable), ExternalCalibrator{<: eltype(analyteobj(dt))}[], analysistable((signal => sampledata, )))
 end
 
 include("interface.jl")

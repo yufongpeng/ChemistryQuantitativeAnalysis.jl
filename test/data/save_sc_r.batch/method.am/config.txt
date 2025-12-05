@@ -7,8 +7,8 @@ relative_signal
 [est_conc]
 estimated_concentration
 
-[true_conc]
-true_concentration
+[nom_conc]
+nominal_concentration
 
 [acc]
 accuracy

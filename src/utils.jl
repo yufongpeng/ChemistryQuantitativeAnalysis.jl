@@ -58,20 +58,121 @@ typedmap(::Type{T}, iters...) where T = collect(T, Base.Generator(T, iters...))
 typedmap(fn::F, ::Type{T}, iters...) where {F, T} = collect(T, Base.Generator(fn, iters...))
 
 """
-    getformula(cal::MultipleCalibration)
+    getformula(cal::ExternalCalibrator)
     getformula(type::Bool, zero::Bool)
 
 Get a `FormulaTerm` based on `type` and `zero` or parameters from `cal`.
 
-See `MultipleCalibration` for detail description of `type` and `zero`.
+See `ExternalCalibrator` for detail description of `type` and `zero`.
 """
-getformula(cal::MultipleCalibration) = getformula(cal.type, cal.zero)
+getformula(cal::ExternalCalibrator) = getformula(cal.type, cal.zero)
 getformula(type::Bool, zero::Bool) = if type 
     zero ? @formula(y ~ 0 + x) : @formula(y ~ x)
 else
     zero ? @formula(y ~ 0 + x + x ^ 2) : @formula(y ~ x + x ^ 2)
 end
+getformula(::Type{Proportional}) = @formula(y ~ 0 + x)
+getformula(::Type{Linear}) = @formula(y ~ x)
+getformula(::Type{QuadraticProportional}) = @formula(y ~ 0 + x + x ^ 2)
+getformula(::Type{Quadratic}) = @formula(y ~ x + x ^ 2)
+getformula(::Type{Logarithmic}) = @formula(y ~ log(x))
+getformula(::Type{Exponential}) = @formula(y ~ exp(x))
+getformula(::Type{Power}) = @formula(log(y) ~ log(x))
 
+"""
+    const_weight(x, y) = 1
+
+Constant weight function
+"""
+const_weight(x, y) = 1.0
+
+"""
+    WFN::Dict{String, Function}
+
+The default dictionary that maps names of weight function to the actual functions
+"""
+const WFN = Dict{String, Function}(
+    "1"     => const_weight,
+    "1/√x"  => (x, y) -> 1/sqrt(x),
+    "1/x^0.5"  => (x, y) -> 1/sqrt(x),
+    "1/x^(1/2)"  => (x, y) -> 1/sqrt(x),
+    "1/x"   => (x, y) -> 1/x,
+    "1/x²"  => (x, y) -> 1/x^2,
+    "1/x^2"  => (x, y) -> 1/x^2,
+    "1/√y"  => (x, y) -> 1/sqrt(y),
+    "1/y^0.5"  => (x, y) -> 1/sqrt(y),
+    "1/y^(1/2)"  => (x, y) -> 1/sqrt(y),
+    "1/y"   => (x, y) -> 1/y,
+    "1/y²"  => (x, y) -> 1/y^2,
+    "1/y^2"  => (x, y) -> 1/y^2,
+    "1/√(x+y)"  => (x, y) -> 1/sqrt(x+y),
+    "1/(x+y)^0.5"  => (x, y) -> 1/sqrt(x+y),
+    "1/(x+y)^(1/2)"  => (x, y) -> 1/sqrt(x+y),
+    "1/(x+y)"   => (x, y) -> 1/(x+y),
+    "1/(x+y)²"  => (x, y) -> 1/(x+y)^2,
+    "1/(x+y)^2"  => (x, y) -> 1/(x+y)^2,
+    "1/√|log(x)|"  => (x, y) -> 1/sqrt(abs(log(x))),
+    "1/|log(x)|^0.5"  => (x, y) -> 1/sqrt(abs(log(x))),
+    "1/|log(x)|^(1/2)"  => (x, y) -> 1/sqrt(abs(log(x))),
+    "1/|log(x)|"   => (x, y) -> 1/abs(log(x)),
+    "1/log(x)²"  => (x, y) -> 1/abs(log(x))^2,
+    "1/log(x)^2"  => (x, y) -> 1/log(x)^2,
+    "1/√|log(y)|"  => (x, y) -> 1/sqrt(abs(log(y))),
+    "1/|log(y)|^0.5"  => (x, y) -> 1/sqrt(abs(log(y))),
+    "1/|log(y)|^(1/2)"  => (x, y) -> 1/sqrt(abs(log(y))),
+    "1/|log(y)|"   => (x, y) -> 1/abs(log(y)),
+    "1/log(y)²"  => (x, y) -> 1/log(y)^2,
+    "1/log(y)^2"  => (x, y) -> 1/log(y)^2
+)
+
+const WNM = Dict{String, Tuple{String, String}}(
+    "1"     => ("1", "1"),
+    "1/√x"  => ("1/√x", "1/x^(1/2)"),
+    "1/x^0.5" => ("1/√x", "1/x^(1/2)"),
+    "1/x^(1/2)" => ("1/√x", "1/x^(1/2)"),
+    "1/x"   => ("1/x", "1/x"),
+    "1/x²"  => ("1/x²", "1/x^2"),
+    "1/x^2" => ("1/x²", "1/x^2"),
+    "1/√y"  => ("1/√y", "1/y^(1/2)"),
+    "1/y^0.5" => ("1/√y", "1/y^(1/2)"),
+    "1/y^(1/2)" => ("1/√y", "1/y^(1/2)"),
+    "1/y"   => ("1/y", "1/y"),
+    "1/y²"  => ("1/y²", "1/y^2"),
+    "1/y^2" => ("1/y²", "1/y^2"),
+    "1/√(x+y)"  => ("1/√(x+y)", "1/(x+y)^(1/2)"),
+    "1/(x+y)^0.5" => ("1/√(x+y)", "1/(x+y)^(1/2)"),
+    "1/(x+y)^(1/2)" => ("1/√(x+y)", "1/(x+y)^(1/2)"),
+    "1/(x+y)"   => ("1/(x+y)", "1/(x+y)"),
+    "1/(x+y)²"  => ("1/(x+y)²", "1/(x+y)^2"),
+    "1/(x+y)^2" => ("1/(x+y)²", "1/(x+y)^2"),
+    "1/√|log(x)|"  => ("1/√|log(x)|", "1/|log(x)|^(1/2)"),
+    "1/|log(x)|^0.5"  => ("1/√|log(x)|", "1/|log(x)|^(1/2)"),
+    "1/|log(x)|^(1/2)"  => ("1/√|log(x)|", "1/|log(x)|^(1/2)"),
+    "1/|log(x)|"   => ("1/|log(x)|", "1/|log(x)|"),
+    "1/log(x)²"  => ("1/log(x)²", "1/log(x)^2"),
+    "1/log(x)^2"  => ("1/log(x)²", "1/log(x)^2"),
+    "1/√|log(y)|"  => ("1/|log(y)|", "1/|log(y)|^(1/2)"),
+    "1/|log(y)|^0.5"  => ("1/√|log(y)|", "1/|log(y)|^(1/2)"),
+    "1/|log(y)|^(1/2)"  => ("1/√|log(y)|", "1/|log(y)|^(1/2)"),
+    "1/|log(y)|"   => ("1/|log(y)|", "1/|log(y)|"),
+    "1/log(y)²"  => ("1/log(y)²", "1/log(y)^2"),
+    "1/log(y)^2"  => ("1/log(y)²", "1/log(y)^2"),
+)
+
+getwts(wfn, x, y) = map(wfn, x, y)
+getwts(wfn::Nothing, x, y) = similar(y, 0)
+
+"""
+    stdof(analyte::B, method::AnalysisMethod{A}) where {A, B <: A}
+
+Return calibratio standard of `analyte` based on `method`.
+"""
+function stdof(analyte::B, method::AnalysisMethod{A}) where {A, B <: A}
+    aid = findfirst(==(analyte), method.analytetable.analyte)
+    isnothing(aid) && throw(ArgumentError("Analyte $analyte is not in the method"))
+    iid = method.analytetable.std[aid]
+    (iid > 0 ? method.analytetable.analyte[iid] : nothing)::Union{A, Nothing}
+end
 """
     isdof(analyte::B, method::AnalysisMethod{A}) where {A, B <: A}
 
@@ -81,7 +182,7 @@ function isdof(analyte::B, method::AnalysisMethod{A}) where {A, B <: A}
     aid = findfirst(==(analyte), method.analytetable.analyte)
     isnothing(aid) && throw(ArgumentError("Analyte $analyte is not in the method"))
     iid = method.analytetable.isd[aid]
-    (iid > 0 ? method.analytetable.analyte[iid] : nothing)::Union{A, Nothing}
+    (iid > 0 ? method.analytetable.analyte[iid] : iid == 0 ? nothing : analyte)::Union{A, Nothing}
 end
 """
     isisd(analyte::B, method::AnalysisMethod{A}) where {A, B <: A}
@@ -209,7 +310,24 @@ function getsample(dt::SampleDataTable{A, S, N}, sample) where {A, S, N}
     [getproperty(dt, p)[id] for p in analytename(dt)]::Vector{N}
 end
 
-function critical_point(cal::MultipleCalibration{A, N}) where {A, N}
+findcalibrator(batch::Batch, analyte) = findcalibrator(batch.calibrator, analyte)
+function findcalibrator(calibrator::AbstractVector{A}, analyte) where {A <: AbstractCalibrator}
+    findfirst(x -> x.analyte == analyte, calibrator)
+end
+function findcalibrator(calibrator::AbstractVector{A}, analyte::Symbol) where {A <: AbstractCalibrator}
+    findfirst(x -> Symbol(x.analyte) == analyte, calibrator)
+end
+
+getcalibrator(batch::Batch, analyte) = getcalibrator(batch.calibrator, analyte)
+function getcalibrator(calibrator::AbstractVector{A}, analyte) where {A <: AbstractCalibrator}
+    id = findcalibrator(calibrator, analyte)
+    isnothing(id) && throw(ArgumentError("Analyte $analyte does not have a calibration curve."))
+    calibrator[id]
+end
+getcalibrator(batch::Batch, id::Int) = getcalibrator(batch.calibrator, id)
+getcalibrator(calibrator::AbstractVector{A}, id::Int) where {A <: AbstractCalibrator} = calibrator[id]
+
+function critical_point(cal::ExternalCalibrator{A, N}) where {A, N}
     β = cal.model.model.pp.beta0::Vector{N}
     c, b, a = cal.zero ? (0, β...) : β
     -b / 2a
@@ -274,74 +392,87 @@ table_convert(::Type{D}, data::A) where {D, A <: AbstractDataTable} =
     A(analyteobj(data), sampleobj(data), idcol(data), D(table(data)))
 
 """
-    dynamic_range(cal::MultipleCalibration)
+    dynamic_range(cal::ExternalCalibrator)
 
 Return dynamic range as a `Tuple` (lloq, uloq).
 """
-dynamic_range(cal::MultipleCalibration) = (lloq(cal), uloq(cal))
+dynamic_range(cal::ExternalCalibrator) = (lloq(cal), uloq(cal))
 """
-    signal_range(cal::MultipleCalibration)
+    signal_range(cal::ExternalCalibrator)
 
 Return theoretical signal of dynamic range as a `Tuple` (lloq, uloq).
 """
-signal_range(cal::MultipleCalibration) = Tuple(predict(cal.model, Table(; x = collect(dynamic_range(cal)))))
+signal_range(cal::ExternalCalibrator) = (predict(cal.machine, Table(; x = collect(dynamic_range(cal))))..., )
 
 """
-    lloq(cal::MultipleCalibration)
+    lloq(cal::ExternalCalibrator)
 
 Return lower limit of quantification.
 """
-lloq(cal::MultipleCalibration) = (cal.type || last(cal.model.model.pp.beta0) < 0) ? cal.table.x[findfirst(cal.table.include)] : max(cal.table.x[findfirst(cal.table.include)], critical_point(cal))
+lloq(cal::ExternalCalibrator) = cal.table.x[findfirst(cal.table.include)]
 """
-    uloq(cal::MultipleCalibration)
+    uloq(cal::ExternalCalibrator)
 
 Return upper limit of quantification.
 """
-uloq(cal::MultipleCalibration) = (cal.type || last(cal.model.model.pp.beta0) > 0) ? cal.table.x[findlast(cal.table.include)] : min(cal.table.x[findlast(cal.table.include)], critical_point(cal))
+uloq(cal::ExternalCalibrator) = cal.table.x[findlast(cal.table.include)]
 """
-    signal_lloq(cal::MultipleCalibration)
+    signal_lloq(cal::ExternalCalibrator)
 
 Return theoretical signal of lower limit of quantification.
 """
-signal_lloq(cal::MultipleCalibration) = only(predict(cal.model, Table(; x = [lloq(cal)])))
+signal_lloq(cal::ExternalCalibrator) = only(predict(cal.machine, Table(; x = [lloq(cal)])))
 """
-    uloq(cal::MultipleCalibration)
+    uloq(cal::ExternalCalibrator)
 
 Return theoretical signal of upper limit of quantification.
 """
-signal_uloq(cal::MultipleCalibration) = only(predict(cal.model, Table(; x = [uloq(cal)])))
+signal_uloq(cal::ExternalCalibrator) = only(predict(cal.machine, Table(; x = [uloq(cal)])))
 
-function blank(cal::MultipleCalibration{A, N}) where {A, N}
-    β = cal.model.model.pp.beta0::Vector{N}
-    if cal.type
-        b = length(β) == 1 ? 0 : first(β)
-    else
-        length(β) == 2 && return 0
-        c, b, a = β
-        a < 0 && return c
-        max(0, b ^ 2 / 4a - b ^ 2 / 2a + c)
-    end
+# function blank(cal::ExternalCalibrator{A, N}) where {A, N}
+#     β = cal.model.model.pp.beta0::Vector{N}
+#     if cal.type
+#         b = length(β) == 1 ? 0 : first(β)
+#     else
+#         length(β) == 2 && return 0
+#         c, b, a = β
+#         a < 0 && return c
+#         max(0, b ^ 2 / 4a - b ^ 2 / 2a + c)
+#     end
+# end
+
+blank(cal::ExternalCalibrator) = blank(cal.model)
+blank(cal::CalibrationModel{Proportional}) = 0
+blank(cal::CalibrationModel{Linear}) = 0
+blank(cal::CalibrationModel{QuadraticProportional}) = 0
+blank(cal::CalibrationModel{Quadratic}) = 0
+blank(cal::CalibrationModel{Logarithmic}) = -Inf
+blank(cal::CalibrationModel{Exponential}) = 0
+blank(cal::CalibrationModel{Power}) = 0
+
+function signal_lob(cal::ExternalCalibrator)
+    zero_id = findall(==(0), cal.table.level)
+    isempty(zero_id) ? blank(cal) + 1.645 * std(cal.table.y[findfirst(cal.table.include)]) : mean(cal.table.y[zero_id]) + 1.645 * std(cal.table.y[zero_id])
 end
 
 """
-    loq(cal::MultipleCalibration)
+    signal_loq(cal::ExternalCalibrator)
 
-Theoretical limit of quantification (LOQ); concentration of signal adding blank signal and 10 times standard deviation of LLOQ signal.
-
-Blank signal is defined as the lowest signal such that the corresponding concentration is larger than 0. 
+Theoretical limit of detection (LOD) in signal space.
 """
-loq(cal::MultipleCalibration) = only(inv_predict(cal, [blank(cal) + 10 * std(cal.table.y[findfirst(cal.table.include)])]))
+function signal_lod(cal::ExternalCalibrator) 
+    zero_id = findall(==(0), cal.table.level)
+    isempty(zero_id) ? blank(cal) + 3.3 * std(cal.table.y[zero_id]) : signal_lob(cal) + 1.645 * std(cal.table.y[findfirst(cal.table.include)])
+end
 """
-    lod(cal::MultipleCalibration)
+    loq(cal::ExternalCalibrator)
 
-Theoretical limit of quantification (LOQ); concentration of signal adding blank signal and 3.3 times standard deviation of LLOQ signal.
-
-Blank signal is defined as the lowest signal such that the corresponding concentration is larger than 0. 
+Theoretical limit of quantification (LOQ) in signal space.
 """
-lod(cal::MultipleCalibration) = only(inv_predict(cal, [blank(cal) + 3.3 * std(cal.table.y[findfirst(cal.table.include)])]))
+signal_loq(cal::ExternalCalibrator) = blank(cal) + 10 * std(cal.table.y[findfirst(cal.table.include)])
 
 """
-    weight_repr(cal::MultipleCalibration)
+    weight_repr(cal::ExternalCalibrator)
     weight_repr(weight::Number)
 
 Return string representation of `cal.weight` or `weight`. 
@@ -349,82 +480,73 @@ Return string representation of `cal.weight` or `weight`.
 "none" for 0, "1/√x" for -0.5, "1/x" for -1, "1/x²" for -2, 
 "x^`\$weight`" for other positive `weight`, and "1/x^`\$(abs(weight))`" for other negative `weight`
 """
-function weight_repr(cal::MultipleCalibration)
-    weight_repr(cal.weight)
-end
-weight_repr(weight::Number) = if weight == -0.5
-    "1/√x"
-elseif weight == -1
-    "1/x"
-elseif weight == -2
-    "1/x²"
-elseif weight == 0
-    "none"
-elseif weight == 1
-    "x"
-elseif weight > 0
-    "x^$weight"
-else
-    "1/x^$(abs(weight))"
-end
-"""
-    weight_value(weight)
-
-Return value of weight from string representation. See "weight_repr".
-"""
-weight_value(weight) = if weight == "none"
-    0
-elseif weight == "1/√x"
-    -0.5
-elseif weight == "1/x"
-    -1
-elseif weight == "1/x²"
-    -2
-elseif weight == "x"
-    1
-else
-    neg = match(r"1/x\^(\d*)", weight)
-    isnothing(neg) ? parse(Float64, first(match(r"x\^(\d*)", weight))) : -parse(Float64, first(neg))
-end
+weight_repr(cal::ExternalCalibrator) = weight_repr(cal.model)
+weight_repr(model::CalibrationModel) = first(WNM[model.wnm])
 
 """
-    formula_repr(cal::SingleCalibration; digits = nothing, sigdigits = 4)
-    formula_repr(cal::MultipleCalibration; digits = nothing, sigdigits = 4)
+    formula_repr(cal::InternalCalibrator; digits = nothing, sigdigits = 4)
+    formula_repr(cal::ExternalCalibrator; digits = nothing, sigdigits = 4)
 
 Return string representation of formula of `cal` with specified `digits` and `sigdigits`. See `format_number`.
 """
-formula_repr(cal::SingleCalibration; digits = nothing, sigdigits = 4) = "y = $(format_number(1/first(getanalyte(cal.caltable.conctable, cal.isd)); digits, sigdigits))x"
-function formula_repr(cal::MultipleCalibration; digits = nothing, sigdigits = 4)
-    β = cal.model.model.pp.beta0
-    cal.type && cal.zero && return "y = $(format_number(β[1]; digits, sigdigits))x"
+formula_repr(cal::InternalCalibrator; digits = nothing, sigdigits = 4) = "y = $(format_number(1/first(getanalyte(cal.caltable.conctable, cal.isd)); digits, sigdigits))x"
+formula_repr(cal::ExternalCalibrator; digits = nothing, sigdigits = 4) = formula_repr(cal.model, cal.machine; digits, sigdigits)
+function formula_repr(model::CalibrationModel, machine; digits = nothing, sigdigits = 4)
+    β = machine.model.pp.beta0
+    formula_repr(model, β; digits, sigdigits)
+end
+formula_repr(::CalibrationModel{Proportional}, β::AbstractVector; digits = nothing, sigdigits = 4) = "y = $(format_number(β[1]; digits, sigdigits))x"
+function formula_repr(::CalibrationModel{Linear}, β::AbstractVector; digits = nothing, sigdigits = 4) 
     op = map(β[2:end]) do b
         b < 0 ? " - " : " + "
     end
-    if cal.type
-        string("y = ", format_number(β[1]; digits, sigdigits), op[1], abs(format_number(β[2]; digits, sigdigits)), "x")
-    elseif cal.zero
-        string("y = ", format_number(β[1]; digits, sigdigits), "x", op[1], abs(format_number(β[2]; digits, sigdigits)), "x²")
-    else
-        string("y = ", format_number(β[1]; digits, sigdigits), op[1], abs(format_number(β[2]; digits, sigdigits)), "x", op[2], abs(format_number(β[3]; digits, sigdigits)), "x²")
-    end
+    string("y = ", format_number(β[1]; digits, sigdigits), op[1], abs(format_number(β[2]; digits, sigdigits)), "x")
 end
-
-@deprecate formula_repr_utf8(x; digits, sigdigits) formula_repr_ascii(x; digits, sigdigits) false
-@deprecate weight_repr_utf8(x) weight_repr_ascii(x) false
+function formula_repr(::CalibrationModel{QuadraticProportional}, β::AbstractVector; digits = nothing, sigdigits = 4) 
+    op = map(β[2:end]) do b
+        b < 0 ? " - " : " + "
+    end
+    string("y = ", format_number(β[1]; digits, sigdigits), "x", op[1], abs(format_number(β[2]; digits, sigdigits)), "x²")
+end
+function formula_repr(::CalibrationModel{Quadratic}, β::AbstractVector; digits = nothing, sigdigits = 4) 
+    op = map(β[2:end]) do b
+        b < 0 ? " - " : " + "
+    end
+    string("y = ", format_number(β[1]; digits, sigdigits), op[1], abs(format_number(β[2]; digits, sigdigits)), "x", op[2], abs(format_number(β[3]; digits, sigdigits)), "x²")
+end
+function formula_repr(::CalibrationModel{Logarithmic}, β::AbstractVector; digits = nothing, sigdigits = 4) 
+    op = map(β[2:end]) do b
+        b < 0 ? " - " : " + "
+    end
+    string("y = ", format_number(β[1]; digits, sigdigits), op[1], abs(format_number(β[2]; digits, sigdigits)), "log(x)")
+end
+function formula_repr(::CalibrationModel{Exponential}, β::AbstractVector; digits = nothing, sigdigits = 4) 
+    op = map(β[2:end]) do b
+        b < 0 ? " - " : " + "
+    end
+    string("log(y) = ", format_number(β[1]; digits, sigdigits), op[1], abs(format_number(β[2]; digits, sigdigits)), "x")
+end
+function formula_repr(::CalibrationModel{Power}, β::AbstractVector; digits = nothing, sigdigits = 4) 
+    op = map(β[2:end]) do b
+        b < 0 ? " - " : " + "
+    end
+    string("log(y) = ", format_number(β[1]; digits, sigdigits), op[1], abs(format_number(β[2]; digits, sigdigits)), "log(x)")
+end
 """
-    formula_repr_ascii(cal::AbstractCalibration; digits = nothing, sigdigits = 4)
+    formula_repr_ascii(cal::AbstractCalibrator; digits = nothing, sigdigits = 4)
 
 Return string representation of formula of `cal` for text file output.
 """
-formula_repr_ascii(cal::AbstractCalibration; digits = nothing, sigdigits = 4) = replace(formula_repr(cal; digits, sigdigits), "x²" => "x^2")
+formula_repr_ascii(cal::AbstractCalibrator; digits = nothing, sigdigits = 4) = replace(formula_repr(cal; digits, sigdigits), "x²" => "x^2")
 """
-    weight_repr_ascii(cal::AbstractCalibration)
+    weight_repr_ascii(cal::AbstractCalibrator)
     weight_repr_ascii(weight::Number)
 
 Return string representation of `cal.weight` or `weight` for text file output.
 """
-weight_repr_ascii(cal::AbstractCalibration) = replace(weight_repr(cal), "x²" => "x^2", "√x" => "x^0.5")
-weight_repr_ascii(weight::Number) = replace(weight_repr(weight), "x²" => "x^2", "√x" => "x^0.5")
+weight_repr_ascii(cal::AbstractCalibrator) = weight_repr_ascii(cal.model)
+weight_repr_ascii(model::CalibrationModel) = last(WNM[model.wnm])
+
 """
     format_number(x; digits = nothing, sigdigits = 4)
 

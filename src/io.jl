@@ -25,28 +25,36 @@ function read_config(file::String)
 end  
 
 """
-    read_calibration(file::String; analytetype = String, numbertype = Float64, delim = '\\t') -> AbstractCalibration{analytetype, numbertype}
+    read_calibrator(file::String; analytetype = String, numbertype = Float64, delim = '\\t') -> AbstractCalibrator{analytetype, numbertype}
 
-Read ".mcal" or ".scal" file into julia as `MultipleCalibration` or `SingleCalibration`. `analytetype` is a concrete type for `analyte`, 
+Read ".ecal" or ".ical" file into julia as `ExternalCalibrator` or `InternalCalibrator`. `analytetype` is a concrete type for `analyte`, 
 , `numbertype` is the type for numeric data, and `delim` specifies delimiter for tabular data if `config[:delim]` does not exist. 
 
 `numbertype` is forced to `Float64` because of issue of `GLM`.
     
 See `ChemistryQuantitativeAnalysis.read` for the requirement of `analytetype`.
 
-See README.md for the structure of ".mcal" and ".scal" file.
+See README.md for the structure of ".ecal" and ".ical" file.
 """
-function read_calibration(file::String; analytetype = String, numbertype = Float64, delim = '\t')
+function read_calibrator(file::String; analytetype = String, numbertype = Float64, delim = '\t')
     d = dirname(file)
     in(basename(file), readdir(isempty(d) ? pwd() : d)) || throw(Base.IOError(string("read(", file, "): no such file or directory (ENOENT)"), -4058))
-    endswith(file, ".mcal") || endswith(file, ".scal") || throw(ArgumentError("The file is not a valid calibration directory"))
-    numbertype = Float64 # Bug of GLM
+    endswith(file, ".ecal") || endswith(file, ".ical") || throw(ArgumentError("The file is not a valid calibrator directory"))
+    # numbertype = Float64 # Bug of GLM
     config = read_config(joinpath(file, "config.txt"))
-    if endswith(file, ".scal")
-        return SingleCalibration((analytetype(config[:analyte]), ), parse(numbertype, config[:conc]))
+    if endswith(file, ".ical")
+        return InternalCalibrator(analytetype(config[:analyte]), parse(numbertype, config[:conc]))
     end
     tbl = CSV.read(joinpath(file, "table.txt"), Table; delim = get(config, :delim, delim), typemap = Dict(Int => numbertype, Float64 => numbertype), types = Dict(:level => Int))
-    calibration(convert.(analytetype, (config[:analyte], config[:isd])), tbl; type = parse(Bool, config[:type]), zero = parse(Bool, config[:zero]), weight = parse(Float64, config[:weight]))
+    model = haskey(config, :model) ? eval(Meta.parse(config[:model])) : CalibrationModel
+    type = eval(Meta.parse(config[:type]))
+    model = model{type}
+    externalcalibrate(cqaconvert(analytetype, config[:analyte]), config[:isd] == "nothing" ? nothing : cqaconvert(analytetype, config[:isd]), tbl; model, extract_config(model, config)...)
+end
+
+function extract_config(::Type{<: CalibrationModel}, config::Dictionary)
+    wnm = config[:weight]
+    (; wnm, wfn = WFN[wnm])
 end
 
 """
@@ -161,12 +169,12 @@ function read_method(file::String, T; analytetype = String, sampletype = String,
     signal = Symbol(get(config, :signal, :area))
     rel_sig = Symbol(get(config, :rel_sig, :relative_signal))
     est_conc = Symbol(get(config, :est_conc, :estimated_concentration))
-    true_conc = Symbol(get(config, :true_conc, :true_concentration))
+    nom_conc = Symbol(get(config, :nom_conc, :nominal_concentration))
     acc = Symbol(get(config, :acc, :accuracy))
     analytetable = CSV.read(joinpath(file, "analytetable.txt"), Table)
     analyte = analytetype.(analytetable.analyte)
     isd = replace(analytetable.isd, missing => 0)
-    conctable = read_datatable(joinpath(file, in("$true_conc.sdt", readdir(file)) ? "$true_conc.sdt" : "$true_conc.adt"), T; analytetype, sampletype = Int, numbertype, delim)
+    conctable = read_datatable(joinpath(file, in("$nom_conc.sdt", readdir(file)) ? "$nom_conc.sdt" : "$nom_conc.adt"), T; analytetype, sampletype = Int, numbertype, delim)
     if length(sampleobj(conctable)) > 1
         signaltable = read_datatable(joinpath(file, in("$signal.sdt", readdir(file)) ? "$signal.sdt" : "$signal.adt"), T; analytetype, sampletype, numbertype, delim, levelname = get(config, :levelname, nothing))
         if haskey(config, :levelname) && in(Symbol(config[:levelname]), propertynames(signaltable))
@@ -180,15 +188,15 @@ function read_method(file::String, T; analytetype = String, sampletype = String,
             rr = ns - nl * nr
             pointlevel = vcat(repeat([1], rr), repeat(1:nl, nr))
         end
-        calibration = map(enumerate(analytetable.calibration)) do (i, c)
+        std = map(enumerate(analytetable.std)) do (i, c)
             ismissing(c) ? i : c
         end
     else
         signaltable = nothing
         pointlevel = [1]
-        calibration = isd
+        std = isd
     end
-    AnalysisMethod(Table(analytetable; analyte, isd, calibration), signal, rel_sig, est_conc, true_conc, acc, pointlevel, conctable, signaltable)
+    AnalysisMethod(Table(analytetable; analyte, isd, std), signal, rel_sig, est_conc, nom_conc, acc, pointlevel, conctable, signaltable)
 end
 """
     read_batch(file::String, T; analytetype = String, sampletype = String, numbertype = Float64, delim = '\\t') -> Batch{analytetype}
@@ -208,14 +216,15 @@ function read_batch(file::String, T; analytetype = String, sampletype = String, 
     config = read_config(joinpath(file, "config.txt"))
     delim = get(config, :delim, delim)   
     method = read_method(joinpath(file, "method.am"), T; analytetype, sampletype, numbertype, delim)
-    if !in("calibration", readdir(file)) || isempty(readdir(joinpath(file, "calibration")))
-        if isnothing(method.signaltable)
-            cal = [SingleCalibration((analyte, ), first(getanalyte(method.conctable, analyte))) for analyte in analyteobj(method.conctable)]
-        else
-            cal = [calibration(method, analyte) for analyte in analyteobj(method.conctable) if !isisd(analyte, method)]
-        end
+    if !in("calibrator", readdir(file)) || isempty(readdir(joinpath(file, "calibrator")))
+        cal = (AbstractCalibrator{T} where {T <: typeof(method).parameters[1]})[]
+        # if isnothing(method.signaltable)
+            # cal = [InternalCalibrator(analyte, mean(getanalyte(method.conctable, analyte))) for analyte in method.calanalyte]
+        # else
+            # cal = [calibrate(method, analyte) for analyte in method.calanalyte]
+        # end
     else
-        cal = [read_calibration(joinpath(file, "calibration", f); delim, analytetype, numbertype) for f in readdir(joinpath(file, "calibration")) if endswith(f, ".mcal") || endswith(f, ".scal")]
+        cal = [read_calibrator(joinpath(file, "calibrator", f); delim, analytetype, numbertype) for f in readdir(joinpath(file, "calibrator")) if endswith(f, ".ecal") || endswith(f, ".ical")]
     end
     fd = findfirst(==("data.at"), readdir(file))
     Batch(method, cal,
@@ -223,29 +232,51 @@ function read_batch(file::String, T; analytetype = String, sampletype = String, 
     )
 end
 
-function print_summary(io::IO, cal::MultipleCalibration{A}) where A
-    print(io, "MultipleCalibration{$A} of ", first(cal.analyte), " with ", length(unique(cal.table.level[cal.table.include])), " levels and ", length(findall(cal.table.include)), " points")
+function print_summary(io::IO, cal::ExternalCalibrator{A}) where A
+    print(io, "ExternalCalibrator{$A} of ", cal.analyte, " with ", length(unique(cal.table.level[cal.table.include])), " levels and ", length(findall(cal.table.include)), " points")
 end
 
-function print_summary(io::IO, cal::SingleCalibration{A}) where A
-    print(io, "SingleCalibration{$A} of ", first(cal.analyte), " with single level")
+function print_summary(io::IO, cal::InternalCalibrator{A}) where A
+    print(io, "InternalCalibrator{$A} of ", cal.analyte, " with single level")
 end
 
-function show(io::IO, ::MIME"text/plain", cal::MultipleCalibration{A, N, T}) where {A, N, T}
-    print(io, "MultipleCalibration{$A, $N, $(shorten_type_repr(T))} with ", length(unique(cal.table.level[cal.table.include])), " levels and ", length(findall(cal.table.include)), " points:\n")
-    print(io, "∘ Analyte: ", first(cal.analyte), "\n")
-    print(io, "∘ ISD: ", last(cal.analyte), "\n")
-    print(io, "∘ Type: ", cal.type ? "linear\n" : "quadratic\n")
-    print(io, "∘ (0, 0): ", cal.zero ? "included\n" : "ommitted\n")
-    print(io, "∘ Weight: ", weight_repr(cal.weight), "\n")
-    print(io, "∘ Formula: ", formula_repr(cal), "\n")
-    print(io, "∘ R²: ", r2(cal.model))
+function show(io::IO, ::MIME"text/plain", cal::ExternalCalibrator{A, N, T}) where {A, N, T}
+    print(io, "ExternalCalibrator{$A, $N, $(shorten_type_repr(T))} with ", length(unique(cal.table.level[cal.table.include])), " levels and ", length(findall(cal.table.include)), " points:\n")
+    print(io, "∘ STD: ", cal.analyte, "\n")
+    print(io, "∘ ISD: ", cal.isd, "\n")
+    print(io, "∘ Model: ")
+    print_summary(io, cal.model)
+    print(io, "\n")
+    print(io, "∘ Equation: ", formula_repr(cal), "\n")
+    print(io, "∘ R²: ", r2(cal.machine))
 end
 
-function show(io::IO, ::MIME"text/plain", cal::SingleCalibration{A, N}) where {A, N}
-    print(io, "SingleCalibration{$A, $N} with single level:\n")
-    print(io, "∘ Analyte (ISD): ", first(cal.analyte), "\n")
+function show(io::IO, ::MIME"text/plain", cal::InternalCalibrator{A, N}) where {A, N}
+    print(io, "InternalCalibrator{$A, $N} with single level:\n")
+    print(io, "∘ STD (ISD): ", cal.analyte, "\n")
     print(io, "∘ Concentration: ", cal.conc)
+end
+
+print_summary(io::IO, ::Type{Proportional}) = print(io, "Proportional")
+print_summary(io::IO, ::Type{Linear}) = print(io, "Linear")
+print_summary(io::IO, ::Type{QuadraticProportional}) = print(io, "QuadraticProportional")
+print_summary(io::IO, ::Type{Quadratic}) = print(io, "Quadratic")
+print_summary(io::IO, ::Type{Logarithmic}) = print(io, "Logarithmic")
+print_summary(io::IO, ::Type{Exponential}) = print(io, "Exponential")
+print_summary(io::IO, ::Type{Power}) = print(io, "Power")
+
+function print_summary(io::IO, model::CalibrationModel{T}) where T
+    print(io, "CalibrationModel | ")
+    print_summary(io, T)
+    print(io, " | Weight ", weight_repr(model))
+end
+
+function show(io::IO, ::MIME"text/plain", model::CalibrationModel{T}) where T
+    print(io, "CalibrationModel\n")
+    print(io, "∘ Type: " )
+    print_summary(io, T)
+    print(io, "\n∘ Formula: ", model.formula, "\n")
+    print(io, "∘ Weight: ", weight_repr(model), "\n")
 end
 
 function print_summary(io::IO, batch::Batch{A, T}) where {A, T}
@@ -256,19 +287,19 @@ function show(io::IO, ::MIME"text/plain", batch::Batch)
     print_summary(io, batch)
     print(io, ":\n∘ Analytes:\n")
     show(io, MIME"text/plain"(), batch.method.analytetable)
-    print(io, "\n\n∘ Calibration:")
-    if length(batch.calibration) > 10
-        for c in @view batch.calibration[1:5]
+    print(io, "\n\n∘ Calibrators:")
+    if length(batch.calibrator) > 10
+        for c in @view batch.calibrator[1:5]
             print(io, "\n ")
             print_summary(io, c)
         end
         print(io, "\n ⋮")
-        for c in @view batch.calibration[end - 4:end]
+        for c in @view batch.calibrator[end - 4:end]
             print(io, "\n ")
             print_summary(io, c)
         end
     else
-        for c in batch.calibration
+        for c in batch.calibrator
             print(io, "\n ")
             print_summary(io, c)
         end
@@ -343,7 +374,7 @@ function show(io::IO, ::MIME"text/plain", tbl::AnalysisMethod)
     print(io, "\n\n∘ Signal: \n")
     show(io, MIME"text/plain"(), isnothing(tbl.signaltable) ? nothing : table(tbl.signaltable))
     print(io, "\n\n∘ Data keys: \n")
-    print(io,  join([tbl.signal, tbl.rel_sig, tbl.est_conc, tbl.true_conc, tbl.acc], ", "), "\n")
+    print(io,  join([tbl.signal, tbl.rel_sig, tbl.est_conc, tbl.nom_conc, tbl.acc], ", "), "\n")
 end
 
 write_datatable(file::String, tbl::AnalyteDataTable; delim = '\t') = write(file * ".adt", tbl; delim)
@@ -375,7 +406,7 @@ end
 
 function write(file::String, tbl::AnalysisMethod; delim = '\t')
     mkpath(file)
-    write_datatable(joinpath(file, "$(tbl.true_conc)"), tbl.conctable; delim)
+    write_datatable(joinpath(file, "$(tbl.nom_conc)"), tbl.conctable; delim)
     isnothing(tbl.signaltable) || write_datatable(joinpath(file, "$(tbl.signal)"), tbl.signaltable; delim)
     id = nothing
     if isa(tbl.signaltable, SampleDataTable)
@@ -383,33 +414,36 @@ function write(file::String, tbl::AnalysisMethod; delim = '\t')
     end
     open(joinpath(file, "config.txt"), "w+") do config
         isnothing(id) ? Base.write(config, "[signal]\n", tbl.signal, "\n\n[rel_sig]\n", tbl.rel_sig, "\n\n[est_conc]\n", tbl.est_conc, 
-            "\n\n[true_conc]\n", tbl.true_conc, "\n\n[acc]\n", tbl.acc, "\n\n[delim]\n", escape_string(string(delim)), "\n\n[pointlevel]\n", join(tbl.pointlevel, "\n")) : 
-            Base.write(config, "[signal]\n", tbl.signal, "\n\n[rel_sig]\n", tbl.rel_sig, "\n\n[est_conc]\n", tbl.est_conc, "\n\n[true_conc]\n", 
-                        tbl.true_conc, "\n\n[acc]\n", tbl.acc, "\n\n[delim]\n", escape_string(string(delim)), "\n\n[levelname]\n", propertynames(tbl.signaltable)[id])
+            "\n\n[nom_conc]\n", tbl.nom_conc, "\n\n[acc]\n", tbl.acc, "\n\n[delim]\n", escape_string(string(delim)), "\n\n[pointlevel]\n", join(tbl.pointlevel, "\n")) : 
+            Base.write(config, "[signal]\n", tbl.signal, "\n\n[rel_sig]\n", tbl.rel_sig, "\n\n[est_conc]\n", tbl.est_conc, "\n\n[nom_conc]\n", 
+                        tbl.nom_conc, "\n\n[acc]\n", tbl.acc, "\n\n[delim]\n", escape_string(string(delim)), "\n\n[levelname]\n", propertynames(tbl.signaltable)[id])
     end
     CSV.write(joinpath(file, "analytetable.txt"), tbl.analytetable; delim)
 end
 
-function write(file::String, cal::MultipleCalibration; delim = '\t')
+function write(file::String, cal::ExternalCalibrator; delim = '\t')
     mkpath(file)
     open(joinpath(file, "config.txt"), "w+") do config
-        Base.write(config, "[analyte]\n", string(first(cal.analyte)), "\n\n[isd]\n", string(last(cal.analyte)), 
-                "\n\n[type]\n", string(cal.type), "\n\n[zero]\n", string(cal.zero), "\n\n[weight]\n", string(cal.weight), 
+        Base.write(config, "[analyte]\n", string(cal.analyte), "\n\n[isd]\n", string(cal.isd), 
+                encode_config(cal.model)..., 
                 "\n\n[delim]\n", escape_string(string(delim)))
     end
     CSV.write(joinpath(file, "table.txt"), cal.table; delim)
 end
-function write(file::String, cal::SingleCalibration; delim = '\t')
+function encode_config(model::CalibrationModel{T}) where T 
+    ("\n\n[model]\n", "CalibrationModel", "\n\n[type]\n", string(T), "\n\n[weight]\n", weight_repr_ascii(model))
+end
+function write(file::String, cal::InternalCalibrator; delim = '\t')
     mkpath(file)
     open(joinpath(file, "config.txt"), "w+") do config
-        Base.write(config, "[analyte]\n", string(first(cal.analyte)), "\n\n[conc]\n", string(cal.conc))
+        Base.write(config, "[analyte]\n", string(cal.analyte), "\n\n[conc]\n", string(cal.conc))
     end
 end
 
 """
     ChemistryQuantitativeAnalysis.write(file::String, object; delim = "\\t")
 
-Write `object` into ".scal" for `SingleCalibration`, ".mcal" for `MultipleCalibration`, ".sdt" for `SampleDataTable`, ".adt" for `AnalyteDataTable`, ".at" for `AnalysisTable`, ".am" for `AnalysisMethod`, and ".batch" for `Batch`. 
+Write `object` into ".ical" for `InternalCalibrator`, ".ecal" for `ExternalCalibrator`, ".sdt" for `SampleDataTable`, ".adt" for `AnalyteDataTable`, ".at" for `AnalysisTable`, ".am" for `AnalysisMethod`, and ".batch" for `Batch`. 
 
 `delim` specifies delimiter for tabular data if `config[:delim]` does not exist.
 
@@ -421,10 +455,10 @@ function write(file::String, batch::Batch; delim = '\t')
         Base.write(config, "[delim]\n", escape_string(string(delim)))
     end
     write(joinpath(file, "method.am"), batch.method; delim)
-    mkpath(joinpath(file, "calibration"))
-    ft = isnothing(batch.method.signaltable) ? "scal" : "mcal"
-    for (i, c) in enumerate(batch.calibration)
-        write(joinpath(file, "calibration", "$i.$ft"), c; delim)
+    mkpath(joinpath(file, "calibrator"))
+    ft = isnothing(batch.method.signaltable) ? "ical" : "ecal"
+    for (i, c) in enumerate(batch.calibrator)
+        write(joinpath(file, "calibrator", "$i.$ft"), c; delim)
     end
     isnothing(batch.data) || write(joinpath(file, "data.at"), batch.data; delim)
 end
@@ -432,7 +466,7 @@ end
 """
     ChemistryQuantitativeAnalysis.read(file::String, T; analytetype = String, sampletype = String, numbertype = Float64, delim = '\\t')
 
-Read ".scal" as `SingleCalibration`, ".mcal" as `MultipleCalibration`, ".sdt" as `SampleDataTable`, ".adt" as `AnalyteDataTable`, ".at" as `AnalysisTable`, ".am" as `AnalysisMethod`, and ".batch" as `Batch`. 
+Read ".ical" as `InternalCalibrator`, ".ecal" as `ExternalCalibrator`, ".sdt" as `SampleDataTable`, ".adt" as `AnalyteDataTable`, ".at" as `AnalysisTable`, ".am" as `AnalysisMethod`, and ".batch" as `Batch`. 
 
 `T` is the sink function for tabular data, 
 `analytetype` is a concrete type for `analyte`, `sampletype` is a concrete type for `sample`, `numbertype` is the type for numeric data, 
@@ -448,8 +482,8 @@ See README.md for the structure of ".batch" file.
 function read(file::String, T; analytetype = String, sampletype = String, numbertype = Float64, delim = '\t', kwargs...)
     if endswith(file, ".batch")
         read_batch(file, T; analytetype, sampletype, numbertype, delim, kwargs...)
-    elseif endswith(file, ".scal") || endswith(file, ".mcal")
-        read_calibration(file; analytetype, numbertype, delim, kwargs...)
+    elseif endswith(file, ".ical") || endswith(file, ".ecal")
+        read_calibrator(file; analytetype, numbertype, delim, kwargs...)
     elseif endswith(file, ".at")
         read_analysistable(file, T; analytetype, sampletype, numbertype, delim, kwargs...)
     elseif endswith(file, ".am")
@@ -551,9 +585,9 @@ function mkbatch(file::String;
         pointlevel = default_level
     end
     default_method = if signal_table == SampleDataTable
-        Dict(:signal => "area", :rel_sig => "relative_signal", :est_conc => "estimated_concentration", :true_conc => "true_concentration", :acc => "accuracy", :delim => delim, :levelname => "Level")
+        Dict(:signal => "area", :rel_sig => "relative_signal", :est_conc => "estimated_concentration", :nom_conc => "nominal_concentration", :acc => "accuracy", :delim => delim, :levelname => "Level")
     else
-        Dict(:signal => "area", :rel_sig => "relative_signal", :est_conc => "estimated_concentration", :true_conc => "true_concentration", :acc => "accuracy", :delim => delim, :pointlevel => pointlevel)
+        Dict(:signal => "area", :rel_sig => "relative_signal", :est_conc => "estimated_concentration", :nom_conc => "nominal_concentration", :acc => "accuracy", :delim => delim, :pointlevel => pointlevel)
     end
     for (k, v) in default_method
         get!(method_config, k, v)
@@ -566,12 +600,12 @@ function mkbatch(file::String;
     end
     if signal_table == SampleDataTable
         confms = string("[signal]\n", method_config[:signal], "\n\n[rel_sig]\n", method_config[:rel_sig], "\n\n[est_conc]\n", method_config[:est_conc], 
-                        "\n\n[true_conc]\n", method_config[:true_conc], "\n\n[acc]\n", method_config[:acc], "\n\n[delim]\n", escape_string(string(method_config[:delim])), 
+                        "\n\n[nom_conc]\n", method_config[:nom_conc], "\n\n[acc]\n", method_config[:acc], "\n\n[delim]\n", escape_string(string(method_config[:delim])), 
                         "\n\n[levelname]\n", method_config[:levelname])
         table[2] = Table(; Symbol(signal_config[:Sample]) => default_point, Symbol(method_config[:levelname]) => default_level, (Symbol.(signal_config[:Analyte]) .=> Ref(repeat([1.0], length(default_point))))...)
     else
         confms = string("[signal]\n", method_config[:signal], "\n\n[rel_sig]\n", method_config[:rel_sig], "\n\n[est_conc]\n", method_config[:est_conc], 
-                        "\n\n[true_conc]\n", method_config[:true_conc], "\n\n[acc]\n", method_config[:acc], "\n\n[delim]\n", escape_string(string(method_config[:delim])), 
+                        "\n\n[nom_conc]\n", method_config[:nom_conc], "\n\n[acc]\n", method_config[:acc], "\n\n[delim]\n", escape_string(string(method_config[:delim])), 
                         "\n\n[pointlevel]\n", join(method_config[:pointlevel], "\n"))
         table[2] = Table(; Symbol(signal_config[:Analyte]) => default_analyte, (Symbol.(signal_config[:Sample]) .=> Ref(repeat([1.0], length(default_analyte))))...)
     end
@@ -581,12 +615,12 @@ function mkbatch(file::String;
         table[3] = Table(; Symbol(conc_config[:Analyte]) => default_analyte, (Symbol.(conc_config[:Sample]) .=> Ref(repeat([1.0], length(default_analyte))))...)
     end
     signal = method_config[:signal]
-    true_conc = method_config[:true_conc]
+    nom_conc = method_config[:nom_conc]
     data_name = string(0, "_", signal, data_table == SampleDataTable ? ".sdt" : ".adt")
     mkpath(joinpath(file, "data.at", data_name))
     write(joinpath(file, "data.at", data_name, "config.txt"), confs[1])
     CSV.write(joinpath(file, "data.at", data_name, "table.txt"), table[1]; delim = data_config[:delim])
-    cp = joinpath(file, "method.am", conc_table == SampleDataTable ? "$true_conc.sdt" : "$true_conc.adt")
+    cp = joinpath(file, "method.am", conc_table == SampleDataTable ? "$nom_conc.sdt" : "$nom_conc.adt")
     mkpath(cp)
     sp = joinpath(file, "method.am", signal_table == SampleDataTable ? "$signal.sdt" : "$signal.adt")
     mkpath(sp)
@@ -594,7 +628,7 @@ function mkbatch(file::String;
     CSV.write(joinpath(sp, "table.txt"), table[2]; delim = signal_config[:delim])
     write(joinpath(cp, "config.txt"), confs[3])
     CSV.write(joinpath(cp, "table.txt"), table[3]; delim = conc_config[:delim])
-    CSV.write(joinpath(file, "method.am", "analytetable.txt"), Table(; analyte = default_analyte, isd = repeat([0], length(default_analyte)), calibration = collect(eachindex(default_analyte))); delim = method_config[:delim])
+    CSV.write(joinpath(file, "method.am", "analytetable.txt"), Table(; analyte = default_analyte, isd = repeat([0], length(default_analyte)), std = collect(eachindex(default_analyte))); delim = method_config[:delim])
     write(joinpath(file, "method.am", "config.txt"), confms)
     write(joinpath(file, "config.txt"), string("[delim]\n", escape_string(string(delim))))
 end

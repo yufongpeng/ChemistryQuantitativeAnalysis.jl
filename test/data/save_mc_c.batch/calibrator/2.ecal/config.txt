@@ -1,0 +1,17 @@
+[analyte]
+Analyte3
+
+[isd]
+Analyte4
+
+[model]
+CalibrationModel
+
+[type]
+ChemistryQuantitativeAnalysis.Linear
+
+[weight]
+1
+
+[delim]
+\t

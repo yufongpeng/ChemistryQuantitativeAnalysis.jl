@@ -314,31 +314,32 @@ tryparse(::Type{AnalyteTest}, s::String) = AnalyteTest(s) # For reading data fro
 
 # Generate data
 analytes = typedmap(AnalyteTest, ["G1(drug_a)", "G2(drug_a)", "G1(drug_b)", "G2(drug_b)"])
-conc = Float64[1, 2, 5, 10, 20, 50, 100]
+conc = Float64[1, 2, 5, 10, 20, 50, 100] .- 1
 signal1 = vcat(Float64[1, 2, 5, 10, 20, 50, 100], [1, 2, 5, 10, 20, 50, 100] .+ 0.1, [1, 2, 5, 10, 20, 50, 100] .- 0.1)
 signal2 = vcat(Float64[1, 2, 5, 10, 20, 50, 100] .^ 2, [1, 2, 5, 10, 20, 50, 100] .^ 2 .+ 0.1, [1, 2, 5, 10, 20, 50, 100] .^ 2 .- 0.1)
 
 # Create method
 conctable = SampleDataTable(
    DataFrame(
-         "level" => collect(1:7), 
+         "level" => collect(0:6), 
          "G1(drug_a)" => conc,
          "G1(drug_b)" => conc .* 10), 
-   :level; 
-   analytetype = AnalyteTest
+   AnalyteTest,
+   :level
 )
 signaltable = SampleDataTable(
    DataFrame(
-         "point" => reshape([string(a, "_", b) for (a, b) in Iterators.product(1:7, 1:3)], 21), 
-         "level" => repeat(1:7, 3),
+         "point" => reshape([string(a, "_", b) for (a, b) in Iterators.product(0:6, 1:3)], 21), 
+         "level" => repeat(0:6, 3),
          "G1(drug_a)" => signal1,
          "G2(drug_a)" => repeat([5.0], 21),
          "G1(drug_b)" => signal2,
          "G2(drug_b)" => repeat([2.0], 21)), 
-   :point; 
-   analytetype = AnalyteTest
+   AnalyteTest,
+   :point;
+   analytename = ["G1(drug_a)", "G2(drug_a)", "G1(drug_b)", "G2(drug_b)"]
 )
-method = AnalysisMethod(conctable, signaltable, :area, :point; analyte = analytes, isd = [2, -1, 4, -1], calibration = [1, -1, 3, -1])
+method = AnalysisMethod(conctable, signaltable, :area, :level; analyte = analytes, isd = [2, -1, 4, -1], std = [1, -1, 3, -1])
 
 # Create sample data
 cdata = AnalysisTable([:area], [
@@ -349,8 +350,8 @@ cdata = AnalysisTable([:area], [
             "G2(drug_a)" => Float64[5, 6, 6],
             "G1(drug_b)" => Float64[200, 800, 9800],
             "G2(drug_b)" => Float64[2, 2, 2]), 
-         :Sample; 
-         analytetype = AnalyteTest
+         AnalyteTest,
+         :Sample
          )
    ]
 )
@@ -372,16 +373,16 @@ cbatch = Batch(method, cdata)
 rbatch = Batch(method, rdata)
 
 # Calibration
-cbatch.calibration # a vector of `MultipleCalibration`
-cbatch.calibration[2].type = false # Use quadratic regression for the second analyte
-rbatch.calibration[AnalyteG1("G1(drug_b)")].type = false # Use quadratic regression for `AnalyteG1("G1(drug_b)")`
-update_calibration!(cbatch, 2)
-update_calibration!(rbatch, AnalyteG1("G1(drug_b)"))
+calibrate!(cbatch)
+calibrate!(rbatch)
+cbatch.calibrator # a vector of `MultipleCalibration`
+recalibrate!(cbatch, 2; model = QuadraticCalibrator)
+recalibrate!(rbatch, AnalyteG1("G1(drug_b)"); wnm = "1/x")
 
 # Quantification
-update_relative_signal!(cbatch) # A new data `cbatch.data.relative_signal` is created.
-update_inv_predict!(cbatch) # Fit `cbatch.data.relative_signal` into calibration curve to create `cbatch.data.estimated_concentration`.
-update_quantification!(cbatch) # equivalent to `update_inv_predict!(update_relative_signal!(cbatch))`
+quantify_relative_signal!(cbatch) # A new data `cbatch.data.relative_signal` is created.
+quantify_inv_predict!(cbatch) # Fit `cbatch.data.relative_signal` into calibration curve to create `cbatch.data.estimated_concentration`.
+quantify!(cbatch) # equivalent to `update_inv_predict!(update_relative_signal!(cbatch))`
 
 # Utils
 analyteobj(cdata.area) # analytes of type `AnalyteTest`
