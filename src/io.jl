@@ -195,6 +195,7 @@ function read_method(file::String, T; analytetype = String, sampletype = String,
         signaltable = nothing
         pointlevel = [1]
         std = isd
+        # std = [v > 0 ? v : i for (i, v) in enumerate(isd)]
     end
     AnalysisMethod(Table(analytetable; analyte, isd, std), signal, rel_sig, est_conc, nom_conc, acc, pointlevel, conctable, signaltable)
 end

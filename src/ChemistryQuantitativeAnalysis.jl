@@ -1,6 +1,6 @@
 module ChemistryQuantitativeAnalysis
 
-using GLM, CSV, TypedTables, LinearAlgebra, Dictionaries, ThreadsX, Tables, Pkg
+using GLM, CSV, TypedTables, LinearAlgebra, Dictionaries, ThreadsX, Tables, Pkg, Statistics
 export SampleDataTable, AnalyteDataTable, 
     AnalysisTable, analysistable, AnalysisMethod, Batch, 
     CalibrationModel,
@@ -17,7 +17,7 @@ export SampleDataTable, AnalyteDataTable,
     relative_signal, set_relative_signal, set_relative_signal!, quantify_relative_signal!,
     quantify, set_quantify, set_quantify!, quantify!,
     accuracy, set_accuracy, set_accuracy!, validate!,
-    stdof, isdof, isisd, 
+    stdof, isdof, isstd, isisd, 
     findanalyte, getanalyte, findsample, getsample, findcalibrator, getcalibrator, setcalibrator!, eachanalyte, eachsample,
     dynamic_range, lloq, uloq, signal_range, signal_lloq, signal_uloq, signal_lob, signal_lod, signal_loq, 
     formula_repr, formula_repr_ascii, weight_repr, weight_repr_ascii, format_number, mkbatch, 

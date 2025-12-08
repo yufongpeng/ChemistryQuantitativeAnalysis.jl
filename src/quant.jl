@@ -7,7 +7,8 @@
 Calculate relative signal using `getproperty(at, signal)` or `dt` as signal data, and return the result as `AbstractDataTable`.
 """
 relative_signal(method::AnalysisMethod, at::AnalysisTable; signal = method.signal) = relative_signal(method, getproperty(at, signal))
-relative_signal(batch::Batch, at::AnalysisTable; signal = batch.method.signal) = relative_signal(batch.method, at; signal)
+relative_signal(batch::Batch, at::AnalysisTable; signal = batch.method.signal) = relative_signal(batch, getproperty(at, signal))
+relative_signal(batch::Batch, dt::AbstractDataTable) = relative_signal(batch.method, dt)
 function relative_signal(method::AnalysisMethod, dt::AbstractDataTable{A, S, N}) where {A, S, N}
     analytetable = method.analytetable
     aid = [findfirst(==(analyte), analytetable.analyte) for analyte in analyteobj(dt)]
@@ -22,7 +23,6 @@ function relative_signal(method::AnalysisMethod, dt::AbstractDataTable{A, S, N})
     end
     fill_result!(deepcopy(dt), cs::Vector{Vector{N}})
 end
-relative_signal(batch::Batch, dt::AbstractDataTable) = relative_signal(batch.method, dt)
 
 """
     set_relative_signal(at::AbstractDataTable, batch::Batch; signal = batch.method.signal, rel_sig = batch.method.rel_sig)
@@ -102,7 +102,8 @@ Inversely predict concentration of `analyte` or analyte specified in `cal`, and 
 """
 inv_predict(cal::InternalCalibrator) = [cal.conc]
 inv_predict(cal::ExternalCalibrator) = inv_predict(cal, cal.table.y)
-inv_predict(cal::AbstractCalibrator, dt::AbstractDataTable; analyte = first(cal.analyte)) = inv_predict(cal, getanalyte(dt, analyte))
+inv_predict(cal::InternalCalibrator, dt::AbstractDataTable, analyte) = inv_predict(cal, getanalyte(dt, analyte))
+inv_predict(cal::ExternalCalibrator, dt::AbstractDataTable, analyte = cal.analyte) = inv_predict(cal, getanalyte(dt, analyte))
 inv_predict(cal::ExternalCalibrator, y::AbstractArray) = inv_predict(cal.model, cal.machine, y)
 function inv_predict(model::CalibrationModel, machine, y::AbstractArray{T}) where T
     β = convert(Vector{T}, machine.model.pp.beta0)::Vector{T}
@@ -192,12 +193,11 @@ Quantify `analyte` using data in `dt` as signals, and return the result as a vec
 """
 quantify(cal::InternalCalibrator) = [cal.conc]
 quantify(cal::ExternalCalibrator) = inv_predict(cal, cal.table.y)
-function quantify(cal::InternalCalibrator, dt::AbstractDataTable{A, S, N}) where {A, S, N}
-    inv_predict(cal, getanalyte(dt, cal.analyte)::AbstractVector{N})
+function quantify(cal::InternalCalibrator, dt::AbstractDataTable{A, S, N}, analyte) where {A, S, N}
+    quantify(cal, dt, analyte, cal.analyte)
 end
-function quantify(cal::AbstractCalibrator, dt::AbstractDataTable{A, S, N}) where {A, S, N}
-    isnothing(cal.isd) && return inv_predict(cal, getanalyte(dt, cal.analyte)::AbstractVector{N})
-    inv_predict(cal, (getanalyte(dt, cal.analyte) ./ getanalyte(dt, cal.isd))::AbstractVector{N})
+function quantify(cal::ExternalCalibrator, dt::AbstractDataTable{A, S, N}, analyte = cal.analyte) where {A, S, N}
+    quantify(cal, dt, analyte, cal.isd)
 end
 
 function quantify(cal::AbstractCalibrator, dt::AbstractDataTable{A, S, N}, analyte, isd) where {A, S, N}
@@ -268,7 +268,7 @@ function accuracy(dtp::AbstractDataTable{A, S, N}, dtt::AbstractDataTable) where
     fill_result!(deepcopy(dtp), cs::Vector{Vector{N}})
 end
 accuracy(cal::ExternalCalibrator, tbl = cal.table) = accuracy(inv_predict(cal, tbl.y), tbl.x)
-accuracy(cal::InternalCalibrator, tbl) = accuracy(inv_predict(cal, tbl.y), tbl.x)
+accuracy(cal::InternalCalibrator, tbl) = repeat([1.0], length(tbl))
 accuracy(x̂::AbstractVector, x::AbstractVector) = @. x̂ / x
 
 """

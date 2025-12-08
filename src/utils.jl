@@ -65,12 +65,6 @@ Get a `FormulaTerm` based on `type` and `zero` or parameters from `cal`.
 
 See `ExternalCalibrator` for detail description of `type` and `zero`.
 """
-getformula(cal::ExternalCalibrator) = getformula(cal.type, cal.zero)
-getformula(type::Bool, zero::Bool) = if type 
-    zero ? @formula(y ~ 0 + x) : @formula(y ~ x)
-else
-    zero ? @formula(y ~ 0 + x + x ^ 2) : @formula(y ~ x + x ^ 2)
-end
 getformula(::Type{Proportional}) = @formula(y ~ 0 + x)
 getformula(::Type{Linear}) = @formula(y ~ x)
 getformula(::Type{QuadraticProportional}) = @formula(y ~ 0 + x + x ^ 2)
@@ -183,6 +177,16 @@ function isdof(analyte::B, method::AnalysisMethod{A}) where {A, B <: A}
     isnothing(aid) && throw(ArgumentError("Analyte $analyte is not in the method"))
     iid = method.analytetable.isd[aid]
     (iid > 0 ? method.analytetable.analyte[iid] : iid == 0 ? nothing : analyte)::Union{A, Nothing}
+end
+"""
+    isstd(analyte::B, method::AnalysisMethod{A}) where {A, B <: A}
+
+Return if `analyte` is a internal standard based on `method`.
+"""
+function isstd(analyte::B, method::AnalysisMethod{A}) where {A, B <: A}
+    aid = findfirst(==(analyte), method.analytetable.analyte)
+    isnothing(aid) && throw(ArgumentError("Analyte $analyte is not in the method"))
+    !isnothing(findfirst(==(aid), method.analytetable.std))
 end
 """
     isisd(analyte::B, method::AnalysisMethod{A}) where {A, B <: A}
@@ -452,7 +456,7 @@ blank(cal::CalibrationModel{Power}) = 0
 
 function signal_lob(cal::ExternalCalibrator)
     zero_id = findall(==(0), cal.table.level)
-    isempty(zero_id) ? blank(cal) + 1.645 * std(cal.table.y[findfirst(cal.table.include)]) : mean(cal.table.y[zero_id]) + 1.645 * std(cal.table.y[zero_id])
+    isempty(zero_id) ? blank(cal) + 1.645 * std(cal.table.y[cal.table.x .== cal.table.x[findfirst(cal.table.include)]]) : mean(cal.table.y[zero_id]) + 1.645 * std(cal.table.y[zero_id])
 end
 
 """
@@ -462,14 +466,14 @@ Theoretical limit of detection (LOD) in signal space.
 """
 function signal_lod(cal::ExternalCalibrator) 
     zero_id = findall(==(0), cal.table.level)
-    isempty(zero_id) ? blank(cal) + 3.3 * std(cal.table.y[zero_id]) : signal_lob(cal) + 1.645 * std(cal.table.y[findfirst(cal.table.include)])
+    isempty(zero_id) ? blank(cal) + 3.3 * std(cal.table.y[cal.table.x .== cal.table.x[findfirst(cal.table.include)]]) : signal_lob(cal) + 1.645 * std(cal.table.y[cal.table.x .== cal.table.x[findfirst(cal.table.include)]])
 end
 """
     loq(cal::ExternalCalibrator)
 
 Theoretical limit of quantification (LOQ) in signal space.
 """
-signal_loq(cal::ExternalCalibrator) = blank(cal) + 10 * std(cal.table.y[findfirst(cal.table.include)])
+signal_loq(cal::ExternalCalibrator) = blank(cal) + 10 * std(cal.table.y[cal.table.x .== cal.table.x[findfirst(cal.table.include)]])
 
 """
     weight_repr(cal::ExternalCalibrator)
@@ -480,6 +484,7 @@ Return string representation of `cal.weight` or `weight`.
 "none" for 0, "1/√x" for -0.5, "1/x" for -1, "1/x²" for -2, 
 "x^`\$weight`" for other positive `weight`, and "1/x^`\$(abs(weight))`" for other negative `weight`
 """
+weight_repr(cal::InternalCalibrator) = "1"
 weight_repr(cal::ExternalCalibrator) = weight_repr(cal.model)
 weight_repr(model::CalibrationModel) = first(WNM[model.wnm])
 
@@ -489,7 +494,7 @@ weight_repr(model::CalibrationModel) = first(WNM[model.wnm])
 
 Return string representation of formula of `cal` with specified `digits` and `sigdigits`. See `format_number`.
 """
-formula_repr(cal::InternalCalibrator; digits = nothing, sigdigits = 4) = "y = $(format_number(1/first(getanalyte(cal.caltable.conctable, cal.isd)); digits, sigdigits))x"
+formula_repr(cal::InternalCalibrator; digits = nothing, sigdigits = 4) = "y = $(format_number(1/cal.conc)); digits, sigdigits))x"
 formula_repr(cal::ExternalCalibrator; digits = nothing, sigdigits = 4) = formula_repr(cal.model, cal.machine; digits, sigdigits)
 function formula_repr(model::CalibrationModel, machine; digits = nothing, sigdigits = 4)
     β = machine.model.pp.beta0
@@ -544,7 +549,8 @@ formula_repr_ascii(cal::AbstractCalibrator; digits = nothing, sigdigits = 4) = r
 
 Return string representation of `cal.weight` or `weight` for text file output.
 """
-weight_repr_ascii(cal::AbstractCalibrator) = weight_repr_ascii(cal.model)
+weight_repr_ascii(cal::InternalCalibrator) = "1"
+weight_repr_ascii(cal::ExternalCalibrator) = weight_repr_ascii(cal.model)
 weight_repr_ascii(model::CalibrationModel) = last(WNM[model.wnm])
 
 """

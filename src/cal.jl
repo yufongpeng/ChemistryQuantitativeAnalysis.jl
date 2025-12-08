@@ -164,13 +164,13 @@ function mkcalmodel(model::Type{CalibrationModel{T}}; wnm = "1", wfn = WFN[wnm])
 end
 function mkcalmachine(model::CalibrationModel{T}, tbl) where T
     lm1 = lm(model.formula, tbl[tbl.include]; wts = getwts(model.wfn, tbl.x[tbl.include], tbl.y[tbl.include]))
-    if T == Quadratic && lm1.model.pp.beta0[1] == 0
-        m = hcat(ones(eltype(tbl.x), count(tbl.include)), tbl.x[tbl.include], tbl.x[tbl.include] .^ 2)
-        sqrtw = diagm(sqrt.(getwts(model.wfn, tbl.x[tbl.include], tbl.y[tbl.include])))
-        y = tbl.y[tbl.include]
-        lm1.model.pp.beta0 = (sqrtw * m) \ (sqrtw * y)
-        GLM.updateμ!(lm1.model.rr, predict(lm1, tbl[tbl.include]))
-    end
+    # if T == Quadratic && lm1.model.pp.beta0[1] == 0
+    #     m = hcat(ones(eltype(tbl.x), count(tbl.include)), tbl.x[tbl.include], tbl.x[tbl.include] .^ 2)
+    #     sqrtw = diagm(sqrt.(getwts(model.wfn, tbl.x[tbl.include], tbl.y[tbl.include])))
+    #     y = tbl.y[tbl.include]
+    #     lm1.model.pp.beta0 = (sqrtw * m) \ (sqrtw * y)
+    #     GLM.updateμ!(lm1.model.rr, predict(lm1, tbl[tbl.include]))
+    # end
     lm1
 end
 mkcalmachine(cal::ExternalCalibrator) = mkcalmachine(cal.model, cal.table)
@@ -299,10 +299,10 @@ function recalibrate!(cal::ExternalCalibrator; model = nothing, kwargs...)
         calibrate!(cal) 
     elseif isnothing(model)
         cal.model = mkcalmodel(typeof(cal.model); kwargs...)
-        cal.machine = mkcalmachine(cal.model, cal.table)
+        cal.machine = mkcalmachine(cal)
     else
         cal.model = mkcalmodel(model; kwargs...)
-        cal.machine = mkcalmachine(cal.model, cal.table)
+        cal.machine = mkcalmachine(cal)
     end
     @warn "Call `quantify!` function on data to get the updated results."
     validate_quantify_calibrator!(cal)
