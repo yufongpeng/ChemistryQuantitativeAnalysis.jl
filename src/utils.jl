@@ -154,7 +154,7 @@ const WNM = Dict{String, Tuple{String, String}}(
 )
 
 getwts(wfn, x, y) = map(wfn, x, y)
-getwts(wfn::Nothing, x, y) = similar(y, 0)
+# getwts(wfn::Nothing, x, y) = similar(y, 0)
 
 """
     stdof(analyte::B, method::AnalysisMethod{A}) where {A, B <: A}
@@ -392,9 +392,10 @@ end
 # end
 
 table_convert(::Type{D}, data::AbstractDataTable{A, S, N, T}) where {D, A, S, N, T <: D} = data
-table_convert(::Type{D}, data::A) where {D, A <: AbstractDataTable} = 
-    A(analyteobj(data), sampleobj(data), idcol(data), D(table(data)))
-
+table_convert(::Type{D}, data::SampleDataTable) where D = 
+    SampleDataTable(analyteobj(data), sampleobj(data), idcol(data), D(table(data)))
+table_convert(::Type{D}, data::AnalyteDataTable) where D = 
+    AnalyteDataTable(analyteobj(data), sampleobj(data), idcol(data), D(table(data)))
 """
     dynamic_range(cal::ExternalCalibrator)
 

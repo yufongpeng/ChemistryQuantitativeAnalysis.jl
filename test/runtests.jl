@@ -174,11 +174,14 @@ end
     @testset "Calibration" begin
         calibrate!(cbatch)
         calibrate!(rbatch)
+        CQA.init_calibrate(cbatch, 1)
         @test all(accuracy(cbatch.calibrator[1]) .== accuracy(rbatch.calibrator[1]))
         @test all(quantify(rbatch.calibrator[2]) .== quantify(cbatch.calibrator[2]))
         recalibrate!(cbatch; wnm = "1/x")
+        @test cbatch.calibrator[1].model.wnm == "1/x"
         recalibrate!(cbatch; params = Table(; wnm = ["1", "1/x"]), model = LinearCalibrator)
         recalibrate!(rbatch, AnalyteG1("G1(drug_b)"); model = QuadraticCalibrator)
+        @test rbatch.calibrator[2].model isa QuadraticCalibrator
         sbatch.method.analytetable.isd .= [2, -1, 4, -1, 0, 0, 0, 0, 0, 0]
         sbatch.method.analytetable.std .= [1, -1, 3, -1, 5, 6, 7, 8, 9, 10]
         abatch.method.analytetable.isd .= [2, -1, 4, -1, 0, 0, 0, 0, 0, 0]
@@ -199,6 +202,24 @@ end
         @test rbatch.calibrator[1].analyte == cbatch.calibrator[1].analyte
         @test all(isapprox.(cbatch.calibrator[1].table.accuracy[4:6], [1, 1.1, 0.9]))
         @test all(isapprox.(rbatch.calibrator[2].table.accuracy[4:6], [1, sqrt(1.1), sqrt(0.9)]))
+        set_isd!(sbatch, "Analyte1", "Analyte4")
+        @test sbatch.calibrator[1].isd == "Analyte4"
+        @test sbatch.method.analytetable.isd[1] == 4
+        set_isd!(sbatch, "Analyte1", "Analyte2")
+        @test sbatch.calibrator[1].isd == "Analyte2"
+        @test sbatch.method.analytetable.isd[1] == 2
+        set_std!(sbatch, "Analyte1", "Analyte3")
+        @test sbatch.method.analytetable.std[1] == 3
+        @test sbatch.method.analytetable.isd[1] == 4
+        popfirst!(sbatch.calibrator)
+        replace_std!(sbatch, "Analyte3", "Analyte1", "Analyte2")
+        @test last(sbatch.calibrator).analyte == "Analyte1"
+        @test sbatch.method.analytetable.std[1] == 1
+        @test sbatch.method.analytetable.isd[1] == 2
+        set_std!(sbatch, "Analyte3", "Analyte3", "Analyte4")
+        @test sbatch.method.analytetable.std[3] == 3
+        @test sbatch.method.analytetable.isd[3] == 4
+        pushfirst!(sbatch.calibrator, pop!(sbatch.calibrator))
         # InternalCalibrator
         global ical = calibrate!(InternalCalibrator(analyteobj(method.conctable)[3], 50.0))
         @test isapprox(quantify(ical)[1], getanalyte(method.conctable, 3)[1])
@@ -249,6 +270,9 @@ end
         @test all(isapprox.(signal_range(cbatch.calibrator[2]), (signal_lloq(cbatch.calibrator[2]), signal_uloq(cbatch.calibrator[2]))))
         @test isapprox(signal_lob(sbatch.calibrator[2]) + signal_lod(sbatch.calibrator[2]),  0.4945 * signal_loq(sbatch.calibrator[2]))
         @test endswith(formula_repr_ascii(rbatch.calibrator[2]), "x^2")
+        for (k, v) in CQA.WFN 
+            CQA.WFN[k](1.0, 1.0)
+        end
         for c in sbatch.calibrator
             formula_repr_ascii(c)
             weight_repr_ascii(c)
@@ -260,9 +284,16 @@ end
         formula_repr_ascii(ical)
         weight_repr_ascii(ical)
         weight_repr(ical)
-        # @test weight_repr_ascii(cbatch.calibrator[1]) == "none"
-        # @test all(weight_value.(["none", "1/√x", "1/x", "1/x²", "x", "x^2", "1/x^3"]) .== [0, -0.5, -1, -2, 1, 2, -3])
-        # @test all(weight_repr_ascii.(Number[0, -0.5, -1, -2, 1, 2, -3]) .== ["none", "1/x^0.5", "1/x", "1/x^2", "x", "x^2", "1/x^3"])
+        @test CQA.cqaconvert(String, "1") == "1"
+        @test CQA.cqaconvert(Real, 1) == Real(1)
+        @test CQA.cqamap(Int, [1, 2, 3]) == [1, 2, 3]
+        @test CQA.cqamap(Real, [1, 2, 3]) == Real[1, 2, 3]
+        @test CQA.cqamap(Int, Real[1, 2, 3]) == [1, 2, 3]
+        @test CQA.cqamap(Int, ["1", "2", "3"]) == [1, 2, 3]
+        @test CQA.cqamap(string, [1, 2, 3]) == string.([1, 2, 3])
+        @test CQA.table(CQA.table_convert(DataFrame, cdata.area)) isa DataFrame
+        @test CQA.table(CQA.table_convert(DataFrame, sdt)) isa DataFrame
+        @test CQA.table(CQA.table_convert(DataFrame, adt)) isa DataFrame
     end
     @testset "IO" begin
         global initial_mc_c = CQA.read(joinpath(datapath, "initial_mc_c.batch"), DataFrame)

@@ -369,7 +369,7 @@ function set_isd!(method::AnalysisMethod{A}, analyte::B, isd::Union{C, Nothing} 
     isnothing(aid) && throw(ArgumentError("Analyte $analyte is not in the method"))
     iid = isnothing(isd) ? 0 : findfirst(==(isd), method.analytetable.analyte)
     isnothing(iid) && throw(ArgumentError("Analyte $isd is not in the method"))
-    cid = findall(==(aid), method.analytetable.calibrator)
+    cid = findall(==(aid), method.analytetable.std)
     method.analytetable.isd[cid] .= iid
     method
 end
@@ -393,16 +393,7 @@ function set_std!(batch::Batch{A}, analyte::B, cal::C, isd::Union{D, Nothing} = 
     iid = isnothing(isd) ? 0 : findfirst(==(isd), batch.method.analytetable.analyte)
     isnothing(iid) && throw(ArgumentError("Analyte $isd is not in the method"))
     batch.method.analytetable.std[aid] = cid
-    calid = findfirst(x -> ==(x.analyte, cal), batch.calibrator)
-    if isnothing(calid)
-        set_isd!(batch.method, cid, iid)
-        push!(batch.calibrator, init_calibrate(batch.method, cal; model, kwargs...))
-        @warn "Call `quantify!` function on data to get the updated results."
-
-    else
-        batch.calibrator[calid].isd == isd || (set_isd!(batch.method, cid, iid); retrieve_method!(batch, calid; model, kwargs...))
-    end
-    batch
+    _set_cal_isd!(batch, cal, isd, cid, iid; model, kwargs...)
 end
 
 """
@@ -411,25 +402,30 @@ end
 Delete calibration curve of `analyte` and replace it with calibration curve of `cal`. `analyte` must have a calibration curve. If `cal` has no caliration curve, a new calibration curve is fitted. The calibration curve use the new internal standard `isd`. All analytes use the calibration standard `analyte` are affected.
 """
 function replace_std!(batch::Batch{A}, analyte::B, cal::C, isd::Union{D, Nothing} = isdof(cal, batch.method); model = nothing, kwargs...) where {A, B <: A, C <: A, D <: A}
-    calid1 = findfirst(x -> ==(first(x.analyte), cal), batch.calibrator)
+    calid1 = findfirst(x -> ==(x.analyte, analyte), batch.calibrator)
     isnothing(calid1) && throw(ArgumentError("No fitted calibration data for $analyte"))
     aid = findfirst(==(analyte), batch.method.analytetable.analyte)
-    isnothing(cid) && throw(ArgumentError("Analyte $analyte is not in the method"))
+    isnothing(aid) && throw(ArgumentError("Analyte $analyte is not in the method"))
     cid = findfirst(==(cal), batch.method.analytetable.analyte)
     isnothing(cid) && throw(ArgumentError("Analyte $cal is not in the method"))
     iid = isnothing(isd) ? 0 : findfirst(==(isd), batch.method.analytetable.analyte)
     isnothing(iid) && throw(ArgumentError("Analyte $isd is not in the method"))
     tocal = findall(==(aid), batch.method.analytetable.std)
     batch.method.analytetable.std[tocal] .= cid
-    calid = findfirst(x -> ==(first(x.analyte), cal), batch.calibrator)
+    _set_cal_isd!(batch, cal, isd, cid, iid; model, kwargs...)
+    # deleteat!(batch.calibrator, calid1)
+    # batch
+end
+
+function _set_cal_isd!(batch::Batch, cal, isd, cid, iid; model = nothing, kwargs...)
+    calid = findfirst(x -> ==(x.analyte, cal), batch.calibrator)
     if isnothing(calid)
         set_isd!(batch.method, cid, iid)
-        push!(batch.calibrator, init_calibrate(batch.method, cal; model, kwargs...))
-        method.analytetable.std[aid] = cid
+        push!(batch.calibrator, isnothing(model) ? init_calibrate(batch.method, cal; kwargs...) : init_calibrate(batch.method, cal; model, kwargs...))
         @warn "Call `quantify!` function on data to get the updated results."
     else
-        batch.calibrator[calid].isd == isd || (set_isd!(batch.method, cid, iid); retrieve_method!(batch, calid; model, kwargs...))
+        set_isd!(batch.method, cid, iid)
+        retrieve_method!(batch, calid; model, kwargs...)
     end
-    delete!(batch.calibrator, calid1)
     batch
 end
