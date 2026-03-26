@@ -11,7 +11,7 @@ CalibrationModel
 ChemistryQuantitativeAnalysis.Linear
 
 [weight]
-1
+ConstWeight
 
 [delim]
 \t

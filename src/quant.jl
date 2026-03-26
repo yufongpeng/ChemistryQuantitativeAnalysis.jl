@@ -100,15 +100,14 @@ end
 
 Inversely predict concentration of `analyte` or analyte specified in `cal`, and return the result as a vector using data in `dt`, `y` or `cal.table.y` as inverse predictors.
 """
-inv_predict(cal::InternalCalibrator) = [cal.conc]
-inv_predict(cal::ExternalCalibrator) = inv_predict(cal, cal.table.y)
 inv_predict(cal::InternalCalibrator, dt::AbstractDataTable, analyte) = inv_predict(cal, getanalyte(dt, analyte))
 inv_predict(cal::ExternalCalibrator, dt::AbstractDataTable, analyte = cal.analyte) = inv_predict(cal, getanalyte(dt, analyte))
 inv_predict(cal::ExternalCalibrator, y::AbstractArray) = inv_predict(cal.model, cal.machine, y)
 function inv_predict(model::CalibrationModel, machine, y::AbstractArray{T}) where T
-    β = convert(Vector{T}, machine.model.pp.beta0)::Vector{T}
+    β = convert(Vector{T}, coef(machine))::Vector{T}
     inv_predict(model, β, y)
 end
+
 inv_predict(model::CalibrationModel{Proportional}, β::AbstractVector, y::AbstractArray{T}) where T = y ./ β[1]
 inv_predict(model::CalibrationModel{Linear}, β::AbstractVector, y::AbstractArray{T}) where T = @. (y - β[1]) / β[2]
 function inv_predict(model::CalibrationModel{QuadraticProportional}, β::AbstractVector, y::AbstractArray{T}) where T 
@@ -122,8 +121,8 @@ function inv_predict(model::CalibrationModel{Quadratic}, β::AbstractVector, y::
     @. (-b + sqrt(d)) / 2a
 end
 inv_predict(model::CalibrationModel{Logarithmic}, β::AbstractVector, y::AbstractArray{T}) where T = @. exp((y - β[1]) / β[2])
-inv_predict(model::CalibrationModel{Exponential}, β::AbstractVector, y::AbstractArray{T}) where T = @. (log(y) - β[1]) / β[2]
-inv_predict(model::CalibrationModel{Power}, β::AbstractVector, y::AbstractArray{T}) where T = @. exp((log(y) - β[1]) / β[2])
+inv_predict(model::CalibrationModel{Exponential}, β::AbstractVector, y::AbstractArray{T}) where T = @. log(y / β[1]) / β[2]
+inv_predict(model::CalibrationModel{Power}, β::AbstractVector, y::AbstractArray{T}) where T = @. (y / β[1]) ^ (1 / β[2])
 
 inv_predict(cal::InternalCalibrator, y::AbstractArray) = y .* cal.conc
 
@@ -191,8 +190,6 @@ end
 
 Quantify `analyte` using data in `dt` as signals, and return the result as a vector.
 """
-quantify(cal::InternalCalibrator) = [cal.conc]
-quantify(cal::ExternalCalibrator) = inv_predict(cal, cal.table.y)
 function quantify(cal::InternalCalibrator, dt::AbstractDataTable{A, S, N}, analyte) where {A, S, N}
     quantify(cal, dt, analyte, cal.analyte)
 end
@@ -250,14 +247,19 @@ end
 
 Calculate accuracy and return the values as `AbstractDataTable` or `Vector`. `tbl` must contain two properties, `y` and `x`, as same as `cal.table`.
 """
-accuracy(at::AnalysisTable; nom_conc = :nominal_concentration, est_conc = :estimated_concentration) = 
-    accuracy(getproperty(at, est_conc), getproperty(at, nom_conc))
+function accuracy(at::AnalysisTable; nom_conc = :nominal_concentration, est_conc = :estimated_concentration, signal = :area) 
+    if est_conc in propertynames(at) && nom_conc in propertynames(at)
+        accuracy(getproperty(at, est_conc), getproperty(at, nom_conc))
+    else
+        accuracy(getproperty(at, signal))
+    end
+end
 
-accuracy(at::AnalysisTable, method::AnalysisMethod; nom_conc = method.nom_conc, est_conc = method.est_conc) = 
-    accuracy(getproperty(at, est_conc), getproperty(at, nom_conc))
+accuracy(method::AnalysisMethod, at::AnalysisTable; nom_conc = method.nom_conc, est_conc = method.est_conc, signal = method.signal) = 
+    accuracy(at; nom_conc, est_conc, signal)
 
-accuracy(at::AnalysisTable, batch::Batch; nom_conc = batch.method.nom_conc, est_conc = batch.method.est_conc) = 
-    accuracy(getproperty(at, est_conc), getproperty(at, nom_conc))
+accuracy(batch::Batch, at::AnalysisTable; nom_conc = batch.method.nom_conc, est_conc = batch.method.est_conc, signal = batch.method.signal) = 
+    accuracy(at; nom_conc, est_conc, signal)
 
 function accuracy(dtp::AbstractDataTable{A, S, N}, dtt::AbstractDataTable) where {A, S, N}
     cs = length(analyteobj(dtp)) > 10 ? ThreadsX.map(analyteobj(dtp)) do analyte
@@ -267,16 +269,26 @@ function accuracy(dtp::AbstractDataTable{A, S, N}, dtt::AbstractDataTable) where
     end
     fill_result!(deepcopy(dtp), cs::Vector{Vector{N}})
 end
-accuracy(cal::ExternalCalibrator, tbl = cal.table) = accuracy(inv_predict(cal, tbl.y), tbl.x)
-accuracy(cal::InternalCalibrator, tbl) = repeat([1.0], length(tbl))
 accuracy(x̂::AbstractVector, x::AbstractVector) = @. x̂ / x
+
+function accuracy(dtp::AbstractDataTable{A, S, N}) where {A, S, N}
+    cs = length(analyteobj(dtp)) > 10 ? ThreadsX.map(analyteobj(dtp)) do analyte
+        convert(Vector{N}, accuracy(getanalyte(dtp, analyte)))::Vector{N}
+    end : map(analyteobj(dtp)) do analyte
+        convert(Vector{N}, accuracy(getanalyte(dtp, analyte)))::Vector{N}
+    end
+    fill_result!(deepcopy(dtp), cs::Vector{Vector{N}})
+end
+
+accuracy(x̂::AbstractVector) = [NaN for _ in x̂]
 
 """
     set_accuracy(at::AnalysisTable, method::AnalysisMethod; nom_conc = method.nom_conc, est_conc = method.est_conc, acc = method.acc)
     set_accuracy(at::AnalysisTable, batch::Batch; nom_conc = batch.method.nom_conc, est_conc = batch.method.est_conc, acc = batch.method.acc)
 
 Calculate accuracy, update or insert the values into a copy of `at` at index `acc`, and return the copy. 
-using `getproperty(at, nom_conc)` as true concentration and `getproperty(at, est_conc)` as estimated concentration.
+
+Use `getproperty(at, nom_conc)` as true concentration and `getproperty(at, est_conc)` as estimated concentration.
 """
 function set_accuracy(at::AnalysisTable, method::AnalysisMethod; nom_conc = method.nom_conc, est_conc = method.est_conc, acc = method.acc)
     result = accuracy(at; nom_conc, est_conc)
@@ -291,8 +303,9 @@ set_accuracy(at::AnalysisTable, batch::Batch; nom_conc = batch.method.nom_conc, 
     set_accuracy!(at::AnalysisTable, method::AnalysisMethod; nom_conc = method.nom_conc, est_conc = method.est_conc, acc = method.acc)
     set_accuracy!(at::AnalysisTable, batch::Batch; nom_conc = batch.method.nom_conc, est_conc = batch.method.est_conc, acc = batch.method.acc)
 
-Calculate accuracy, update or insert the values into `at` at index `acc`, and return the object 
-using `getproperty(at, nom_conc)` as true concentration and `getproperty(at, est_conc)` as estimated concentration.
+Calculate accuracy, update or insert the values into `at` at index `acc`, and return the object. 
+
+Use `getproperty(at, nom_conc)` as true concentration and `getproperty(at, est_conc)` as estimated concentration.
 """
 function set_accuracy!(at::AnalysisTable, method::AnalysisMethod; nom_conc = method.nom_conc, est_conc = method.est_conc, acc = method.acc)
     set!(at, acc, accuracy(at; nom_conc, est_conc))
@@ -306,14 +319,30 @@ set_accuracy!(at::AnalysisTable, batch::Batch; nom_conc = batch.method.nom_conc,
     validate!(batch::Batch; nom_conc = batch.method.nom_conc, est_conc = batch.method.est_conc, acc = batch.method.acc)
 
 Calculate accuracy, and update or insert the values into `batch.data` or a copy of `batch.data` at index `acc`, and returns the updated `batch`.
+
 Use `getproperty(batch.data, nom_conc)` as true concentration and `getproperty(batch.data, est_conc)` as estimated concentration. 
-This function assigns `at` to `batch.data` 
 """
 function validate!(batch::Batch{A, M, C, D}; nom_conc = batch.method.nom_conc, est_conc = batch.method.est_conc, acc = batch.method.acc) where {A, M, C, D}
     set_accuracy!(batch.data, batch; nom_conc, est_conc, acc)
     batch
 end
 function validate!(batch::Batch{A, M, C, Nothing}; nom_conc = batch.method.nom_conc, est_conc = batch.method.est_conc, acc = batch.method.acc) where {A, M, C}
+    @warn "There is no data!"
+    batch
+end
+
+"""
+    analyze!(batch::Batch; signal = batch.method.signal, rel_sig = batch.method.rel_sig, nom_conc = batch.method.nom_conc, est_conc = batch.method.est_conc, acc = batch.method.acc)
+
+Quantify all analytes, calculate accuracy, and update or insert the values into `batch.data` or a copy of `batch.data` at index `rel_sig` for relative signal, `est_conc` for concentration, and `acc` for accuracy, and returns the updated `batch`.
+
+Use `getproperty(at, signal)` as signal data, `getproperty(batch.data, nom_conc)` as true concentration, and `getproperty(batch.data, est_conc)` as estimated concentration. 
+"""
+function analyze!(batch::Batch{A, M, C, D}; signal = batch.method.signal, rel_sig = batch.method.rel_sig, nom_conc = batch.method.nom_conc, est_conc = batch.method.est_conc, acc = batch.method.acc) where {A, M, C, D}
+    quantify!(batch; signal, rel_sig, est_conc)
+    validate!(batch; nom_conc, est_conc, acc)
+end
+function analyze!(batch::Batch{A, M, C, Nothing}; signal = batch.method.signal, rel_sig = batch.method.rel_sig, nom_conc = batch.method.nom_conc, est_conc = batch.method.est_conc, acc = batch.method.acc) where {A, M, C}
     @warn "There is no data!"
     batch
 end

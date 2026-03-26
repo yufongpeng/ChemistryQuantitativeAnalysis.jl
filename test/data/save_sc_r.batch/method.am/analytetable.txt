@@ -1,8 +1,8 @@
-analyte	isd	std
-Analyte1	2	2
-Analyte2	-1	-1
-Analyte3	4	4
-Analyte4	-1	-1
-Analyte5	4	4
-Analyte6	2	2
-Analyte7	4	4
+analyte	isd	std	model
+Analyte1	2	2	LinearCalibrator(ConstWeight())
+Analyte2	-1	-1	LinearCalibrator(ConstWeight())
+Analyte3	4	4	LinearCalibrator(ConstWeight())
+Analyte4	-1	-1	LinearCalibrator(ConstWeight())
+Analyte5	4	4	LinearCalibrator(ConstWeight())
+Analyte6	2	2	LinearCalibrator(ConstWeight())
+Analyte7	4	4	LinearCalibrator(ConstWeight())

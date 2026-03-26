@@ -130,8 +130,13 @@ end
         global ebatch = Batch(method)
         global sdt = SampleDataTable(CSV.read(joinpath(datapath, "area.sdt", "table.txt"), Table; delim = '\t', stringtype = String), :Sample)
         global adt = AnalyteDataTable(CSV.read(joinpath(datapath, "area.adt", "table.txt"), Table; delim = '\t', stringtype = String), :Analyte)
-        global sbatch = Batch(sdt; f2c = repeat([1], 10))
-        global abatch = Batch(adt; calid = vcat(repeat(1:6; inner = 3), repeat([missing], 50)), ratio = [0.1, 0.2, 0.5, 1, 2, 5], f2c = repeat([1], 10))
+        global sbatch = Batch(sdt; conc_factor = repeat([1], 10))
+        global abatch = Batch(adt; level = vcat(repeat(1:6; inner = 3), repeat([missing], 50)), ratio = [0.1, 0.2, 0.5, 1, 2, 5], conc_factor = repeat([1], 10))
+        global sdt2 = CQA.read(joinpath(datapath, "area2.sdt"), Table)
+        global adt2 = CQA.read(joinpath(datapath, "area2.adt"), Table)
+        global sbatch2 = Batch(sdt2; level = :Level, ratio = :Ratio, conc_factor = 1:10)
+        global abatch2 = Batch(adt2; level = vcat(repeat(1:6; inner = 3), repeat([missing], 50)), ratio = [0.1, 0.2, 0.5, 1, 2, 5], conc_factor = :Factor)
+  
         @test all(isapprox.(sbatch.method.conctable.Analyte1, collect(abatch.method.conctable[1])[2:end]))
         @test getanalyte(cdata.area, 1) == getanalyte(rdata.area, 1) == getanalyte(SampleDataTable(rdata.area, :Sample, Table), 1)
         @test getsample(cdata.area, 2) == getsample(rdata.area, 2) == getsample(AnalyteDataTable(cdata.area, :Analyte, Table), 2)
@@ -140,6 +145,7 @@ end
         @test propertynames(cdata) == (:area, )
         @test propertynames(cdata.area) == (:Sample, Symbol.(analytes)...)
         @test propertynames(rdata.area) == (:Analyte, Symbol.(["S1", "S2", "S3"])...)
+        @test all(isapprox.(sbatch2.method.conctable.Analyte7 .* 2, sbatch2.method.conctable.Analyte2 .* 7))
     end
     @testset "Interface.jl" begin
         cdata.area[AnalyteTest("G2(drug_a)"), "S1"] = 4
@@ -174,20 +180,23 @@ end
     @testset "Calibration" begin
         calibrate!(cbatch)
         calibrate!(rbatch)
-        CQA.init_calibrate(cbatch, 1)
-        @test all(accuracy(cbatch.calibrator[1]) .== accuracy(rbatch.calibrator[1]))
-        @test all(quantify(rbatch.calibrator[2]) .== quantify(cbatch.calibrator[2]))
-        recalibrate!(cbatch; wnm = "1/x")
-        @test cbatch.calibrator[1].model.wnm == "1/x"
-        recalibrate!(cbatch; params = Table(; wnm = ["1", "1/x"]), model = LinearCalibrator)
-        recalibrate!(rbatch, AnalyteG1("G1(drug_b)"); model = QuadraticCalibrator)
+        calibrate(cbatch, 1)
+        @test all(CQA.validate_calibrator(cbatch.calibrator[1]) .== CQA.validate_calibrator(rbatch.calibrator[1]))
+        @test all(CQA.quantify_calibrator(rbatch.calibrator[2]) .== CQA.quantify_calibrator(cbatch.calibrator[2]))
+        model_calibrator!(cbatch; weight = XWeight())
+        @test cbatch.calibrator[1].model.weight == XWeight()
+        model_calibrator!(cbatch, Table(; analyte = [AnalyteG1("G1(drug_a)"), AnalyteG1("G1(drug_b)")], weight = [ConstWeight(), XWeight()]), model = LinearCalibrator)
+        model_calibrator!(rbatch, AnalyteG1("G1(drug_b)"); model = QuadraticCalibrator)
         @test rbatch.calibrator[2].model isa QuadraticCalibrator
-        sbatch.method.analytetable.isd .= [2, -1, 4, -1, 0, 0, 0, 0, 0, 0]
-        sbatch.method.analytetable.std .= [1, -1, 3, -1, 5, 6, 7, 8, 9, 10]
-        abatch.method.analytetable.isd .= [2, -1, 4, -1, 0, 0, 0, 0, 0, 0]
-        abatch.method.analytetable.std .= [1, -1, 3, -1, 5, 6, 7, 8, 9, 10]
-        calibrate!(sbatch; params = Table(; model = [LinearCalibrator, ProportionalCalibrator, LinearCalibrator, QuadraticCalibrator, QuadraticProportionalCalibrator, LogarithmicCalibrator, ExponentialCalibrator, PowerCalibrator]))
-        calibrate!(abatch; params = Table(; model = [LinearCalibrator, ProportionalCalibrator, LinearCalibrator, QuadraticCalibrator, QuadraticProportionalCalibrator, LogarithmicCalibrator, ExponentialCalibrator, PowerCalibrator]))
+        edit_method_calibrate!(sbatch, Table(; 
+            std = [1, -1, 3, -1, 5, 6, 7, 8, 9, 10], 
+            isd = [2, -1, 4, -1, 0, 0, 0, 0, 0, 0],
+            model = [LinearCalibrator, Nothing, ProportionalCalibrator, Nothing, LinearCalibrator, QuadraticCalibrator, QuadraticProportionalCalibrator, LogarithmicCalibrator, ExponentialCalibrator, PowerCalibrator]))
+        edit_method_calibrate!(abatch, 
+            [], 
+            [2, 4], 
+            [1 => 2, 3 => 4], 
+            Table(; analyte = abatch.std, model = [LinearCalibrator, ProportionalCalibrator, LinearCalibrator, QuadraticCalibrator, QuadraticProportionalCalibrator, LogarithmicCalibrator, ExponentialCalibrator, PowerCalibrator]))
         sbatch.data.area.Analyte2 .*= 10
         sbatch.method.signaltable.Analyte2 .*= 10
         for v in columns(abatch.data.area)
@@ -196,36 +205,35 @@ end
         for v in columns(abatch.method.signaltable)
             v[2] /= 10
         end
-        retrieve_method!(sbatch; model = LinearCalibrator)
-        retrieve_method!(sbatch; params = Table(; model = [LinearCalibrator, ProportionalCalibrator, LinearCalibrator, QuadraticCalibrator, QuadraticProportionalCalibrator, LogarithmicCalibrator, ExponentialCalibrator, PowerCalibrator]))
-        retrieve_method!(abatch, "Analyte1")
+        edit_method!(sbatch; model = LinearCalibrator)
+        edit_method_calibrate!(sbatch, Table(; analyte = sbatch.method.std, model = [LinearCalibrator, ProportionalCalibrator, LinearCalibrator, QuadraticCalibrator, QuadraticProportionalCalibrator, LogarithmicCalibrator, ExponentialCalibrator, PowerCalibrator]))
+        calibrate!(abatch, "Analyte1")
         @test rbatch.calibrator[1].analyte == cbatch.calibrator[1].analyte
         @test all(isapprox.(cbatch.calibrator[1].table.accuracy[4:6], [1, 1.1, 0.9]))
         @test all(isapprox.(rbatch.calibrator[2].table.accuracy[4:6], [1, sqrt(1.1), sqrt(0.9)]))
-        set_isd!(sbatch, "Analyte1", "Analyte4")
+        assign_isd_calibrate!(sbatch, "Analyte1", "Analyte4")
         @test sbatch.calibrator[1].isd == "Analyte4"
         @test sbatch.method.analytetable.isd[1] == 4
-        set_isd!(sbatch, "Analyte1", "Analyte2")
+        assign_isd_calibrate!(sbatch, "Analyte1", "Analyte2")
         @test sbatch.calibrator[1].isd == "Analyte2"
         @test sbatch.method.analytetable.isd[1] == 2
-        set_std!(sbatch, "Analyte1", "Analyte3")
+        assign_std!(sbatch, "Analyte1", "Analyte3")
         @test sbatch.method.analytetable.std[1] == 3
         @test sbatch.method.analytetable.isd[1] == 4
         popfirst!(sbatch.calibrator)
-        replace_std!(sbatch, "Analyte3", "Analyte1", "Analyte2")
+        replace_std_calibrate!(sbatch, "Analyte3", "Analyte1", "Analyte2")
         @test last(sbatch.calibrator).analyte == "Analyte1"
         @test sbatch.method.analytetable.std[1] == 1
         @test sbatch.method.analytetable.isd[1] == 2
-        set_std!(sbatch, "Analyte3", "Analyte3", "Analyte4")
+        assign_std_calibrate!(sbatch, "Analyte3", "Analyte3", "Analyte4")
         @test sbatch.method.analytetable.std[3] == 3
         @test sbatch.method.analytetable.isd[3] == 4
         pushfirst!(sbatch.calibrator, pop!(sbatch.calibrator))
         # InternalCalibrator
-        global ical = calibrate!(InternalCalibrator(analyteobj(method.conctable)[3], 50.0))
-        @test isapprox(quantify(ical)[1], getanalyte(method.conctable, 3)[1])
-        @test CQA.validate_quantify_calibrator!(Batch(method, [ical])).calibrator[1] == ical
-        @test recalibrate!(ical) == ical
-        @test retrieve_method!(ical, method) == ical
+        global ical = CQA.analyze_calibrator!(InternalCalibrator(analyteobj(method.conctable)[3], 50.0))
+        @test isapprox(CQA.quantify_calibrator(ical)[1], getanalyte(method.conctable, 3)[1])
+        @test CQA.analyze_calibrator!(Batch(method, [ical])).calibrator[1] == ical
+        @test model_calibrator!(ical, Nothing) == ical
     end
     @testset "Quantification" begin
         # empty batch
@@ -233,6 +241,7 @@ end
         @test @test_noerror quantify_relative_signal!(ebatch)
         @test @test_noerror quantify_inv_predict!(ebatch)
         @test @test_noerror validate!(ebatch)
+        @test @test_noerror analyze!(ebatch)
         # Batch: quantify, quantify!, set_quantify!, set_quantify, set_inv_predict, relative_signal
         @test all(isapprox.(getanalyte(set_relative_signal(rbatch.data, rbatch).relative_signal, AnalyteTest("G1(drug_a)")), cbatch.data.area.var"G1(drug_a)" ./ cbatch.data.area.var"G2(drug_a)"))
         set_relative_signal!(cbatch.data, cbatch)
@@ -241,17 +250,17 @@ end
         set_quantify!(rbatch.data, rbatch)
         @test all(isapprox.(set_inv_predict(cbatch.data, cbatch).estimated_concentration.var"G1(drug_a)", getanalyte(rbatch.data.estimated_concentration, AnalyteTest("G1(drug_a)"))))
         @test all(isapprox.(getanalyte(set_quantify(rbatch.data, rbatch).estimated_concentration, AnalyteTest("G1(drug_a)")), quantify(cbatch, cbatch.data).var"G1(drug_a)"))
-        @test all(isapprox.(quantify!(cbatch).data.estimated_concentration.var"G1(drug_a)", quantify(cbatch.calibrator[1], cbatch.data.area, cbatch.calibrator[1].analyte, cbatch.calibrator[1].isd)))
+        @test all(isapprox.(analyze!(cbatch).data.estimated_concentration.var"G1(drug_a)", quantify(cbatch.calibrator[1], cbatch.data.area, cbatch.calibrator[1].analyte, cbatch.calibrator[1].isd)))
         
         # Cal: inv_predict, quantify
-        @test quantify(ical) == inv_predict(ical)
+        # @test quantify(ical) == inv_predict(ical)
         @test quantify(ical, cbatch.data.area, AnalyteTest("G1(drug_a)")) == inv_predict(ical, cbatch.data.relative_signal, AnalyteTest("G1(drug_a)"))
-        @test quantify(cbatch.calibrator[2]) == inv_predict(cbatch.calibrator[2])
+        # @test quantify(cbatch.calibrator[2]) == inv_predict(cbatch.calibrator[2])
         @test quantify(cbatch.calibrator[2], cbatch.data.area) == inv_predict(cbatch.calibrator[2], cbatch.data.relative_signal)
 
         set!(cbatch.data, :nominal_concentration, deepcopy(cbatch.data.estimated_concentration))
         @test all(isapprox.(validate!(cbatch).data.accuracy.var"G1(drug_b)", set_accuracy(cbatch.data, cbatch).accuracy.var"G1(drug_b)"))
-        @test all(isapprox.(accuracy(cbatch.data, cbatch).var"G1(drug_b)", accuracy(cbatch.data, cbatch.method).var"G1(drug_b)"))
+        @test all(isapprox.(accuracy(cbatch, cbatch.data).var"G1(drug_b)", accuracy(cbatch.method, cbatch.data).var"G1(drug_b)"))
     end
     @testset "Utils" begin
         @test isstd("Analyte1", sbatch.method)
@@ -270,20 +279,40 @@ end
         @test all(isapprox.(signal_range(cbatch.calibrator[2]), (signal_lloq(cbatch.calibrator[2]), signal_uloq(cbatch.calibrator[2]))))
         @test isapprox(signal_lob(sbatch.calibrator[2]) + signal_lod(sbatch.calibrator[2]),  0.4945 * signal_loq(sbatch.calibrator[2]))
         @test endswith(formula_repr_ascii(rbatch.calibrator[2]), "x^2")
-        for (k, v) in CQA.WFN 
-            CQA.WFN[k](1.0, 1.0)
+        for w in [ConstWeight,
+                    RootXWeight,
+                    RootYWeight,
+                    RootXYWeight,
+                    XWeight,
+                    YWeight,
+                    XYWeight,
+                    SqXWeight,
+                    SqYWeight,
+                    SqXYWeight,
+                    RootLogXWeight,
+                    RootLogYWeight,
+                    LogXWeight,
+                    LogYWeight,
+                    SqLogXWeight,
+                    SqLogYWeight,
+                    RootExpXWeight,
+                    RootExpYWeight,
+                    ExpXWeight,
+                    ExpYWeight,
+                    SqExpXWeight,
+                    SqExpYWeight]
+            wf = w()
+            CQA.getwts(wf, 1.0, 1.0)
+            CQA.human_name(wf)
+            CQA.human_name_ascii(wf)
         end
         for c in sbatch.calibrator
             formula_repr_ascii(c)
-            weight_repr_ascii(c)
-            weight_repr(c)
             signal_lob(c)
             signal_lod(c)
             signal_loq(c)
         end 
         formula_repr_ascii(ical)
-        weight_repr_ascii(ical)
-        weight_repr(ical)
         @test CQA.cqaconvert(String, "1") == "1"
         @test CQA.cqaconvert(Real, 1) == Real(1)
         @test CQA.cqamap(Int, [1, 2, 3]) == [1, 2, 3]

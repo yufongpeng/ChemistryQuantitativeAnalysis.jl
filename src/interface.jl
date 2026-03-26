@@ -37,7 +37,7 @@ Base.delete!(at::AnalysisTable, i) = (delete!(tables(at), i); at)
 Base.getproperty(at::AnalysisTable, property::Symbol) = tables(at)[property]
 Base.propertynames(at::AnalysisTable) = Tuple(keys(tables(at)))
 Base.getindex(at::AnalysisTable, i) = getindex(tables(at), i)
-Base.setindex!(at::AnalysisTable, v, i) = (setindex!(tables(at), v, i); at)
+Base.setindex!(at::AnalysisTable, v, i) = (set!(tables(at), i, v); at)
 Base.pairs(at::AnalysisTable) = pairs(tables(at))
 Base.keys(at::AnalysisTable) = keys(tables(at))
 Base.values(at::AnalysisTable) = values(tables(at))
@@ -93,13 +93,13 @@ struct EachSample{T}
 end
 
 """
-    eachanalyte(dt::AbstractDataTable)
+    eachanalyte(dt::AbstractDataTable) -> EachAnalyte
 
 Create an iterator which gets data belonging to each analyte as a `Vector`. For `AnalyteDataTable`, new vectors are created; mutating these vector will not change the value in `dt`.
 """
 eachanalyte(dt::AbstractDataTable) = EachAnalyte(dt)
 """
-    eachsample(dt::AbstractDataTable)
+    eachsample(dt::AbstractDataTable) -> EachSample
 
 Create an iterator which gets data belonging to each sample as a `Vector`. For `SampleDataTable`, new vectors are created; mutating these vector will not change the value in `dt`.
 """
@@ -113,3 +113,9 @@ Base.iterate(it::EachAnalyte{<: SampleDataTable}, st = 1) = st > length(it) ? no
 Base.iterate(it::EachAnalyte{<: AnalyteDataTable}, st = 1) = st > length(it) ? nothing : ([getproperty(table(it.table), p)[st] for p in samplename(it.table)], st + 1)
 Base.iterate(it::EachSample{<: SampleDataTable}, st = 1) = st > length(it) ? nothing : ([getproperty(table(it.table), p)[st] for p in analytename(it.table)], st + 1)
 Base.iterate(it::EachSample{<: AnalyteDataTable}, st = 1) = st > length(it) ? nothing : (getproperty(table(it.table), samplename(it.table)[st]), st + 1)
+
+StatsAPI.coef(machine::LsqFitMachine) = coef(machine.fit)
+StatsAPI.r2(machine::LsqFitMachine) = predict(machine)
+StatsAPI.predict(machine::LsqFitMachine, x::Vector) = machine.fn(x, machine.fit.param)
+StatsAPI.predict(machine::LsqFitMachine, x::T) where T = 
+    Table.istable(T) ? machine.fn(Tables.getcolumn(x, :x), machine.fit.param) : machine.fn(x, machine.fit.param)
