@@ -367,13 +367,13 @@ function calibrate(method::AnalysisMethod{A}, analyte::B) where {A, B <: A}
     table = Table(; 
                     id = id[ord], 
                     level = level, 
+                    y = convert(Vector{numbertype}, y), 
                     x = map(level) do l
                         convert(numbertype, conc[findsample(method.conctable, Symbol(l))])
                     end, 
-                    y = convert(Vector{numbertype}, y), 
                     x̂ = zeros(numbertype, length(id)), 
                     accuracy = zeros(numbertype, length(id)),
-                    include = level .> 0
+                    include = collect(level .> 0)
                     )
     calmodel = method.analytetable.model[getanalyteid(method, analyte)]
     isnothing(calmodel) && throw(ArgumentError(""))
