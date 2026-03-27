@@ -563,7 +563,7 @@ Construct calibration machine from `tbl` (`cal.table`) of type `model` (`cal.mod
 """
 mkcalmachine(model::Type{T}, tbl) where {T <: AbstractCalibrationModel} = throw(ArgumentError("`mkcalmachine` not defined for `$T`"))
 function mkcalmachine(model::CalibrationModel{T}, tbl) where T
-    lm1 = lm(getformula(T), tbl[tbl.include]; weight = getweights(model.weight, tbl.x[tbl.include], tbl.y[tbl.include]))
+    lm1 = lm(getformula(T), tbl[tbl.include]; weights = getweights(model.weight, tbl.x[tbl.include], tbl.y[tbl.include]))
     # if T == Quadratic && lm1.model.pp.beta0[1] == 0
     #     m = hcat(ones(eltype(tbl.x), count(tbl.include)), tbl.x[tbl.include], tbl.x[tbl.include] .^ 2)
     #     sqrtw = diagm(sqrt.(getweights(model.wfn, tbl.x[tbl.include], tbl.y[tbl.include])))
