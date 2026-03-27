@@ -25,15 +25,15 @@ Additionally, `tryparse` have to be extended for `CSV` parsing:
 
 See README.md for the structure of ".batch" file.
 """
-function read(file::String, T; analytetype = String, sampletype = String, numbertype = Float64, delim = '\t', kwargs...)
+function read(file::String, T; analytetype = String, sampletype = String, numbertype = Float64, modeltype = CalibrationModel, delim = '\t', kwargs...)
     if endswith(file, ".batch")
-        read_batch(file, T; analytetype, sampletype, numbertype, delim, kwargs...)
+        read_batch(file, T; analytetype, sampletype, numbertype, modeltype, delim, kwargs...)
     elseif endswith(file, ".ical") || endswith(file, ".ecal")
         read_calibrator(file; analytetype, numbertype, delim, kwargs...)
     elseif endswith(file, ".at")
         read_analysistable(file, T; analytetype, sampletype, numbertype, delim, kwargs...)
     elseif endswith(file, ".am")
-        read_method(file, T; analytetype, sampletype, numbertype, delim, kwargs...)
+        read_method(file, T; analytetype, sampletype, numbertype, delim, modeltype, kwargs...)
     elseif endswith(file, ".sdt") || endswith(file, ".adt")
         read_datatable(file, T; analytetype, sampletype, numbertype, delim, kwargs...)
     end
@@ -93,7 +93,7 @@ function read_calibrator(file::String; analytetype = String, numbertype = Float6
     if endswith(file, ".ical")
         return InternalCalibrator(analytetype(config[:analyte]), parse(numbertype, config[:conc]))
     end
-    tbl = CSV.read(joinpath(file, "table.txt"), Table; delim = get(config, :delim, delim), typemap = Dict(Int => numbertype, Float64 => numbertype), types = Dict(:level => Int))
+    tbl = CSV.read(joinpath(file, "table.txt"), Table; delim = get(config, :delim, delim), typemap = Dict(Int => numbertype, Float64 => numbertype), types = Dict(:level => Int), stringtype = String)
     model = cqaconvert(modeltype, config[:model])
     externalcalibrate(cqaconvert(analytetype, config[:analyte]), config[:isd] == "nothing" ? nothing : cqaconvert(analytetype, config[:isd]), tbl, model; decode_config(modeltype, config)...)
 end
@@ -146,7 +146,7 @@ function read_sampledatatable(file::String, T; analytetype = String, sampletype 
     config = read_config(joinpath(file, "config.txt"))
     delim = get(config, :delim, delim)
     sample_name = Symbol(first(split(config[:Sample], "\t")))
-    tbl = CSV.read(joinpath(file, "table.txt"), T; delim, typemap = Dict(Int => numbertype), types = Dict(sample_name => sampletype, levelname => Int), validate = false)
+    tbl = CSV.read(joinpath(file, "table.txt"), T; delim, typemap = Dict(Int => numbertype), types = Dict(sample_name => sampletype, levelname => Int), stringtype = String, validate = false)
     analyte_name = String.(filter!(!isempty, vectorize(config[:Analyte])))
     for i in Symbol.(analyte_name)
         replace!(getproperty(tbl, i), missing => 0)
@@ -178,7 +178,7 @@ function read_analytedatatable(file::String, T; analytetype = String, sampletype
     delim = get(config, :delim, delim)
     analyte_name = Symbol(config[:Analyte])
     sample_name = String.(filter!(!isempty, vectorize(config[:Sample])))
-    tbl = CSV.read(joinpath(file, "table.txt"), T; delim, typemap = Dict(Int => numbertype), types = Dict(analyte_name => analytetype), validate = false)
+    tbl = CSV.read(joinpath(file, "table.txt"), T; delim, typemap = Dict(Int => numbertype), types = Dict(analyte_name => analytetype), stringtype = String, validate = false)
     for i in Symbol.(sample_name)
         replace!(getproperty(tbl, i), missing => 0)
     end
@@ -240,7 +240,7 @@ function read_method(file::String, T; analytetype = String, sampletype = String,
     est_conc = Symbol(get(config, :est_conc, :estimated_concentration))
     nom_conc = Symbol(get(config, :nom_conc, :nominal_concentration))
     acc = Symbol(get(config, :acc, :accuracy))
-    analytetable = CSV.read(joinpath(file, "analytetable.txt"), Table)
+    analytetable = CSV.read(joinpath(file, "analytetable.txt"), Table; stringtype = String)
     analyte = analytetype.(analytetable.analyte)
     isd = replace(analytetable.isd, missing => 0)
     model = :model in propertynames(analytetable) ? cqaconvert.(modeltype, analytetable.model) : [LinearCalibrator(ConstWeight()) for _ in eachindex(analytetable)]
