@@ -1,53 +1,4 @@
 """
-    cqaconvert(::Type{T}, x::S)
-    cqaconvert(fn::Function, x::S)
-
-Call constructor, `parse`, or `fn`. Extend this function if defining `T(x)` is not safe.
-
-Return
-* `parse(T, x)` if `T <: Number` and `S <: Union{AbstractString, AbstractChar}`.
-* `fn(x)` if `fn` is a `Function`.
-* `T(x)` otherwise.
-
-Note that for any `x` of type `T`, `x == cqaconvert(T, string(x)))`.
-"""
-cqaconvert(::Type{T}, x) where T = T(x)::T
-cqaconvert(::Type{T}, x::T) where T = x
-cqaconvert(::Type{T}, x::Union{AbstractString, AbstractChar}) where {T <: Number} = parse(T, x)::T
-cqaconvert(fn::T, x) where {T <: Function} = fn(x)
-
-"""
-    cqamap(::Type{T}, x::AbstractVector{S})
-    cqamap(fn::Function, x::AbstractVector)
-
-Convert `x` to `AbstractVector{T}`. If direct construction is not possible, i.e. neither `T <: S` nor `S <: T`, it applys `cqaconvert` on every elements.
-
-For a function, `T` is inferred by `cqatype(fn)` first and then `cqatype(fn, v)` for the returned vector `v` to avoid abstract element type. 
-"""
-cqamap(::Type{T}, x::AbstractVector{T}) where T = x
-cqamap(::Type{T}, x::AbstractVector{<: T}) where T = Vector{T}(x)
-cqamap(::Type{T}, x::AbstractVector{S}) where {S, T <: S} = Vector{T}(x)
-cqamap(::Type{T}, x::AbstractVector) where T = typedmap(e -> cqaconvert(T, e), T, x)
-function cqamap(fn::T, x::AbstractVector) where {T <: Function}
-    R = cqatype(fn)
-    if isabstracttype(R)
-        v = map(e -> cqaconvert(fn, e), x)
-        cqamap(cqatype(fn, v), v)
-    else
-        typedmap(e -> cqaconvert(fn, e), R, x)
-    end
-end
-
-"""
-    cqatype(fn::Function)
-    cqatype(fn::Function, x::AbstractVector)
-
-Default returned type of `cqaconvert(fn, x)`. By default, the union of types of each element is used to avoid abstract element type. Extend this function if neccessary.
-"""
-cqatype(fn::T) where {T <: Function} = Any
-cqatype(fn::T, v::AbstractVector) where {T <: Function} = Union{typeof.(v)...}
-
-"""
     typedmap(::Type{T}, c...) 
     typedmap(f, ::Type{T}, c...)
 
@@ -58,30 +9,36 @@ typedmap(::Type{T}, iters...) where T = collect(T, Base.Generator(T, iters...))
 typedmap(fn::F, ::Type{T}, iters...) where {F, T} = collect(T, Base.Generator(fn, iters...))
 
 """
-    getformula(cal::MultipleCalibration)
-    getformula(type::Bool, zero::Bool)
+    stdof(analyte::B, method::AnalysisMethod{A}) where {A, B <: A}
 
-Get a `FormulaTerm` based on `type` and `zero` or parameters from `cal`.
-
-See `MultipleCalibration` for detail description of `type` and `zero`.
+Return calibratio standard of `analyte` based on `method`.
 """
-getformula(cal::MultipleCalibration) = getformula(cal.type, cal.zero)
-getformula(type::Bool, zero::Bool) = if type 
-    zero ? @formula(y ~ 0 + x) : @formula(y ~ x)
-else
-    zero ? @formula(y ~ 0 + x + x ^ 2) : @formula(y ~ x + x ^ 2)
+function stdof(analyte::B, method::AnalysisMethod{A}) where {A, B <: A}
+    aid = getanalyteid(method, analyte)
+    isnothing(aid) && throw(ArgumentError("Analyte $analyte is not in the method"))
+    iid = method.analytetable.std[aid]
+    (iid > 0 ? method.analytetable.analyte[iid] : nothing)::Union{A, Nothing}
 end
-
 """
     isdof(analyte::B, method::AnalysisMethod{A}) where {A, B <: A}
 
 Return internal standard of `analyte` based on `method`.
 """
 function isdof(analyte::B, method::AnalysisMethod{A}) where {A, B <: A}
-    aid = findfirst(==(analyte), method.analytetable.analyte)
+    aid = getanalyteid(method, analyte)
     isnothing(aid) && throw(ArgumentError("Analyte $analyte is not in the method"))
     iid = method.analytetable.isd[aid]
-    (iid > 0 ? method.analytetable.analyte[iid] : nothing)::Union{A, Nothing}
+    (iid > 0 ? method.analytetable.analyte[iid] : iid == 0 ? nothing : analyte)::Union{A, Nothing}
+end
+"""
+    isstd(analyte::B, method::AnalysisMethod{A}) where {A, B <: A}
+
+Return if `analyte` is a internal standard based on `method`.
+"""
+function isstd(analyte::B, method::AnalysisMethod{A}) where {A, B <: A}
+    aid = findfirst(==(analyte), method.analytetable.analyte)
+    isnothing(aid) && throw(ArgumentError("Analyte $analyte is not in the method"))
+    !isnothing(findfirst(==(aid), method.analytetable.std))
 end
 """
     isisd(analyte::B, method::AnalysisMethod{A}) where {A, B <: A}
@@ -95,8 +52,28 @@ function isisd(analyte::B, method::AnalysisMethod{A}) where {A, B <: A}
 end
 
 # getter method
+"""
+    table(dt::AbstractDataTable)
+
+Get field `:table`. 
+"""
 table(dt::AbstractDataTable) = getfield(dt, :table)
+"""
+    tables(dt::AnalysisTable)
+
+Get field `:tables`. 
+"""
 tables(at::AnalysisTable) = getfield(at, :tables)
+"""
+    table_convert(::Type{T}, data::AbstractDataTable)
+
+Convert internal table to type `T`.
+"""
+table_convert(::Type{D}, data::AbstractDataTable{A, S, N, T}) where {D, A, S, N, T <: D} = data
+table_convert(::Type{D}, data::SampleDataTable) where D = 
+    SampleDataTable(analyteobj(data), sampleobj(data), idcol(data), D(table(data)))
+table_convert(::Type{D}, data::AnalyteDataTable) where D = 
+    AnalyteDataTable(analyteobj(data), sampleobj(data), idcol(data), D(table(data)))
 """
     analyteobj(dt::AbstractDataTable{A}) -> Vector{A}
     analyteobj(at::AnalysisTable{A}) -> Vector{A}
@@ -209,232 +186,123 @@ function getsample(dt::SampleDataTable{A, S, N}, sample) where {A, S, N}
     [getproperty(dt, p)[id] for p in analytename(dt)]::Vector{N}
 end
 
-function critical_point(cal::MultipleCalibration{A, N}) where {A, N}
-    β = cal.model.model.pp.beta0::Vector{N}
-    c, b, a = cal.zero ? (0, β...) : β
-    -b / 2a
+"""
+    findcalibrator(batch::Batch, analyte)
+    findcalibrator(calibrator::AbstractVector, analyte)
+    findcalibrator(calibrator::AbstractVector, analyte::Symbol)
+
+Return the index of the first element of `calibrator` or `batch.calibrator` for which the element is the calibrator of `analyte`.
+"""
+findcalibrator(batch::Batch, analyte) = findcalibrator(batch.calibrator, analyte)
+function findcalibrator(calibrator::AbstractVector{A}, analyte) where {A <: AbstractCalibrator}
+    findfirst(x -> x.analyte == analyte, calibrator)
 end
-
-function parse_calibration_level_name(dt::AbstractDataTable, calid::Regex, order, ratio, df, f2c, parse_decimal)
-    so = split(order, "")
-    dilutionid = findfirst(==("D"), so)
-    ratioid = findfirst(==("R"), so)
-    levelid = findfirst(==("L"), so)
-    cs = map(samplename(dt)) do s
-            m = match(calid, string(s))
-            isnothing(m) ? nothing : collect(String, m)
-    end
-    isnothing(levelid) && throw(ArgumentError("No valid level id."))
-    clevel = map(s -> isnothing(s) ? nothing : parse(Int, s[levelid]), cs)
-    id = findall(!isnothing, clevel)
-    pointlevel = convert(Vector{Int}, clevel[id])
-    levels = unique(pointlevel)
-    idx = [findfirst(==(x), clevel) for x in levels]
-    if !isnothing(ratio)
-        concs = map(s -> s .* f2c, ratio)
-    elseif !isnothing(df)
-        concs = map(s -> f2c ./ s, df)
-    elseif !isnothing(ratioid)
-        concs = map(s -> parse(Float64, parse_decimal(s[ratioid])) .* f2c, cs[idx])
-    elseif !isnothing(dilutionid)
-        concs = map(s -> f2c ./ parse(Float64, parse_decimal(s[dilutionid])), cs[idx])
-    else
-        throw(ArgumentError("No valid ratios or dilution factors are obtained."))
-    end
-    id, pointlevel, levels, concs
+function findcalibrator(calibrator::AbstractVector{A}, analyte::Symbol) where {A <: AbstractCalibrator}
+    findfirst(x -> Symbol(x.analyte) == analyte, calibrator)
 end
-
-
-function parse_calibration_level_name(dt::AbstractDataTable, calid, order, ratio, df, f2c, parse_decimal)
-    clevel = replace(calid, missing => nothing)
-    id = findall(!isnothing, clevel)
-    pointlevel = convert(Vector{Int}, clevel[id])
-    levels = unique(pointlevel)
-    if !isnothing(ratio)
-        concs = map(s -> s .* f2c, ratio)
-    elseif !isnothing(df)
-        concs = map(s -> f2c ./ s, df)
-    else
-        throw(ArgumentError("No valid ratios or dilution factors are obtained."))
-    end
-    id, pointlevel, levels, concs
-end
-
-# function parse_calibration_name(s, r, d, calid, levelid, ratioid, dilutionid, f2c, parse_decimal)
-#     m = match(calid, string(s))
-#     isnothing(m) && return missing
-#     m = collect(String, m)
-#     level = parse(Int, m[levelid])
-#     conc = parse(Float64, parse_decimal(m[only(setdiff(eachindex(m), levelid))]))
-#     (level, dilution ? f2c ./ conc : f2c .* conc)
-# end
-
-table_convert(::Type{D}, data::AbstractDataTable{A, S, N, T}) where {D, A, S, N, T <: D} = data
-table_convert(::Type{D}, data::A) where {D, A <: AbstractDataTable} = 
-    A(analyteobj(data), sampleobj(data), idcol(data), D(table(data)))
 
 """
-    dynamic_range(cal::MultipleCalibration)
+    getcalibrator(batch::Batch, analyte)
+    getcalibrator(calibrator::AbstractVector, analyte)
+    getcalibrator(calibrator::AbstractVector, analyte::Symbol)
+
+Get calibrator of `analyte` from `calibrator` or `batch.calibrator`.
+"""
+getcalibrator(batch::Batch, analyte) = getcalibrator(batch.calibrator, analyte)
+function getcalibrator(calibrator::AbstractVector{A}, analyte) where {A <: AbstractCalibrator}
+    id = findcalibrator(calibrator, analyte)
+    isnothing(id) && throw(ArgumentError("Analyte $analyte does not have a calibration curve."))
+    calibrator[id]
+end
+getcalibrator(batch::Batch, id::Int) = getcalibrator(batch.calibrator, id)
+getcalibrator(calibrator::AbstractVector{A}, id::Int) where {A <: AbstractCalibrator} = calibrator[id]
+
+"""
+    dynamic_range(cal::ExternalCalibrator)
 
 Return dynamic range as a `Tuple` (lloq, uloq).
 """
-dynamic_range(cal::MultipleCalibration) = (lloq(cal), uloq(cal))
+dynamic_range(cal::ExternalCalibrator) = (lloq(cal), uloq(cal))
 """
-    signal_range(cal::MultipleCalibration)
+    signal_range(cal::ExternalCalibrator)
 
 Return theoretical signal of dynamic range as a `Tuple` (lloq, uloq).
 """
-signal_range(cal::MultipleCalibration) = Tuple(predict(cal.model, Table(; x = collect(dynamic_range(cal)))))
+signal_range(cal::ExternalCalibrator) = (predict(cal.machine, Table(; x = collect(dynamic_range(cal))))..., )
 
 """
-    lloq(cal::MultipleCalibration)
+    lloq(cal::ExternalCalibrator)
 
 Return lower limit of quantification.
 """
-lloq(cal::MultipleCalibration) = (cal.type || last(cal.model.model.pp.beta0) < 0) ? cal.table.x[findfirst(cal.table.include)] : max(cal.table.x[findfirst(cal.table.include)], critical_point(cal))
+lloq(cal::ExternalCalibrator) = cal.table.x[findfirst(cal.table.include)]
 """
-    uloq(cal::MultipleCalibration)
+    uloq(cal::ExternalCalibrator)
 
 Return upper limit of quantification.
 """
-uloq(cal::MultipleCalibration) = (cal.type || last(cal.model.model.pp.beta0) > 0) ? cal.table.x[findlast(cal.table.include)] : min(cal.table.x[findlast(cal.table.include)], critical_point(cal))
+uloq(cal::ExternalCalibrator) = cal.table.x[findlast(cal.table.include)]
 """
-    signal_lloq(cal::MultipleCalibration)
+    signal_lloq(cal::ExternalCalibrator)
 
 Return theoretical signal of lower limit of quantification.
 """
-signal_lloq(cal::MultipleCalibration) = only(predict(cal.model, Table(; x = [lloq(cal)])))
+signal_lloq(cal::ExternalCalibrator) = only(predict(cal.machine, Table(; x = [lloq(cal)])))
 """
-    uloq(cal::MultipleCalibration)
+    uloq(cal::ExternalCalibrator)
 
 Return theoretical signal of upper limit of quantification.
 """
-signal_uloq(cal::MultipleCalibration) = only(predict(cal.model, Table(; x = [uloq(cal)])))
+signal_uloq(cal::ExternalCalibrator) = only(predict(cal.machine, Table(; x = [uloq(cal)])))
 
-function blank(cal::MultipleCalibration{A, N}) where {A, N}
-    β = cal.model.model.pp.beta0::Vector{N}
-    if cal.type
-        b = length(β) == 1 ? 0 : first(β)
-    else
-        length(β) == 2 && return 0
-        c, b, a = β
-        a < 0 && return c
-        max(0, b ^ 2 / 4a - b ^ 2 / 2a + c)
-    end
+"""
+    blank(cal::ExternalCalibrator)
+    blank(model::CalibrationModel)
+
+Blank signal of `cal`.
+"""
+blank(cal::ExternalCalibrator) = blank(cal.model)
+blank(model::CalibrationModel{Proportional}) = 0
+blank(model::CalibrationModel{Linear}) = 0
+blank(model::CalibrationModel{QuadraticProportional}) = 0
+blank(model::CalibrationModel{Quadratic}) = 0
+blank(model::CalibrationModel{Logarithmic}) = -Inf
+blank(model::CalibrationModel{Exponential}) = 0
+blank(model::CalibrationModel{Power}) = 0
+
+"""
+    signal_lob(cal::ExternalCalibrator)
+
+Theoretical limit of blank (LOB) in signal space.
+"""
+function signal_lob(cal::ExternalCalibrator)
+    zero_id = findall(==(0), cal.table.level)
+    isempty(zero_id) ? blank(cal) + 1.645 * std(cal.table.y[cal.table.x .== cal.table.x[findfirst(cal.table.include)]]) : mean(cal.table.y[zero_id]) + 1.645 * std(cal.table.y[zero_id])
 end
 
 """
-    loq(cal::MultipleCalibration)
+    signal_lod(cal::ExternalCalibrator)
 
-Theoretical limit of quantification (LOQ); concentration of signal adding blank signal and 10 times standard deviation of LLOQ signal.
-
-Blank signal is defined as the lowest signal such that the corresponding concentration is larger than 0. 
+Theoretical limit of detection (LOD) in signal space.
 """
-loq(cal::MultipleCalibration) = only(inv_predict(cal, [blank(cal) + 10 * std(cal.table.y[findfirst(cal.table.include)])]))
-"""
-    lod(cal::MultipleCalibration)
-
-Theoretical limit of quantification (LOQ); concentration of signal adding blank signal and 3.3 times standard deviation of LLOQ signal.
-
-Blank signal is defined as the lowest signal such that the corresponding concentration is larger than 0. 
-"""
-lod(cal::MultipleCalibration) = only(inv_predict(cal, [blank(cal) + 3.3 * std(cal.table.y[findfirst(cal.table.include)])]))
-
-"""
-    weight_repr(cal::MultipleCalibration)
-    weight_repr(weight::Number)
-
-Return string representation of `cal.weight` or `weight`. 
-
-"none" for 0, "1/√x" for -0.5, "1/x" for -1, "1/x²" for -2, 
-"x^`\$weight`" for other positive `weight`, and "1/x^`\$(abs(weight))`" for other negative `weight`
-"""
-function weight_repr(cal::MultipleCalibration)
-    weight_repr(cal.weight)
-end
-weight_repr(weight::Number) = if weight == -0.5
-    "1/√x"
-elseif weight == -1
-    "1/x"
-elseif weight == -2
-    "1/x²"
-elseif weight == 0
-    "none"
-elseif weight == 1
-    "x"
-elseif weight > 0
-    "x^$weight"
-else
-    "1/x^$(abs(weight))"
+function signal_lod(cal::ExternalCalibrator) 
+    zero_id = findall(==(0), cal.table.level)
+    isempty(zero_id) ? blank(cal) + 3.3 * std(cal.table.y[cal.table.x .== cal.table.x[findfirst(cal.table.include)]]) : signal_lob(cal) + 1.645 * std(cal.table.y[cal.table.x .== cal.table.x[findfirst(cal.table.include)]])
 end
 """
-    weight_value(weight)
+    signal_loq(cal::ExternalCalibrator)
 
-Return value of weight from string representation. See "weight_repr".
+Theoretical limit of quantification (LOQ) in signal space.
 """
-weight_value(weight) = if weight == "none"
-    0
-elseif weight == "1/√x"
-    -0.5
-elseif weight == "1/x"
-    -1
-elseif weight == "1/x²"
-    -2
-elseif weight == "x"
-    1
-else
-    neg = match(r"1/x\^(\d*)", weight)
-    isnothing(neg) ? parse(Float64, first(match(r"x\^(\d*)", weight))) : -parse(Float64, first(neg))
-end
+signal_loq(cal::ExternalCalibrator) = blank(cal) + 10 * std(cal.table.y[cal.table.x .== cal.table.x[findfirst(cal.table.include)]])
 
 """
-    formula_repr(cal::SingleCalibration; digits = nothing, sigdigits = 4)
-    formula_repr(cal::MultipleCalibration; digits = nothing, sigdigits = 4)
+    getweight(cal::InternalCalibrator)
+    getweight(cal::ExternalCalibrator)
+    getweight(model::CalibrationModel)
 
-Return string representation of formula of `cal` with specified `digits` and `sigdigits`. See `format_number`.
+Get weight object from `cal` or `model`. 
 """
-formula_repr(cal::SingleCalibration; digits = nothing, sigdigits = 4) = "y = $(format_number(1/first(getanalyte(cal.caltable.conctable, cal.isd)); digits, sigdigits))x"
-function formula_repr(cal::MultipleCalibration; digits = nothing, sigdigits = 4)
-    β = cal.model.model.pp.beta0
-    cal.type && cal.zero && return "y = $(format_number(β[1]; digits, sigdigits))x"
-    op = map(β[2:end]) do b
-        b < 0 ? " - " : " + "
-    end
-    if cal.type
-        string("y = ", format_number(β[1]; digits, sigdigits), op[1], abs(format_number(β[2]; digits, sigdigits)), "x")
-    elseif cal.zero
-        string("y = ", format_number(β[1]; digits, sigdigits), "x", op[1], abs(format_number(β[2]; digits, sigdigits)), "x²")
-    else
-        string("y = ", format_number(β[1]; digits, sigdigits), op[1], abs(format_number(β[2]; digits, sigdigits)), "x", op[2], abs(format_number(β[3]; digits, sigdigits)), "x²")
-    end
-end
-
-@deprecate formula_repr_utf8(x; digits, sigdigits) formula_repr_ascii(x; digits, sigdigits) false
-@deprecate weight_repr_utf8(x) weight_repr_ascii(x) false
-"""
-    formula_repr_ascii(cal::AbstractCalibration; digits = nothing, sigdigits = 4)
-
-Return string representation of formula of `cal` for text file output.
-"""
-formula_repr_ascii(cal::AbstractCalibration; digits = nothing, sigdigits = 4) = replace(formula_repr(cal; digits, sigdigits), "x²" => "x^2")
-"""
-    weight_repr_ascii(cal::AbstractCalibration)
-    weight_repr_ascii(weight::Number)
-
-Return string representation of `cal.weight` or `weight` for text file output.
-"""
-weight_repr_ascii(cal::AbstractCalibration) = replace(weight_repr(cal), "x²" => "x^2", "√x" => "x^0.5")
-weight_repr_ascii(weight::Number) = replace(weight_repr(weight), "x²" => "x^2", "√x" => "x^0.5")
-"""
-    format_number(x; digits = nothing, sigdigits = 4)
-
-Return string representation of number with specified `digits`.
-
-If `digits` is `nothing`, the function uses `sigdigits` instead.
-"""
-format_number(x; digits = nothing, sigdigits = 4) = isnothing(digits) ? format_number2int(round(x; sigdigits)) : format_number2int(round(x; digits))
-format_number2int(x) = 
-    x == round(x) ? round(Int, x) : x
-
-vectorize(x) = [x]
-vectorize(x::AbstractVector) = x
+getweight(cal::InternalCalibrator) = ConstWeight()
+getweight(cal::ExternalCalibrator) = getweight(cal.model)
+getweight(model::CalibrationModel) = model.weight

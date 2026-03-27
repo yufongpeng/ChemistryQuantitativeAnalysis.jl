@@ -4,14 +4,8 @@ Analyte1
 [isd]
 Analyte2
 
-[type]
-true
-
-[zero]
-false
-
-[weight]
-0.0
+[model]
+LinearCalibrator(ConstWeight())
 
 [delim]
 \t
