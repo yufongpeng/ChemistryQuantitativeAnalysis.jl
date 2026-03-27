@@ -317,15 +317,16 @@ calibrate!(batch::Batch, cid::Int) =
 
 # recalibration after point select
 """
-    externalcalibrate(analyte, isd, tbl::Table; model = CalibrationModel{Linear}, kwargs...) -> ExternalCalibrator
+    externalcalibrate(analyte, isd, tbl::Table, model; modeltype = Nothing, kwargs...) -> ExternalCalibrator
 
 Construct `ExternalCalibrator` from existing data.
 
 * `tbl::TypedTable.Table`: this will be stored as `table`. It is clean-up calibration data for points selection.
-* `model`: calibration model type.
-* `kwargs`: keyword arguments for function `mkcalmodel`.  
+* `model`: calibration model.
+* `modeltype`: new calibration model type.
+* `kwargs`: new parameters; keyword arguments for function `mkcalmodel`.  
 """
-function externalcalibrate(analyte::A, isd, tbl::Table; model = CalibrationModel{Linear}, kwargs...) where A
+function externalcalibrate(analyte::A, isd, tbl::Table, model; modeltype = Nothing, kwargs...) where A
     id = findall(x -> isa(x, Number), tbl.y)
     tbl = tbl[id]
     xlevel = filter(>(0), unique(tbl.x))
@@ -336,7 +337,7 @@ function externalcalibrate(analyte::A, isd, tbl::Table; model = CalibrationModel
     end
     table = :level in propertynames(tbl) ? table : Table(table; level)
     table = :include in propertynames(tbl) ? table : Table(table; include = level .> 0)
-    calmodel = mkcalmodel(model; kwargs...)
+    calmodel = modifycalmodel(model, modeltype; kwargs...)
     calmachine = mkcalmachine(calmodel, table)
     table = Table(; id = table.id, level = table.level, y = table.y, x = table.x, x̂ = zeros(eltype(table.x), length(table)), accuracy = zeros(eltype(table.x), length(table)), include = table.include)
     analyze_calibrator!(ExternalCalibrator(analyte, isd, table, calmodel, calmachine))
@@ -578,7 +579,7 @@ function mkcalmachine(model::CalibrationModel{T}, tbl) where {T <: Union{Exponen
     beta0 = lm1.model.pp.beta0
     fn = getlsqfn(T)
     fit = curve_fit(fn, tbl.x[tbl.include], tbl.y[tbl.include], wts, [exp(beta0[1]), beta0[2]])
-    LsqFitMachine(fit, fn)
+    LsqFitMachine(fit, fn, var(tbl.y[tbl.include]))
 end
 mkcalmachine(cal::ExternalCalibrator) = mkcalmachine(cal.model, cal.table)
 

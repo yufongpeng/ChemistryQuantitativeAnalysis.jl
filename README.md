@@ -37,14 +37,14 @@ This package provides two wrappers for data, `SampleDataTable{A, S, N, T}` and `
 `AnalysisMethod{A, M, C, D}` is used for storing method, containing all analytes, their internal standards and calibration curve setting, and data for fitting calibration curve.
 |Property|Description|
 |----------|---------|
-|`analytetable::M <: Table`: table with at least 3 columns, `analytes` identical to property `analytes`, `isd`, matching each analyte to index of its internal standard, and `calibration` matching each analyte to index of other analyte for fitting its calibration curve. `-1` indicates the analyte itself is internal standard, and `0` indicates no internal standard. For example, a row `(analytes = AnalyteX, isd = 2, calibration = 3)` means that internal standard of `AnalyteX` is the second analyte, and it will be quantified using calibration curve of the third analyte.|
+|`analytetable::M <: Table`|table with at least 4 columns, `analytes` identical to property `analytes`, `isd`, matching each analyte to index of its internal standard, and `std` matching each analyte to the index of calibration standard. `-1` indicates the analyte itself is internal standard, and `0` indicates no internal standard. `model` stores the calibration model. For example, a row `(analytes = AnalyteX, isd = 2, std = 3, model = LinearCalibrator(ConstWeight()))` means that internal standard of `AnalyteX` is the second analyte, and it will be external calibrated by the third analyte with ordinary linear regression. If isd and std are the same, internal calibrator is used.|
 |`signal::Symbol`|type and key name of experimental acquisition data.|
 |`rel_sig::Symbol`|key name of  relative signal.|
 |`est_conc::Symbol`|key name of  estimated concentration.|
 |`true_conc::Symbol`| key name of  true concentration.|
 |`acc::Symbol`|key name of accuracy.|
-|`pointlevel::Vector{Int}| matching each point to level. It can be empty if there is only one level in `conctable`.|
-|`conctable::C <: AbstractDataTable{A, Int}`| containing concentration data for each level. Sample names must be symbol or string of integers for multiple levels. One level indicates using `InternallCalibrator`.|
+|`pointlevel::Vector{Int}`| matching each point to level. It can be empty if there is only one level in `conctable`.|
+|`conctable::C <: AbstractDataTable{A, Int}`| containing concentration data for each level. Sample names must be symbol or string of integers for multiple levels.|
 |`signaltable::D <: AbstractDataTable{A, S}`| containig signal for each point. It can be `nothing` if signal data is unecessary.|
 |`analyte::AbstractVector{A}`|analytes in user-defined types.|
 |`isd::AbstractVector{<: A}`|internal standards.|
@@ -63,7 +63,7 @@ Keyword arguments
 * `est_conc`: key name of estimated concentration. It defaults to `:estimated_concentration`.
 * `true_conc`: key name of true concentration. It defaults to `:true_concentration`. 
 * `acc`: key name of accuracy. It defaults to `:accuracy`.
-* Other keyword arguments will be columns in `analytetable`; when `analyte`, `isd` and `calibration` are not provided, it will use analyte in `conctable`. 
+* Other keyword arguments will be columns in `analytetable`; when `analyte`, `isd` and `std` are not provided, it will use analyte in `conctable`. 
 
 `levelname` is the column name for `pointlevel` if `signaltable` is a `SampleDataTable`.
 
@@ -84,10 +84,10 @@ The key names are determined by an `AnalysisMethod`.
 `iter` is an iterable iter of key-value `Pair`s (or other iterables of two elements, such as a two-tuples). Keys should be `Symbol`s, and values should be `AbstractDataTable`s.
 
 ## Calibrator
-This package provides two Calibrator types, `ExternalCalibrator{A, N, T}` and `InternalCalibrator{A, N}` which are subtypes of `AbstractCalibrator{A, N}`.
+This package provides two calibrator types, `ExternalCalibrator{A, N, T}` and `InternalCalibrator{A, N}` which are subtypes of `AbstractCalibrator{A, N}`.
 
 ### ExternalCalibrator
-This type fits and stores calibration curve. It can be created from a `AnalysisMethod{A, S}` containing calibration data, an analyte `A` using function `calibration`.
+This type is for external calibration with or without internal calibration. It can be constructed from a `AnalysisMethod{A, S}` containing calibration data, and analyte `A` using function `calibrate`.
 |Field|Description|
 |----------|-----------|
 |`analyte`|analyte being quantified|
@@ -108,10 +108,10 @@ The columns in `table`:
 |`accuracy`|Accuracy, i.e. `x̂/x`.|
 |`include`|Whether this point is included or not|
 
-To predict concentration, call `inv_predict`. To calculate accuracy, call `accuracy`. To change internal standard or calibration standard, use edit_method!`, `assign_isd!`, `assign_sts!`, and `replace_std!`. After any modification, call `calibrate!` to update the `model`.
+To predict concentration, call `quantify_calibrator` and `quantify_calibrator!`. To calculate accuracy, call `validate_calibrator` and `validate_calibrator!`. `analyze_calibrator!` applys `quantify_calibrator!` and `validate_calibrator!` subsequently. 
 
 ### InternalCalibrator
-This type contains data for single pont calibration. 
+This type contains data for single point internal calibration. 
 |Field|Description|
 |----------|-----------|
 |`analyte::Tuple{A}`|the analyte with known concentration (internal standard).|
@@ -131,12 +131,14 @@ This type contains data for single pont calibration.
 |`level::AbstractVector{Int}`| calibration levels, identical to `method.level`.|
 
 Constructors for `Batch{A, M, C, D}`:
-1. `Batch(method::M, calibration::C, data::D = nothing)`
+1. `Batch(method::M, calibrator::C, data::D = nothing)`
 2. `Batch(method::AnalysisMethod, data = nothing; type = true, zero = false, weight = 0)`
 3. `Batch(batch::Batch, at::AnalysisTable)`
 4. `Batch(dt::AbstractDataTable; signal = :area, rel_sig = :relative_signal, est_conc = :estimated_concentration, true_conc = :true_concentration, acc = :accuracy, calid = r"Cal_(\d)_(\d*-*\d*)", order = "LR", level = nothing, ratio = nothing, dilution_factor = nothing, conc_factor = 1, parse_decimal = x -> replace(x, "-" => "."))`
 
-The last method allows user to use encoded sample names or additional tabular data from `dt` to generate `AnalysisMethod`. Note that the returned batch does not have any calibration curves, which allows user to edit `analytetable` with `edit_method!`, `assign_isd!`, `assign_std!`, `replace_std!`, and then apply `calibrate!` to start calibration or incombination, `..._calibrate!`.
+The last method allows user to use encoded sample names or additional tabular data from `dt` to generate `AnalysisMethod`. 
+
+Note that the constructor does not automatically fit any calibration curves if no calibrators are given. User can edit `analytetable` with `edit_method!`, `assign_isd!`, `assign_std!`, `replace_std!`, and then apply `calibrate!` to start calibration or in combination, `..._calibrate!`.
 
 To calculate relative signal, concentration or accuracy and save the result, call `quantify_relative_signal!`, `quantify_inv_predict!` (in combination, `quantify!!`) and `validate!` (in combination, `analyze!`), respectively.
 
@@ -154,9 +156,9 @@ batch_name.batch
 │  │  └──table.txt
 │  ├──analytetable.txt
 │  └──config.txt
-├──calibration
-│  ├──1.mcal
-│  └──2.mcal
+├──calibrator
+│  ├──1.ecal
+│  └──2.ical
 └──data.at
    ├──0_quantity1.sdt
    ├──1_quantity2.sdt 
@@ -177,7 +179,7 @@ value3
 ```
 The first config file contains a header `delim` which determines the default delimiter for `table.txt` in this directory and subdirectories.
 
-`data.at` and `calibration` is not necessary for initializing a batch. The former can be added to the batch directly in julia, and the latter will be generated after calibration.
+`data.at` and `calibrator` is not necessary for initializing a batch. The former can be added to the batch directly in julia, and the latter will be generated after calibration.
 
 All `*.sdt` files can be replaced with `*.adt` files.
 
@@ -216,7 +218,7 @@ sample_col_name_2
 ``` 
 
 ### *.am
-It must contain two `.sdt` or `.adt` files. A file must contain true concentration for each analyte and level. The sample names must be integers.
+It must contain two `.sdt` or `.adt` files. A file must contain nominal concentration for each analyte and level. The sample names must be integers.
 Another file is signal data for each analyte and calibration point. The file name is determined by `config.txt`.
 
 Config file for `method.am` needs the following headers.
@@ -230,8 +232,8 @@ relative_signal
 [est_conc]
 estimated_concentration
 
-[true_conc]
-true_concentration
+[nom_conc]
+nominal_concentration
 
 [acc]
 accuracy
@@ -247,18 +249,18 @@ level_for_1st_point
 level_for_2nd_point
 ⋮
 ```
-`signal`, `rel_sig`, `est_conc`, `true_conc`, and `acc` specifys which `.sdt` or `.adt` files containing corresponding data in the method directory or ascociated `**.at` directory. 
-For the above file, `method.am/area.sdt` or `method.am/area.adt` will become `method.signaltable`; `method.am/true_concentration.sdt` or `method.am/true_concentration.adt` will become `method.conctable`.
+`signal`, `rel_sig`, `est_conc`, `nom_conc`, and `acc` specifys which `.sdt` or `.adt` files containing corresponding data in the method directory or ascociated `**.at` directory. 
+For the above file, `method.am/area.sdt` or `method.am/area.adt` will become `method.signaltable`; `method.am/nominal_concentration.sdt` or `method.am/nominal_concentration.adt` will become `method.conctable`.
 
 `pointlevel` maps each point to level which should be integers.
 
 `levelname` specifys the column representing property `pointlevel` of `AnalysisMethod`. It only works for which `signaltable` is `SampleDataTable`; otherwise, it falls back to use `pointlevel`.
 
-`analytetable.txt` needs to contain analyte names, index of their internal standards, and index of of other analytes whose calibration curve is used. The column names are fixed for these three columns.
+`analytetable.txt` needs to contain analyte names, index of their internal standards, index of calibration standards, and calibration model. The column names are fixed for these four columns.
 ```
-analytes isd   calibration other_information
-analyte1 isd1  calibration_analyte_id1 other_information1
-analyte2 isd2  calibration_analyte_id2 other_information2
+analytes isd   std model
+analyte1 isd1  std1 LinearCalibrator(ConstWeight())
+analyte2 isd2  std2 LinearCalibrator(ConstWeight())
 ⋮
 ```
 The delimiter should be "\t", and the order of columns does not matter.
@@ -269,9 +271,9 @@ It can contain multiple `*.sdt` or `*.adt`. The file names must start from an in
 ### Reading and writing Batch
 To read a batch into julia, call `ChemistryQuantitativeAnalysis.read`.
 ```julia-repl
-julia> batch = ChemistryQuantitativeAnalysis.read("batch_name.batch", T; table_type, analytetype,sampletype, numbertype, delim)
+julia> batch = ChemistryQuantitativeAnalysis.read("batch_name.batch", T; table_type, analytetype, sampletype, numbertype, modeltype, delim)
 ```
-`T` is the sink function for tabular data; it should create an object following `Tables.jl` interface. `table_type` is `T` parameter in the type signature of `Batch` which determines the underlying table type, `analytetype` is a concrete type for `analyte`, `sampletype` is a concrete type for `sample`, `numbertype` is a cincrete type for numeric data, and `delim` specifies delimiter for tabular data if `config[:delim]` does not exist. 
+`T` is the sink function for tabular data; it should create an object following `Tables.jl` interface. `table_type` is `T` parameter in the type signature of `Batch` which determines the underlying table type, `analytetype` is a concrete type for `analyte`, `sampletype` is a concrete type for `sample`, `numbertype` is a concrete type for numeric data, `modeltype` specifys calibration model type, and `delim` specifies delimiter for tabular data if `config[:delim]` does not exist. 
 
 For any `x` of type `analytetype` or `sampletype`, `x` equals `cqaconvert(type, string(x)))`. Additionally, `tryparse` have to be extended for `CSV` parsing:
 * `tryparse(::Type{analytetype}, x::AbstractString)` is neccessary for `AnalyteDataTable`.
@@ -281,7 +283,7 @@ To write batch to disk, call `ChemistryQuantitativeAnalysis.write`. There is a k
 ```julia-repl
 julia> ChemistryQuantitativeAnalysis.write("batch_name.batch", batch; delim = '\t')
 ```
-There will be a folder `calibration` containing multiple `*.mcal` or `*.scal` folders. The former is for `ExternalCalibrator` and the latter is for `InternallCalibrator`.
+There will be a folder `calibrator` containing multiple `*.ecal` or `*.ical` folders. The former is for `ExternalCalibrator` and the latter is for `InternallCalibrator`.
 
 ## Examples
 ```julia

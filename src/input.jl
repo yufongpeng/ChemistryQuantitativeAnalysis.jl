@@ -1,5 +1,5 @@
 """
-    ChemistryQuantitativeAnalysis.read(file, T; analytetype = String, sampletype = String, numbertype = Float64, delim = '\\t')
+    ChemistryQuantitativeAnalysis.read(file, T; analytetype = String, sampletype = String, numbertype = Float64, modeltype = CalibrationModel, delim = '\\t')
 
 Read file into `ChemistryQuantitativeAnalysis` objects.
 
@@ -15,6 +15,7 @@ Read file into `ChemistryQuantitativeAnalysis` objects.
 * `analytetype` is a concrete type for `analyte`.
 * `sampletype` is a concrete type for `sample.`
 * `numbertype` is the type for numeric data, 
+* `modeltype`: calibration model type.
 * `delim` specifies delimiter for tabular data if `config[:delim]` does not exist.
 
 For any `x` of type `analytetype` or `sampletype`, `x == cqaconvert(type, string(x)))`. 
@@ -65,7 +66,7 @@ function read_config(file::String)
 end  
 
 """
-    read_calibrator(file::String; analytetype = String, numbertype = Float64, delim = '\\t') -> AbstractCalibrator{analytetype, numbertype}
+    read_calibrator(file::String; analytetype = String, numbertype = Float64, modeltype = CalibrationModel, delim = '\\t') -> AbstractCalibrator{analytetype, numbertype}
 
 Read file as calibrator.
 
@@ -74,6 +75,7 @@ Read file as calibrator.
     * ".ecal": `ExternalCalibrator`
 * `analytetype` is a concrete type for `analyte`.
 * `numbertype` is the type for numeric data, 
+* `modeltype`: calibration model type.
 * `delim` specifies delimiter for tabular data if `config[:delim]` does not exist.
 
 `numbertype` is forced to `Float64` because of issue of `GLM`.
@@ -82,7 +84,7 @@ See `ChemistryQuantitativeAnalysis.read` for the requirement of `analytetype`.
 
 See README.md for the structure of ".ecal" and ".ical" file.
 """
-function read_calibrator(file::String; analytetype = String, numbertype = Float64, delim = '\t')
+function read_calibrator(file::String; analytetype = String, numbertype = Float64, modeltype = CalibrationModel, delim = '\t')
     d = dirname(file)
     in(basename(file), readdir(isempty(d) ? pwd() : d)) || throw(Base.IOError(string("read(", file, "): no such file or directory (ENOENT)"), -4058))
     endswith(file, ".ecal") || endswith(file, ".ical") || throw(ArgumentError("The file is not a valid calibrator directory"))
@@ -92,10 +94,8 @@ function read_calibrator(file::String; analytetype = String, numbertype = Float6
         return InternalCalibrator(analytetype(config[:analyte]), parse(numbertype, config[:conc]))
     end
     tbl = CSV.read(joinpath(file, "table.txt"), Table; delim = get(config, :delim, delim), typemap = Dict(Int => numbertype, Float64 => numbertype), types = Dict(:level => Int))
-    model = haskey(config, :model) ? eval(Meta.parse(config[:model])) : CalibrationModel
-    type = eval(Meta.parse(config[:type]))
-    model = model{type}
-    externalcalibrate(cqaconvert(analytetype, config[:analyte]), config[:isd] == "nothing" ? nothing : cqaconvert(analytetype, config[:isd]), tbl; model, decode_config(model, config)...)
+    model = cqaconvert(modeltype, config[:model])
+    externalcalibrate(cqaconvert(analytetype, config[:analyte]), config[:isd] == "nothing" ? nothing : cqaconvert(analytetype, config[:isd]), tbl, model; decode_config(modeltype, config)...)
 end
 
 """
@@ -213,7 +213,7 @@ function read_analysistable(file::String, T; analytetype = String, sampletype = 
     AnalysisTable(Symbol.(replace.(files, Ref(r".[a,s]dt" => ""), Ref(r"^\d*_" => ""))), tables)
 end
 """
-    read_method(file::String, T; analytetype = String, sampletype = String, numbertype = Float64, delim = '\\t') -> AnalysisMethod{analytetype, <: Table}
+    read_method(file::String, T; analytetype = String, sampletype = String, numbertype = Float64, modeltype = CalibrationModel, delim = '\\t') -> AnalysisMethod{analytetype, <: Table}
 
 Read file into `AnalysisMethod`.
 
@@ -222,13 +222,14 @@ Read file into `AnalysisMethod`.
 * `analytetype` is a concrete type for `analyte`.
 * `sampletype` is a concrete type for `sample.`
 * `numbertype` is the type for numeric data, 
+* `modeltype`: calibration model type.
 * `delim` specifies delimiter for tabular data if `config[:delim]` does not exist.
   
 See `ChemistryQuantitativeAnalysis.read` for the requirements of `analytetype` and `sampletype`.
 
 See README.md for the structure of ".am" file.
 """
-function read_method(file::String, T; analytetype = String, sampletype = String, numbertype = Float64, delim = '\t')
+function read_method(file::String, T; analytetype = String, sampletype = String, numbertype = Float64, modeltype = CalibrationModel, delim = '\t')
     endswith(file, ".am") || throw(ArgumentError("The file is not a valid method directory"))
     d = dirname(file)
     in(basename(file), readdir(isempty(d) ? pwd() : d)) || throw(Base.IOError(string("read(", file, "): no such file or directory (ENOENT)"), -4058))
@@ -242,6 +243,7 @@ function read_method(file::String, T; analytetype = String, sampletype = String,
     analytetable = CSV.read(joinpath(file, "analytetable.txt"), Table)
     analyte = analytetype.(analytetable.analyte)
     isd = replace(analytetable.isd, missing => 0)
+    model = :model in propertynames(analytetable) ? cqaconvert.(modeltype, analytetable.model) : [LinearCalibrator(ConstWeight()) for _ in eachindex(analytetable)]
     conctable = read_datatable(joinpath(file, in("$nom_conc.sdt", readdir(file)) ? "$nom_conc.sdt" : "$nom_conc.adt"), T; analytetype, sampletype = Int, numbertype, delim)
     if length(sampleobj(conctable)) > 1
         signaltable = read_datatable(joinpath(file, in("$signal.sdt", readdir(file)) ? "$signal.sdt" : "$signal.adt"), T; analytetype, sampletype, numbertype, delim, levelname = get(config, :levelname, nothing))
@@ -265,10 +267,10 @@ function read_method(file::String, T; analytetype = String, sampletype = String,
         std = isd
         # std = [v > 0 ? v : i for (i, v) in enumerate(isd)]
     end
-    AnalysisMethod(Table(analytetable; analyte, isd, std), signal, rel_sig, est_conc, nom_conc, acc, pointlevel, conctable, signaltable)
+    AnalysisMethod(Table(analytetable; analyte, isd, std, model), signal, rel_sig, est_conc, nom_conc, acc, pointlevel, conctable, signaltable)
 end
 """
-    read_batch(file::String, T; analytetype = String, sampletype = String, numbertype = Float64, delim = '\\t') -> Batch{analytetype}
+    read_batch(file::String, T; analytetype = String, sampletype = String, numbertype = Float64, modeltype = CalibrationModel, delim = '\\t') -> Batch{analytetype}
 
 Read file into `Batch`.
 
@@ -277,19 +279,20 @@ Read file into `Batch`.
 * `analytetype` is a concrete type for `analyte`.
 * `sampletype` is a concrete type for `sample.`
 * `numbertype` is the type for numeric data, 
+* `modeltype`: calibration model type.
 * `delim` specifies delimiter for tabular data if `config[:delim]` does not exist.
    
 See `ChemistryQuantitativeAnalysis.read` for the requirements of `analytetype` and `sampletype`.
 
 See README.md for the structure of ".batch" file.
 """
-function read_batch(file::String, T; analytetype = String, sampletype = String, numbertype = Float64, delim = '\t')
+function read_batch(file::String, T; analytetype = String, sampletype = String, numbertype = Float64, modeltype = CalibrationModel, delim = '\t')
     endswith(file, ".batch") || throw(ArgumentError("The file is not a valid batch directory"))
     d = dirname(file)
     in(basename(file), readdir(isempty(d) ? pwd() : d)) || throw(Base.IOError(string("read(", file, "): no such file or directory (ENOENT)"), -4058))
     config = read_config(joinpath(file, "config.txt"))
     delim = get(config, :delim, delim)   
-    method = read_method(joinpath(file, "method.am"), T; analytetype, sampletype, numbertype, delim)
+    method = read_method(joinpath(file, "method.am"), T; analytetype, sampletype, numbertype, modeltype, delim)
     if !in("calibrator", readdir(file)) || isempty(readdir(joinpath(file, "calibrator")))
         cal = (AbstractCalibrator{T} where {T <: typeof(method).parameters[1]})[]
         # if isnothing(method.signaltable)
@@ -298,12 +301,20 @@ function read_batch(file::String, T; analytetype = String, sampletype = String, 
             # cal = [calibrate(method, analyte) for analyte in method.calanalyte]
         # end
     else
-        cal = [read_calibrator(joinpath(file, "calibrator", f); delim, analytetype, numbertype) for f in readdir(joinpath(file, "calibrator")) if endswith(f, ".ecal") || endswith(f, ".ical")]
+        cal = [read_calibrator(joinpath(file, "calibrator", f); delim, analytetype, numbertype, modeltype) for f in readdir(joinpath(file, "calibrator")) if endswith(f, ".ecal") || endswith(f, ".ical")]
     end
     fd = findfirst(==("data.at"), readdir(file))
-    Batch(method, cal,
+    batch = Batch(method, cal,
         isnothing(fd) ? nothing : read_analysistable(joinpath(file, "data.at"), T; analytetype, sampletype, numbertype, delim),
     )
+    for analyte in batch.analyte
+        j = findfirst(x -> ==(x.analyte, analyte), batch.calibrator)
+        (isnothing(j) || batch.calibrator[j] isa InternalCalibrator) && continue
+        if batch.method.analytetable.model[j] != batch.calibrator[j].model
+            model_calibrator!(batch.calibrator[j], batch.method.analytetable.method[j])
+        end
+    end
+    batch
 end
 
 """
@@ -312,9 +323,7 @@ end
 Decode config for keyword arguments of `mkcalmodel` for certain calibration model type.
 """
 function decode_config(::Type{<: CalibrationModel}, config::Dictionary)
-    wt = get(config, :weight, "ConstWeight")
-    weight = eval(Meta.parse(wt))()
-    (; weight)
+    (; )
 end
 
 """
@@ -365,3 +374,18 @@ Default returned type of `cqaconvert(fn, x)`. By default, the union of types of 
 """
 cqatype(fn::T) where {T <: Function} = Any
 cqatype(fn::T, v::AbstractVector) where {T <: Function} = Union{typeof.(v)...}
+
+function cqaconvert(::Type{T}, x::AbstractString) where {T <: ComposedWeight}
+    m = match(r"^[a-z,A-Z,\{\}]*\(\)$", x)
+    isnothing(m) && throw(ArgumentError("Cannot convert $x to type $T"))
+    r = eval(Meta.parse(x))
+    r isa T ? r : throw(ArgumentError("Cannot convert $x to type $T"))
+end
+
+function cqaconvert(::Type{T}, x::AbstractString) where {T <: CalibrationModel}
+    m = match(r"^CalibrationModel\{[a-z,A-Z,\d]*\}\([a-z,A-Z,\d]*\(.*\)\)$", x)
+    m = isnothing(m) ? match(r"^[a-z,A-Z,\d]*Calibrator\([a-z,A-Z,\d]*\(.*\)\)$", x) : m
+    isnothing(m) && throw(ArgumentError("Cannot convert $x to type $T"))
+    r = eval(Meta.parse(x))
+    r isa T ? r : throw(ArgumentError("Cannot convert $x to type $T"))
+end

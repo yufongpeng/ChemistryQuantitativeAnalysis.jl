@@ -258,7 +258,7 @@ end
         # @test quantify(cbatch.calibrator[2]) == inv_predict(cbatch.calibrator[2])
         @test quantify(cbatch.calibrator[2], cbatch.data.area) == inv_predict(cbatch.calibrator[2], cbatch.data.relative_signal)
 
-        set!(cbatch.data, :nominal_concentration, deepcopy(cbatch.data.estimated_concentration))
+        cbatch.data[:nominal_concentration] = deepcopy(cbatch.data.estimated_concentration)
         @test all(isapprox.(validate!(cbatch).data.accuracy.var"G1(drug_b)", set_accuracy(cbatch.data, cbatch).accuracy.var"G1(drug_b)"))
         @test all(isapprox.(accuracy(cbatch, cbatch.data).var"G1(drug_b)", accuracy(cbatch.method, cbatch.data).var"G1(drug_b)"))
     end
@@ -278,7 +278,24 @@ end
         @test all(isapprox.(dynamic_range(cbatch.calibrator[1]), (1, 100)))
         @test all(isapprox.(signal_range(cbatch.calibrator[2]), (signal_lloq(cbatch.calibrator[2]), signal_uloq(cbatch.calibrator[2]))))
         @test isapprox(signal_lob(sbatch.calibrator[2]) + signal_lod(sbatch.calibrator[2]),  0.4945 * signal_loq(sbatch.calibrator[2]))
-        @test endswith(formula_repr_ascii(rbatch.calibrator[2]), "x^2")
+        for cal in sbatch.calibrator
+            global c = cal
+            @test @test_noerror signal_lob(c)
+            @test @test_noerror signal_lod(c)
+            @test @test_noerror signal_loq(c)
+        end 
+        @test CQA.cqaconvert(String, "1") == "1"
+        @test CQA.cqaconvert(Real, 1) == Real(1)
+        @test CQA.cqamap(Int, [1, 2, 3]) == [1, 2, 3]
+        @test CQA.cqamap(Real, [1, 2, 3]) == Real[1, 2, 3]
+        @test CQA.cqamap(Int, Real[1, 2, 3]) == [1, 2, 3]
+        @test CQA.cqamap(Int, ["1", "2", "3"]) == [1, 2, 3]
+        @test CQA.cqamap(string, [1, 2, 3]) == string.([1, 2, 3])
+        @test CQA.table(CQA.table_convert(DataFrame, cdata.area)) isa DataFrame
+        @test CQA.table(CQA.table_convert(DataFrame, sdt)) isa DataFrame
+        @test CQA.table(CQA.table_convert(DataFrame, adt)) isa DataFrame
+    end
+    @testset "IO" begin
         for w in [ConstWeight,
                     RootXWeight,
                     RootYWeight,
@@ -301,40 +318,27 @@ end
                     ExpYWeight,
                     SqExpXWeight,
                     SqExpYWeight]
-            wf = w()
-            CQA.getwts(wf, 1.0, 1.0)
-            CQA.human_name(wf)
-            CQA.human_name_ascii(wf)
+            global wf = w()
+            @test @test_noerror CQA.getwts(wf, 1.0, 1.0)
+            @test @test_noerror CQA.human_name(wf)
+            @test @test_noerror CQA.human_name_ascii(wf)
         end
-        for c in sbatch.calibrator
-            formula_repr_ascii(c)
-            signal_lob(c)
-            signal_lod(c)
-            signal_loq(c)
+        for cal in sbatch.calibrator
+            global c = cal
+            @test @test_noerror CQA.formula_repr_ascii(c)
         end 
-        formula_repr_ascii(ical)
-        @test CQA.cqaconvert(String, "1") == "1"
-        @test CQA.cqaconvert(Real, 1) == Real(1)
-        @test CQA.cqamap(Int, [1, 2, 3]) == [1, 2, 3]
-        @test CQA.cqamap(Real, [1, 2, 3]) == Real[1, 2, 3]
-        @test CQA.cqamap(Int, Real[1, 2, 3]) == [1, 2, 3]
-        @test CQA.cqamap(Int, ["1", "2", "3"]) == [1, 2, 3]
-        @test CQA.cqamap(string, [1, 2, 3]) == string.([1, 2, 3])
-        @test CQA.table(CQA.table_convert(DataFrame, cdata.area)) isa DataFrame
-        @test CQA.table(CQA.table_convert(DataFrame, sdt)) isa DataFrame
-        @test CQA.table(CQA.table_convert(DataFrame, adt)) isa DataFrame
-    end
-    @testset "IO" begin
+        @test @test_noerror CQA.formula_repr_ascii(ical)
+        @test endswith(CQA.formula_repr_ascii(rbatch.calibrator[2]), "x^2")
         global initial_mc_c = CQA.read(joinpath(datapath, "initial_mc_c.batch"), DataFrame)
         global initial_mc_r = CQA.read(joinpath(datapath, "initial_mc_r.batch"), DataFrame)
         global initial_sc_c = CQA.read(joinpath(datapath, "initial_sc_c.batch"), DataFrame)
         global initial_sc_r = CQA.read(joinpath(datapath, "initial_sc_r.batch"), DataFrame)
-        CQA.read(joinpath(datapath, "initial_mc_c.batch", "data.at"), DataFrame)
-        CQA.read(joinpath(datapath, "initial_mc_c.batch", "data.at", "0_area.sdt"), DataFrame)
-        CQA.read(joinpath(datapath, "initial_mc_r.batch", "data.at", "0_area.adt"), DataFrame)
-        CQA.read(joinpath(datapath, "initial_mc_c.batch", "method.am"), DataFrame)
-        CQA.read(joinpath(datapath, "save_mc_c.batch", "calibrator", "1.ecal"), DataFrame)
-        CQA.read(joinpath(datapath, "save_sc_c.batch", "calibrator", "1.ical"), DataFrame)
+        @test @test_noerror CQA.read(joinpath(datapath, "initial_mc_c.batch", "data.at"), DataFrame)
+        @test @test_noerror CQA.read(joinpath(datapath, "initial_mc_c.batch", "data.at", "0_area.sdt"), DataFrame)
+        @test @test_noerror CQA.read(joinpath(datapath, "initial_mc_r.batch", "data.at", "0_area.adt"), DataFrame)
+        @test @test_noerror CQA.read(joinpath(datapath, "initial_mc_c.batch", "method.am"), DataFrame)
+        @test @test_noerror CQA.read(joinpath(datapath, "save_mc_c.batch", "calibrator", "1.ecal"), DataFrame)
+        @test @test_noerror CQA.read(joinpath(datapath, "save_sc_c.batch", "calibrator", "1.ical"), DataFrame)
         quantify!(sbatch)
         quantify!(abatch)
         calibrate!(initial_mc_c)

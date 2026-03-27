@@ -247,11 +247,7 @@ function show(io::IO, ::MIME"text/plain", cal::ExternalCalibrator{A, N, T}) wher
     print_summary(io, cal.model)
     print(io, "\n")
     print(io, "∘ Equation: ", formula_repr(cal), "\n")
-    if cal.machine isa LsqFitMachine
-        print(io, "∘ SSR: ", sum(cal.machine.fit.resid))
-    else
-        print(io, "∘ R²: ", r2(cal.machine))
-    end
+    print(io, "∘ R²: ", r2(cal.machine))
 end
 
 function show(io::IO, ::MIME"text/plain", cal::InternalCalibrator{A, N}) where {A, N}
@@ -450,5 +446,72 @@ human_name_ascii(::SqExpYWeight) = "1/e^(2y)"
 Encode keyword arguments of `mkcalmodel` for specific calibration model type into config file.
 """
 function encode_config(model::CalibrationModel{T}) where T 
-    ("\n\n[model]\n", "CalibrationModel", "\n\n[type]\n", string(T), "\n\n[weight]\n", string(typeof(getweight(model))))
+    ("\n\n[model]\n", string(model))
 end
+
+"""
+    formula_repr(cal::InternalCalibrator; digits = nothing, sigdigits = 4)
+    formula_repr(cal::ExternalCalibrator; digits = nothing, sigdigits = 4)
+
+Return string representation of formula of `cal` with specified `digits` and `sigdigits`. See `format_number`.
+"""
+formula_repr(cal::InternalCalibrator; digits = nothing, sigdigits = 4) = "y = $(format_number(1/cal.conc; digits, sigdigits))x"
+formula_repr(cal::ExternalCalibrator; digits = nothing, sigdigits = 4) = formula_repr(cal.model, cal.machine; digits, sigdigits)
+function formula_repr(model::CalibrationModel, machine; digits = nothing, sigdigits = 4)
+    β = coef(machine)
+    formula_repr(model, β; digits, sigdigits)
+end
+
+formula_repr(::CalibrationModel{Proportional}, β::AbstractVector; digits = nothing, sigdigits = 4) = "y = $(format_number(β[1]; digits, sigdigits))x"
+function formula_repr(::CalibrationModel{Linear}, β::AbstractVector; digits = nothing, sigdigits = 4) 
+    op = map(β[2:end]) do b
+        b < 0 ? " - " : " + "
+    end
+    string("y = ", format_number(β[1]; digits, sigdigits), op[1], abs(format_number(β[2]; digits, sigdigits)), "x")
+end
+function formula_repr(::CalibrationModel{QuadraticProportional}, β::AbstractVector; digits = nothing, sigdigits = 4) 
+    op = map(β[2:end]) do b
+        b < 0 ? " - " : " + "
+    end
+    string("y = ", format_number(β[1]; digits, sigdigits), "x", op[1], abs(format_number(β[2]; digits, sigdigits)), "x²")
+end
+function formula_repr(::CalibrationModel{Quadratic}, β::AbstractVector; digits = nothing, sigdigits = 4) 
+    op = map(β[2:end]) do b
+        b < 0 ? " - " : " + "
+    end
+    string("y = ", format_number(β[1]; digits, sigdigits), op[1], abs(format_number(β[2]; digits, sigdigits)), "x", op[2], abs(format_number(β[3]; digits, sigdigits)), "x²")
+end
+function formula_repr(::CalibrationModel{Logarithmic}, β::AbstractVector; digits = nothing, sigdigits = 4) 
+    op = map(β[2:end]) do b
+        b < 0 ? " - " : " + "
+    end
+    string("y = ", format_number(β[1]; digits, sigdigits), op[1], abs(format_number(β[2]; digits, sigdigits)), "log(x)")
+end
+function formula_repr(::CalibrationModel{Exponential}, β::AbstractVector; digits = nothing, sigdigits = 4) 
+    op = map(β[2:end]) do b
+        b < 0 ? " -" : ""
+    end
+    string("y = ", format_number(β[1]; digits, sigdigits), "e ^ (", op[1], abs(format_number(β[2]; digits, sigdigits)), "x)")
+end
+function formula_repr(::CalibrationModel{Power}, β::AbstractVector; digits = nothing, sigdigits = 4) 
+    op = map(β[2:end]) do b
+        b < 0 ? "-" : "" 
+    end
+    string("y = ", format_number(β[1]; digits, sigdigits), "x ^ ", string(isempty(op[1]) ? "" : "(", op[1], abs(format_number(β[2]; digits, sigdigits)), isempty(op[1]) ? "" : ")"))
+end
+"""
+    formula_repr_ascii(cal::AbstractCalibrator; digits = nothing, sigdigits = 4)
+
+Return string representation of formula of `cal` for text file output.
+"""
+formula_repr_ascii(cal::AbstractCalibrator; digits = nothing, sigdigits = 4) = replace(formula_repr(cal; digits, sigdigits), "x²" => "x^2")
+
+"""
+    format_number(x; digits = nothing, sigdigits = 4)
+
+Return string representation of number with specified `digits`.
+
+If `digits` is `nothing`, the function uses `sigdigits` instead.
+"""
+format_number(x; digits = nothing, sigdigits = 4) = isnothing(digits) ? format_number2int(round(x; sigdigits)) : format_number2int(round(x; digits))
+format_number2int(x) = x == round(x) ? round(Int, x) : x

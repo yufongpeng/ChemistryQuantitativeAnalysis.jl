@@ -29,10 +29,12 @@ Type wrapping `LsqFitResult` and the target function.
 # Fields 
 * `fit::LsqFitResult`
 * `fn::Function`: target function.
+* `totalvariance::Real`: variance of y.
 """
 struct LsqFitMachine
     fit::LsqFitResult
     fn::Function
+    totalvariance::Real
 end
 
 @doc cdoc 

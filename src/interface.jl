@@ -115,7 +115,7 @@ Base.iterate(it::EachSample{<: SampleDataTable}, st = 1) = st > length(it) ? not
 Base.iterate(it::EachSample{<: AnalyteDataTable}, st = 1) = st > length(it) ? nothing : (getproperty(table(it.table), samplename(it.table)[st]), st + 1)
 
 StatsAPI.coef(machine::LsqFitMachine) = coef(machine.fit)
-StatsAPI.r2(machine::LsqFitMachine) = predict(machine)
+StatsAPI.r2(machine::LsqFitMachine) = 1 - rss(machine.fit) / machine.totalvariance
 StatsAPI.predict(machine::LsqFitMachine, x::Vector) = machine.fn(x, machine.fit.param)
 StatsAPI.predict(machine::LsqFitMachine, x::T) where T = 
     Table.istable(T) ? machine.fn(Tables.getcolumn(x, :x), machine.fit.param) : machine.fn(x, machine.fit.param)

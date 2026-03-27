@@ -5,13 +5,7 @@ Analyte5
 nothing
 
 [model]
-CalibrationModel
-
-[type]
-ChemistryQuantitativeAnalysis.Linear
-
-[weight]
-ConstWeight
+LinearCalibrator(ConstWeight())
 
 [delim]
 \t
