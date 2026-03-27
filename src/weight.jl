@@ -44,7 +44,7 @@ Weight object to generate weight function.
 
 `CurveType` is restructed to `Proportional`, `Exponential`, `Logarithmic`.
 
-Real function can be constructed using `getwts`.
+Weight values can be computed using `getweights`.
 """
 @doc wdoc
 struct ComposedWeight{X, Y, S, N} end 
@@ -111,13 +111,13 @@ Constant weight function
 const_weight(x::S, y::T) where {S, T} = promote_type(S, T)(1.0)
 
 """
-    getwts(::ComposedWeight, x, y)
+    getweights(::ComposedWeight, x, y)
 
 Get weight values from weight object.
 """
-function getwts(::ComposedWeight{X, Y, S, N}, x, y) where {X, Y, S, N}
+function getweights(::ComposedWeight{X, Y, S, N}, x, y) where {X, Y, S, N}
     if X == Nothing && Y == Nothing 
-        getwts(ConstWeight(), x, y)
+        getweights(ConstWeight(), x, y)
     elseif Y == Nothing
         @. 1 / Ref(wtsop(X))(x) ^ N
     elseif X == Nothing 
@@ -126,40 +126,40 @@ function getwts(::ComposedWeight{X, Y, S, N}, x, y) where {X, Y, S, N}
         @. 1 / Ref(wtsop(S))(Ref(wtsop(X))(x), Ref(wtsop(Y))(y)) ^ N
     end
 end
-getwts(::ConstWeight, x, y) = @. const_weight(x, y)
-getwts(::RootXWeight, x, y) = @. 1 / sqrt(x)
-getwts(::RootYWeight, x, y) = @. 1 / sqrt(y)
-getwts(::RootXYWeight, x, y) = @. 1 / sqrt(x + y)
-function getwts(::RootLogXWeight, x, y) 
+getweights(::ConstWeight, x, y) = @. const_weight(x, y)
+getweights(::RootXWeight, x, y) = @. 1 / sqrt(x)
+getweights(::RootYWeight, x, y) = @. 1 / sqrt(y)
+getweights(::RootXYWeight, x, y) = @. 1 / sqrt(x + y)
+function getweights(::RootLogXWeight, x, y) 
     @. 1 / sqrt(max(log(x), eps(x)))
 end
-function getwts(::RootLogYWeight, x, y) 
+function getweights(::RootLogYWeight, x, y) 
     @. 1 / sqrt(max(log(y), eps(y)))
 end
-getwts(::RootExpXWeight, x, y) = @. 1 / sqrt(exp(x))
-getwts(::RootExpYWeight, x, y) = @. 1 / sqrt(exp(y))
-getwts(::XWeight, x, y) = @. 1 / x
-getwts(::YWeight, x, y) = @. 1 / y
-getwts(::XYWeight, x, y) = @. 1 / (x + y)
-function getwts(::LogXWeight, x, y) 
+getweights(::RootExpXWeight, x, y) = @. 1 / sqrt(exp(x))
+getweights(::RootExpYWeight, x, y) = @. 1 / sqrt(exp(y))
+getweights(::XWeight, x, y) = @. 1 / x
+getweights(::YWeight, x, y) = @. 1 / y
+getweights(::XYWeight, x, y) = @. 1 / (x + y)
+function getweights(::LogXWeight, x, y) 
     @. 1 / max(log(x), eps(x))
 end
-function getwts(::LogYWeight, x, y) 
+function getweights(::LogYWeight, x, y) 
     @. 1 / max(log(y), eps(y))
 end
-getwts(::ExpXWeight, x, y) = @. 1 / exp(x)
-getwts(::ExpYWeight, x, y) = @. 1 / exp(y)
-getwts(::SqXWeight, x, y) = @. 1 / x ^ 2
-getwts(::SqYWeight, x, y) = @. 1 / y ^ 2
-getwts(::SqXYWeight, x, y) = @. 1 / (x + y) ^ 2
-function getwts(::SqLogXWeight, x, y) 
+getweights(::ExpXWeight, x, y) = @. 1 / exp(x)
+getweights(::ExpYWeight, x, y) = @. 1 / exp(y)
+getweights(::SqXWeight, x, y) = @. 1 / x ^ 2
+getweights(::SqYWeight, x, y) = @. 1 / y ^ 2
+getweights(::SqXYWeight, x, y) = @. 1 / (x + y) ^ 2
+function getweights(::SqLogXWeight, x, y) 
     @. 1 / max(log(x), eps(x)) ^ 2
 end
-function getwts(::SqLogYWeight, x, y) 
+function getweights(::SqLogYWeight, x, y) 
     @. 1 / max(log(y), eps(y)) ^ 2
 end
-getwts(::SqExpXWeight, x, y) = @. 1 / exp(2 * x)
-getwts(::SqExpYWeight, x, y) = @. 1 / exp(2 * y)
+getweights(::SqExpXWeight, x, y) = @. 1 / exp(2 * x)
+getweights(::SqExpYWeight, x, y) = @. 1 / exp(2 * y)
 
 """
     wtsop(::WSum)

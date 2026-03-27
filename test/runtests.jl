@@ -319,7 +319,7 @@ end
                     SqExpXWeight,
                     SqExpYWeight]
             global wf = w()
-            @test @test_noerror CQA.getwts(wf, 1.0, 1.0)
+            @test @test_noerror CQA.getweights(wf, 1.0, 1.0)
             @test @test_noerror CQA.human_name(wf)
             @test @test_noerror CQA.human_name_ascii(wf)
         end
