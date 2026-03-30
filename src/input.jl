@@ -242,7 +242,10 @@ function read_method(file::String, T; analytetype = String, sampletype = String,
     acc = Symbol(get(config, :acc, :accuracy))
     analytetable = CSV.read(joinpath(file, "analytetable.txt"), Table; stringtype = String)
     analyte = analytetype.(analytetable.analyte)
-    isd = replace(analytetable.isd, missing => 0)
+    isd = :isd in propertynames(analytetable) ? replace(analytetable.isd, missing => 0) : zeros(length(analytetable))
+    std = :std in propertynames(analytetable) ? map(enumerate(analytetable.std)) do (i, c)
+            ismissing(c) ? i : c
+        end : nothing
     model = :model in propertynames(analytetable) ? cqaconvert.(modeltype, analytetable.model) : [LinearCalibrator(ConstWeight()) for _ in eachindex(analytetable)]
     conctable = read_datatable(joinpath(file, in("$nom_conc.sdt", readdir(file)) ? "$nom_conc.sdt" : "$nom_conc.adt"), T; analytetype, sampletype = Int, numbertype, delim)
     if length(sampleobj(conctable)) > 1
@@ -258,13 +261,15 @@ function read_method(file::String, T; analytetype = String, sampletype = String,
             rr = ns - nl * nr
             pointlevel = vcat(repeat([1], rr), repeat(1:nl, nr))
         end
-        std = map(enumerate(analytetable.std)) do (i, c)
-            ismissing(c) ? i : c
+        if isnothing(std)
+            std = collect(eachindex(analytetable))
         end
     else
         signaltable = nothing
         pointlevel = [1]
-        std = isd
+        if isnothing(std)
+            std = isd
+        end
         # std = [v > 0 ? v : i for (i, v) in enumerate(isd)]
     end
     AnalysisMethod(Table(analytetable; analyte, isd, std, model), signal, rel_sig, est_conc, nom_conc, acc, pointlevel, conctable, signaltable)

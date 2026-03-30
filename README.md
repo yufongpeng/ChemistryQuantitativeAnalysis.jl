@@ -47,8 +47,9 @@ This package provides two wrappers for data, `SampleDataTable{A, S, N, T}` and `
 |`conctable::C <: AbstractDataTable{A, Int}`| containing concentration data for each level. Sample names must be symbol or string of integers for multiple levels.|
 |`signaltable::D <: AbstractDataTable{A, S}`| containig signal for each point. It can be `nothing` if signal data is unecessary.|
 |`analyte::AbstractVector{A}`|analytes in user-defined types.|
-|`isd::AbstractVector{<: A}`|internal standards.|
-|`nonisd::AbstractVector{<: A}`|analytes not internal standards.|same|
+|`isd::AbstractVector{A}`|internal standards.|
+|`nonisd::AbstractVector{A}`|analytes which are not internal standards.|
+|`std::AbstractVector{A}`|analytes which are calibration standards.|
 |`point::AbstractVector{S}`|calibration points, identical to `signaltable.samples`. If `signaltable` is `nothing`, this value is `nothing` too.|
 |`level::AbstractVector{Int}`|calibration levels, identical to `conctable.samples`.|
 
@@ -122,13 +123,14 @@ This type contains data for single point internal calibration.
 |Property|Description|
 |----------|-----------|
 |`method::M <: AnalysisMethod{A}`|method|
-|`calibrator::C <: Union{AbstractVector{ExternalCalibrator{<: A}}, AbstractVector{InternallCalibrator{<: A}}}`|calibrators|
-|`data::D <: Union{AnalysisTable{<: A}, Nothing`|Data for analysis|
-|`analyte::AbstractVector{A}: analytes in user-defined types, identical to `method.analytetable.analyte`.|
-|`isd::AbstractVector{<: A}`, analytes which are internal standards, identical to `method.analytetable.analyte`.|
-|`nonisd`|`AbstractVector{<: A}`| that each analytes are not internal standards.|
-|`point::Union{Nothing, AbstractVector{S}}`| calibration points, identical to `method.point`.|
-|`level::AbstractVector{Int}`| calibration levels, identical to `method.level`.|
+|`calibrator::C <: Union{AbstractVector{ExternalCalibrator{A}}, AbstractVector{InternallCalibrator{A}}}`|calibrators|
+|`data::D <: Union{AnalysisTable{A}, Nothing`|Data for analysis|
+|`analyte::AbstractVector{A}|analytes in user-defined types, identical to `method.analyte`.|
+|`isd::AbstractVector{A}`|analytes which are internal standards, identical to `method.isd`.|
+|`nonisd::AbstractVector{A}`|analytes which are not internal standards, identical to `method.nonstd`.|
+|`std::AbstractVector{A}`|analytes which are calibration standards, identical to `method.std`.|
+|`point::Union{Nothing, AbstractVector{S}}`|calibration points, identical to `method.point`.|
+|`level::AbstractVector{Int}`|calibration levels, identical to `method.level`.|
 
 Constructors for `Batch{A, M, C, D}`:
 1. `Batch(method::M, calibrator::C, data::D = nothing)`
@@ -138,9 +140,9 @@ Constructors for `Batch{A, M, C, D}`:
 
 The last method allows user to use encoded sample names or additional tabular data from `dt` to generate `AnalysisMethod`. 
 
-Note that the constructor does not automatically fit any calibration curves if no calibrators are given. User can edit `analytetable` with `edit_method!`, `assign_isd!`, `assign_std!`, `replace_std!`, and then apply `calibrate!` to start calibration or in combination, `..._calibrate!`.
+Note that the constructor does not automatically fit any calibration curves if no calibrators are given. User can edit `analytetable` with `edit_method!`, `assign_isd!`, `assign_std!`, and then apply `calibrate!` to start calibration or in combination, `..._calibrate!`.
 
-To calculate relative signal, concentration or accuracy and save the result, call `quantify_relative_signal!`, `quantify_inv_predict!` (in combination, `quantify!!`) and `validate!` (in combination, `analyze!`), respectively.
+To calculate relative signal, concentration or accuracy and save the result, call `quantify_relative_signal!`, `quantify_inv_predict!` (in combination, `quantify!!`) and `validate!` (in combination with `quantify!, `analyze!`), respectively.
 
 ## Reading and writting data to disk
 To use data on disk, user should create a directory in the following structure:

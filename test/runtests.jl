@@ -217,11 +217,10 @@ end
         assign_isd_calibrate!(sbatch, "Analyte1", "Analyte2")
         @test sbatch.calibrator[1].isd == "Analyte2"
         @test sbatch.method.analytetable.isd[1] == 2
-        assign_std!(sbatch, "Analyte1", "Analyte3")
+        assign_std_calibrate!(sbatch, "Analyte1", "Analyte3")
         @test sbatch.method.analytetable.std[1] == 3
         @test sbatch.method.analytetable.isd[1] == 4
-        popfirst!(sbatch.calibrator)
-        replace_std_calibrate!(sbatch, "Analyte3", "Analyte1", "Analyte2")
+        assign_std_calibrate!(sbatch, "Analyte1", "Analyte1", "Analyte2")
         @test last(sbatch.calibrator).analyte == "Analyte1"
         @test sbatch.method.analytetable.std[1] == 1
         @test sbatch.method.analytetable.isd[1] == 2
