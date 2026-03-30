@@ -359,6 +359,8 @@ end
         @test all(isapprox_nan.(collect(CQA.table(initial_mc_r.data.estimated_concentration)[1, :]), collect(CQA.table(save_mc_r.data.estimated_concentration)[1, :])))
         @test all(isapprox_nan.(collect(CQA.table(initial_sc_c.data.estimated_concentration)[1, :]), collect(CQA.table(save_sc_c.data.estimated_concentration)[1, :])))
         @test all(isapprox_nan.(collect(CQA.table(initial_sc_r.data.estimated_concentration)[1, :]), collect(CQA.table(save_sc_r.data.estimated_concentration)[1, :])))
+        model_calibrator!(save_mc_c; model = QuadraticCalibrator)
+        model_calibrator!(save_mc_r; weight = SqXWeight())
         calibrate!(save_mc_c)
         calibrate!(save_mc_r)
         calibrate!(save_sc_c)

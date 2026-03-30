@@ -448,7 +448,7 @@ function model_calibrator!(batch::Batch, cid::Int, cal::AbstractCalibrator; kwar
     model = get!(kwargs, :model, Nothing)
     delete!(kwargs, :model)
     batch.method.analytetable.model[cid] = modifycalmodel(batch.method.analytetable.model[cid], model; kwargs...)
-    model_calibrator!(cal, batch.method.analytetable.model[cid]; kwargs...)
+    model_calibrator!(cal, batch.method.analytetable.model[cid])
 end
 
 """
