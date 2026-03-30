@@ -2,7 +2,7 @@
 
 julia_version = "1.12.2"
 manifest_format = "2.0"
-project_hash = "439add53eb6628a142920cd8ffba9e160b5d6d83"
+project_hash = "83e9cb16bec561da73c9024bbc455b65341ccbc0"
 
 [[deps.Adapt]]
 deps = ["LinearAlgebra", "Requires"]
@@ -291,6 +291,12 @@ version = "1.11.1"
 
     [deps.Statistics.weakdeps]
     SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+
+[[deps.StatsAPI]]
+deps = ["LinearAlgebra"]
+git-tree-sha1 = "178ed29fd5b2a2cfc3bd31c13375ae925623ff36"
+uuid = "82ae8749-77ed-4fe6-ae5f-f523153014b0"
+version = "1.8.0"
 
 [[deps.StringManipulation]]
 deps = ["PrecompileTools"]

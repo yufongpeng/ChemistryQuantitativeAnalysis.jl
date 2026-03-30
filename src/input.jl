@@ -317,7 +317,7 @@ function read_batch(file::String, T; analytetype = String, sampletype = String, 
         j = findfirst(x -> ==(x.analyte, analyte), batch.calibrator)
         (isnothing(j) || batch.calibrator[j] isa InternalCalibrator) && continue
         if batch.method.analytetable.model[j] != batch.calibrator[j].model
-            model_calibrator!(batch.calibrator[j], batch.method.analytetable.method[j])
+            model_calibrator!(batch.calibrator[j], batch.method.analytetable.model[j])
         end
     end
     batch
