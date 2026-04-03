@@ -191,12 +191,12 @@ end
         edit_method_calibrate!(sbatch, Table(; 
             std = [1, -1, 3, -1, 5, 6, 7, 8, 9, 10], 
             isd = [2, -1, 4, -1, 0, 0, 0, 0, 0, 0],
-            model = [LinearCalibrator, Nothing, ProportionalCalibrator, Nothing, LinearCalibrator, QuadraticCalibrator, QuadraticProportionalCalibrator, LogarithmicCalibrator, ExponentialCalibrator, PowerCalibrator]))
+            model = [LinearCalibrator, Nothing, ProportionalCalibrator, Nothing, LinearCalibrator, QuadraticCalibrator, QuadraticOriginCalibrator, LogarithmicCalibrator, ExponentialCalibrator, PowerCalibrator]))
         edit_method_calibrate!(abatch, 
             [], 
             [2, 4], 
             [1 => 2, 3 => 4], 
-            Table(; analyte = abatch.std, model = [LinearCalibrator, ProportionalCalibrator, LinearCalibrator, QuadraticCalibrator, QuadraticProportionalCalibrator, LogarithmicCalibrator, ExponentialCalibrator, PowerCalibrator]))
+            Table(; analyte = abatch.std, model = [LinearCalibrator, ProportionalCalibrator, LinearCalibrator, QuadraticCalibrator, QuadraticOriginCalibrator, LogarithmicCalibrator, ExponentialCalibrator, PowerCalibrator]))
         sbatch.data.area.Analyte2 .*= 10
         sbatch.method.signaltable.Analyte2 .*= 10
         for v in columns(abatch.data.area)
@@ -206,7 +206,7 @@ end
             v[2] /= 10
         end
         edit_method!(sbatch; model = LinearCalibrator)
-        edit_method_calibrate!(sbatch, Table(; analyte = sbatch.method.std, model = [LinearCalibrator, ProportionalCalibrator, LinearCalibrator, QuadraticCalibrator, QuadraticProportionalCalibrator, LogarithmicCalibrator, ExponentialCalibrator, PowerCalibrator]))
+        edit_method_calibrate!(sbatch, Table(; analyte = sbatch.std, model = [LinearCalibrator, ProportionalCalibrator, LinearCalibrator, QuadraticCalibrator, QuadraticOriginCalibrator, LogarithmicCalibrator, ExponentialCalibrator, PowerCalibrator]))
         calibrate!(abatch, "Analyte1")
         @test rbatch.calibrator[1].analyte == cbatch.calibrator[1].analyte
         @test all(isapprox.(cbatch.calibrator[1].table.accuracy[4:6], [1, 1.1, 0.9]))

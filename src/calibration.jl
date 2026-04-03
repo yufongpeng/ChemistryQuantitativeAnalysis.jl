@@ -549,7 +549,7 @@ Get correspond `FormulaTerm` of `CurveType` for GLM fitting.
 """
 getformula(::Type{Proportional}) = @formula(y ~ 0 + x)
 getformula(::Type{Linear}) = @formula(y ~ x)
-getformula(::Type{QuadraticProportional}) = @formula(y ~ 0 + x + x ^ 2)
+getformula(::Type{QuadraticOrigin}) = @formula(y ~ 0 + x + x ^ 2)
 getformula(::Type{Quadratic}) = @formula(y ~ x + x ^ 2)
 getformula(::Type{Logarithmic}) = @formula(y ~ log(x))
 getformula(::Type{Exponential}) = @formula(log(y) ~ x)

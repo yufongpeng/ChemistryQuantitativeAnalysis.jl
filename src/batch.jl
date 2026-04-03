@@ -58,6 +58,7 @@ Batch(batch::Batch, at::AnalysisTable) = Batch(batch.method, batch.calibrator, a
         acc = :accuracy, 
         calid = r"Cal_(\\d)_(\\d*-*\\d*)", 
         order = "LR", 
+        level = nothing,
         ratio = nothing, 
         dilution_factor = nothing, 
         conc_factor = 1,
@@ -80,7 +81,7 @@ Construct a batch from data. All analytes are considered as normal analytes, so 
 * `level`: level of calibration of each sample (`missing` for non calibration sample). If it is a property name of `dt`, the column is used. `nothing` indicates using captured values. 
 * `ratio`: ratio of concantrations of each level. If it is a property name of `dt`, the column is used. `nothing` indicates using captured values. 
 * `dilution_factor`: dilution factors of each level. If it is a property name of `dt`, the column is used. `nothing` indicates using captured values. 
-* `conc_factor::Union{Number, Vector{<: Number}`: concentration equals to conc_factor * ratio or conc_factor / dilution_factor. When a vector is provided, each element represents `conc_factor` value of each analyte. If it is a property name of `dt`, the column is used. 
+* `conc_factor::Union{Number, Vector{<: Number}`: concentration equals to `conc_factor * ratio` or `conc_factor / dilution_factor`. When a vector is provided, each element represents `conc_factor` value of each analyte. If it is a property name of `dt`, the column is used. 
 * `parse_decimal::Function`: converts a string into another string which can be parsed as floating number.
 """
 function Batch(dt::AbstractDataTable; 

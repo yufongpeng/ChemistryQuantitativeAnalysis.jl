@@ -381,7 +381,7 @@ Default returned type of `cqaconvert(fn, x)`. By default, the union of types of 
 cqatype(fn::T) where {T <: Function} = Any
 cqatype(fn::T, v::AbstractVector) where {T <: Function} = Union{typeof.(v)...}
 
-function cqaconvert(::Type{T}, x::AbstractString) where {T <: ComposedWeight}
+function cqaconvert(::Type{T}, x::AbstractString) where {T <: CalibrationWeight}
     m = match(r"^[a-z,A-Z,\{\}]*\(\)$", x)
     isnothing(m) && throw(ArgumentError("Cannot convert $x to type $T"))
     r = eval(Meta.parse(x))

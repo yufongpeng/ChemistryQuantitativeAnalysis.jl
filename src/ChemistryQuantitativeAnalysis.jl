@@ -10,9 +10,10 @@ export
     AnalysisMethod, Batch, 
     # CalibrationModel
     CalibrationModel,
+    LinearOriginCalibrator,
     ProportionalCalibrator,
     LinearCalibrator,
-    QuadraticProportionalCalibrator,
+    QuadraticOriginCalibrator,
     QuadraticCalibrator,
     LogarithmicCalibrator,
     ExponentialCalibrator,

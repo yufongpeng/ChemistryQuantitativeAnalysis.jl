@@ -1,39 +1,42 @@
 abstract type CurveType end 
-struct Proportional <: CurveType end
+struct LinearOrigin <: CurveType end
+const Proportional = LinearOrigin
 struct Linear <: CurveType end
-struct QuadraticProportional <: CurveType end
+struct QuadraticOrigin <: CurveType end
+@deprecate QuadraticProportional QuadraticOrigin
 struct Quadratic <: CurveType end
 struct Logarithmic <: CurveType end
 struct Exponential <: CurveType end
 struct Power <: CurveType end
 
+@deprecate ComposedWeight CalibrationWeight
 wdoc = """
-    struct ComposedWeight{X, Y, S, N} end 
+    struct CalibrationWeight{X, Y, S, N} end 
 
-    const ConstWeight = ComposedWeight{Nothing, Nothing, WSum, 1}
-    const RootXWeight = ComposedWeight{Proportional, Nothing, WSum, 1//2}
-    const RootYWeight = ComposedWeight{Nothing, Proportional, WSum, 1//2}
-    const RootXYWeight = ComposedWeight{Proportional, Proportional, WSum, 1//2}
-    const XWeight = ComposedWeight{Proportional, Nothing, WSum, 1}
-    const YWeight = ComposedWeight{Nothing, Proportional, WSum, 1}
-    const XYWeight = ComposedWeight{Proportional, Proportional, WSum, 1}
-    const SqXWeight = ComposedWeight{Proportional, Nothing, WSum, 2}
-    const SqYWeight = ComposedWeight{Nothing, Proportional, WSum, 2}
-    const SqXYWeight = ComposedWeight{Proportional, Proportional, WSum, 2}
+    const ConstWeight = CalibrationWeight{Nothing, Nothing, WSum, 1}
+    const RootXWeight = CalibrationWeight{Proportional, Nothing, WSum, 1//2}
+    const RootYWeight = CalibrationWeight{Nothing, Proportional, WSum, 1//2}
+    const RootXYWeight = CalibrationWeight{Proportional, Proportional, WSum, 1//2}
+    const XWeight = CalibrationWeight{Proportional, Nothing, WSum, 1}
+    const YWeight = CalibrationWeight{Nothing, Proportional, WSum, 1}
+    const XYWeight = CalibrationWeight{Proportional, Proportional, WSum, 1}
+    const SqXWeight = CalibrationWeight{Proportional, Nothing, WSum, 2}
+    const SqYWeight = CalibrationWeight{Nothing, Proportional, WSum, 2}
+    const SqXYWeight = CalibrationWeight{Proportional, Proportional, WSum, 2}
 
-    const RootLogXWeight = ComposedWeight{Logarithmic, Nothing, WSum, 1//2}
-    const RootLogYWeight = ComposedWeight{Nothing, Logarithmic, WSum, 1//2}
-    const LogXWeight = ComposedWeight{Logarithmic, Nothing, WSum, 1}
-    const LogYWeight = ComposedWeight{Nothing, Logarithmic, WSum, 1}
-    const SqLogXWeight = ComposedWeight{Logarithmic, Nothing, WSum, 2}
-    const SqLogYWeight = ComposedWeight{Nothing, Logarithmic, WSum, 2}
+    const RootLogXWeight = CalibrationWeight{Logarithmic, Nothing, WSum, 1//2}
+    const RootLogYWeight = CalibrationWeight{Nothing, Logarithmic, WSum, 1//2}
+    const LogXWeight = CalibrationWeight{Logarithmic, Nothing, WSum, 1}
+    const LogYWeight = CalibrationWeight{Nothing, Logarithmic, WSum, 1}
+    const SqLogXWeight = CalibrationWeight{Logarithmic, Nothing, WSum, 2}
+    const SqLogYWeight = CalibrationWeight{Nothing, Logarithmic, WSum, 2}
 
-    const RootExpXWeight = ComposedWeight{Exponential, Nothing, WSum, 1//2}
-    const RootExpYWeight = ComposedWeight{Nothing, Exponential, WSum, 1//2}
-    const ExpXWeight = ComposedWeight{Exponential, Nothing, WSum, 1}
-    const ExpYWeight = ComposedWeight{Nothing, Exponential, WSum, 1}
-    const SqExpXWeight = ComposedWeight{Exponential, Nothing, WSum, 2}
-    const SqExpYWeight = ComposedWeight{Nothing, Exponential, WSum, 2}
+    const RootExpXWeight = CalibrationWeight{Exponential, Nothing, WSum, 1//2}
+    const RootExpYWeight = CalibrationWeight{Nothing, Exponential, WSum, 1//2}
+    const ExpXWeight = CalibrationWeight{Exponential, Nothing, WSum, 1}
+    const ExpYWeight = CalibrationWeight{Nothing, Exponential, WSum, 1}
+    const SqExpXWeight = CalibrationWeight{Exponential, Nothing, WSum, 2}
+    const SqExpYWeight = CalibrationWeight{Nothing, Exponential, WSum, 2}
 
 Weight object to generate weight function. 
 
@@ -47,7 +50,7 @@ Weight object to generate weight function.
 Weight values can be computed using `getweights`.
 """
 @doc wdoc
-struct ComposedWeight{X, Y, S, N} end 
+struct CalibrationWeight{X, Y, S, N} end 
 
 """
     struct WSum end 
@@ -57,51 +60,51 @@ Operation for summing x and y.
 struct WSum end 
 
 @doc wdoc
-const ConstWeight = ComposedWeight{Nothing, Nothing, WSum, 1}
+const ConstWeight = CalibrationWeight{Nothing, Nothing, WSum, 1}
 @doc wdoc
-const RootXWeight = ComposedWeight{Proportional, Nothing, WSum, 1//2}
+const RootXWeight = CalibrationWeight{Proportional, Nothing, WSum, 1//2}
 @doc wdoc
-const RootYWeight = ComposedWeight{Nothing, Proportional, WSum, 1//2}
+const RootYWeight = CalibrationWeight{Nothing, Proportional, WSum, 1//2}
 @doc wdoc
-const RootXYWeight = ComposedWeight{Proportional, Proportional, WSum, 1//2}
+const RootXYWeight = CalibrationWeight{Proportional, Proportional, WSum, 1//2}
 @doc wdoc
-const XWeight = ComposedWeight{Proportional, Nothing, WSum, 1}
+const XWeight = CalibrationWeight{Proportional, Nothing, WSum, 1}
 @doc wdoc
-const YWeight = ComposedWeight{Nothing, Proportional, WSum, 1}
+const YWeight = CalibrationWeight{Nothing, Proportional, WSum, 1}
 @doc wdoc
-const XYWeight = ComposedWeight{Proportional, Proportional, WSum, 1}
+const XYWeight = CalibrationWeight{Proportional, Proportional, WSum, 1}
 @doc wdoc
-const SqXWeight = ComposedWeight{Proportional, Nothing, WSum, 2}
+const SqXWeight = CalibrationWeight{Proportional, Nothing, WSum, 2}
 @doc wdoc
-const SqYWeight = ComposedWeight{Nothing, Proportional, WSum, 2}
+const SqYWeight = CalibrationWeight{Nothing, Proportional, WSum, 2}
 @doc wdoc
-const SqXYWeight = ComposedWeight{Proportional, Proportional, WSum, 2}
+const SqXYWeight = CalibrationWeight{Proportional, Proportional, WSum, 2}
 
 @doc wdoc
-const RootLogXWeight = ComposedWeight{Logarithmic, Nothing, WSum, 1//2}
+const RootLogXWeight = CalibrationWeight{Logarithmic, Nothing, WSum, 1//2}
 @doc wdoc
-const RootLogYWeight = ComposedWeight{Nothing, Logarithmic, WSum, 1//2}
+const RootLogYWeight = CalibrationWeight{Nothing, Logarithmic, WSum, 1//2}
 @doc wdoc
-const LogXWeight = ComposedWeight{Logarithmic, Nothing, WSum, 1}
+const LogXWeight = CalibrationWeight{Logarithmic, Nothing, WSum, 1}
 @doc wdoc
-const LogYWeight = ComposedWeight{Nothing, Logarithmic, WSum, 1}
+const LogYWeight = CalibrationWeight{Nothing, Logarithmic, WSum, 1}
 @doc wdoc
-const SqLogXWeight = ComposedWeight{Logarithmic, Nothing, WSum, 2}
+const SqLogXWeight = CalibrationWeight{Logarithmic, Nothing, WSum, 2}
 @doc wdoc
-const SqLogYWeight = ComposedWeight{Nothing, Logarithmic, WSum, 2}
+const SqLogYWeight = CalibrationWeight{Nothing, Logarithmic, WSum, 2}
 
 @doc wdoc
-const RootExpXWeight = ComposedWeight{Exponential, Nothing, WSum, 1//2}
+const RootExpXWeight = CalibrationWeight{Exponential, Nothing, WSum, 1//2}
 @doc wdoc
-const RootExpYWeight = ComposedWeight{Nothing, Exponential, WSum, 1//2}
+const RootExpYWeight = CalibrationWeight{Nothing, Exponential, WSum, 1//2}
 @doc wdoc
-const ExpXWeight = ComposedWeight{Exponential, Nothing, WSum, 1}
+const ExpXWeight = CalibrationWeight{Exponential, Nothing, WSum, 1}
 @doc wdoc
-const ExpYWeight = ComposedWeight{Nothing, Exponential, WSum, 1}
+const ExpYWeight = CalibrationWeight{Nothing, Exponential, WSum, 1}
 @doc wdoc
-const SqExpXWeight = ComposedWeight{Exponential, Nothing, WSum, 2}
+const SqExpXWeight = CalibrationWeight{Exponential, Nothing, WSum, 2}
 @doc wdoc
-const SqExpYWeight = ComposedWeight{Nothing, Exponential, WSum, 2}
+const SqExpYWeight = CalibrationWeight{Nothing, Exponential, WSum, 2}
 
 """
     const_weight(x, y) = 1
@@ -111,11 +114,11 @@ Constant weight function
 const_weight(x::S, y::T) where {S, T} = promote_type(S, T)(1.0)
 
 """
-    getweights(::ComposedWeight, x, y)
+    getweights(::CalibrationWeight, x, y)
 
 Get weight values from weight object.
 """
-function getweights(::ComposedWeight{X, Y, S, N}, x, y) where {X, Y, S, N}
+function getweights(::CalibrationWeight{X, Y, S, N}, x, y) where {X, Y, S, N}
     if X == Nothing && Y == Nothing 
         getweights(ConstWeight(), x, y)
     elseif Y == Nothing

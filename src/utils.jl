@@ -264,7 +264,7 @@ Blank signal of `cal`.
 blank(cal::ExternalCalibrator) = blank(cal.model)
 blank(model::CalibrationModel{Proportional}) = 0
 blank(model::CalibrationModel{Linear}) = 0
-blank(model::CalibrationModel{QuadraticProportional}) = 0
+blank(model::CalibrationModel{QuadraticOrigin}) = 0
 blank(model::CalibrationModel{Quadratic}) = 0
 blank(model::CalibrationModel{Logarithmic}) = -Inf
 blank(model::CalibrationModel{Exponential}) = 0

@@ -3,9 +3,10 @@ abstract type AbstractCalibrationModel{T} end
 cdoc = """
     CalibrationModel{T <: CurveType} 
 
-    const ProportionalCalibrator = CalibrationModel{Proportional}
+    const LinearOriginCalibrator = CalibrationModel{LinearOrigin}
+    const ProportionalCalibrator = LinearOriginCalibrator
     const LinearCalibrator = CalibrationModel{Linear}
-    const QuadraticProportionalCalibrator = CalibrationModel{QuadraticProportional}
+    const QuadraticOriginCalibrator = CalibrationModel{QuadraticOrigin}
     const QuadraticCalibrator = CalibrationModel{Quadratic}
     const LogarithmicCalibrator = CalibrationModel{Logarithmic}
     const ExponentialCalibrator = CalibrationModel{Exponential}
@@ -14,11 +15,11 @@ cdoc = """
 Calibration model type of curve type `T`. 
 
 # Fields
-* `weight::ComposedWeight`: weight object to generate weight function. 
+* `weight::CalibrationWeight`: weight object to generate weight function. 
 """
 @doc cdoc 
 struct CalibrationModel{T <: CurveType} <: AbstractCalibrationModel{T}
-    weight::ComposedWeight 
+    weight::CalibrationWeight 
 end
 
 """
@@ -38,11 +39,13 @@ struct LsqFitMachine
 end
 
 @doc cdoc 
-const ProportionalCalibrator = CalibrationModel{Proportional}
+const LinearOriginCalibrator = CalibrationModel{LinearOrigin}
+@doc cdoc 
+const ProportionalCalibrator = LinearOriginCalibrator
 @doc cdoc 
 const LinearCalibrator = CalibrationModel{Linear}
 @doc cdoc 
-const QuadraticProportionalCalibrator = CalibrationModel{QuadraticProportional}
+const QuadraticOriginCalibrator = CalibrationModel{QuadraticOrigin}
 @doc cdoc 
 const QuadraticCalibrator = CalibrationModel{Quadratic}
 @doc cdoc 
@@ -52,6 +55,7 @@ const ExponentialCalibrator = CalibrationModel{Exponential}
 @doc cdoc 
 const PowerCalibrator = CalibrationModel{Power}
 
+@deprecate QuadraticProportionalCalibrator QuadraticOriginCalibrator
 @deprecate MultipleCalibration ExternalCalibrator
 """
     ExternalCalibrator{A, N, T <: Table} <: AbstractCalibrator{A, N}

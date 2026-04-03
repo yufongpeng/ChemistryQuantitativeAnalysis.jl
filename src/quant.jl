@@ -110,7 +110,7 @@ end
 
 inv_predict(model::CalibrationModel{Proportional}, β::AbstractVector, y::AbstractArray{T}) where T = y ./ β[1]
 inv_predict(model::CalibrationModel{Linear}, β::AbstractVector, y::AbstractArray{T}) where T = @. (y - β[1]) / β[2]
-function inv_predict(model::CalibrationModel{QuadraticProportional}, β::AbstractVector, y::AbstractArray{T}) where T 
+function inv_predict(model::CalibrationModel{QuadraticOrigin}, β::AbstractVector, y::AbstractArray{T}) where T 
     b, a = β
     d = @. max(b ^ 2 + 4 * a * y, 0)
     @. (-b + sqrt(d)) / 2a

@@ -7,7 +7,7 @@
 
 Graphical user interface is available for adjusting calibration curve. See [`ChemistryQuantitativeAnalysisUI.jl`](https://github.com/yufongpeng/ChemistryQuantitativeAnalysisUI.jl).
 
-Command line interfaces are implemented in [`juliaquant`](https://github.com/yufongpeng/juliaquant) for non-programmers.
+Command line interfaces are implemented in [`juliaquant`](https://github.com/yufongpeng/juliaquant).
 
 ## Tabular data wrapper
 This package provides two wrappers for data, `SampleDataTable{A, S, N, T}` and `AnalyteDataTable{A, S, N, T}` which are subtypes of `AbstractDataTable{A, S, N, T}`. `SampleDataTable` indicates that part of columns represent analytes, and all rows reprsent samples. `AnalyteDataTable` indicates that part of columns represent samples, and all rows represent analytes. Both types behave like the underlying `table` object. 
@@ -15,9 +15,9 @@ This package provides two wrappers for data, `SampleDataTable{A, S, N, T}` and `
 |----------|---------------------|------------------|
 |`analytecol`|-|`Symbol`, column name whose elements are analytes.|
 |`samplecol`|`Symbol`, column name whose elements are samples.|-|
-|`analyte`|`Vector{A}`, analytes in user-defined types.|same|
-|`sample`|`Vector{S}`, samples in user-defined types.|same|
-|`table`|Tabular data of type `T`|same|
+|`analyte`|`Vector{A}`, analytes in user-defined types.|`Vector{A}`, analytes in user-defined types.|
+|`sample`|`Vector{S}`, samples in user-defined types.|`Vector{S}`, samples in user-defined types.|
+|`table`|Tabular data of type `T`|Tabular data of type `T`|
 
 `SampleDataTable{A, S, N, T}` can be constructed in the following ways:
 1. `SampleDataTable(analytetype::TypeOrFn, samplecol::Symbol, table; analytename = setdiff(propertynames(table), [samplecol]))`
@@ -37,11 +37,11 @@ This package provides two wrappers for data, `SampleDataTable{A, S, N, T}` and `
 `AnalysisMethod{A, M, C, D}` is used for storing method, containing all analytes, their internal standards and calibration curve setting, and data for fitting calibration curve.
 |Property|Description|
 |----------|---------|
-|`analytetable::M <: Table`|table with at least 4 columns, `analytes` identical to property `analytes`, `isd`, matching each analyte to index of its internal standard, and `std` matching each analyte to the index of calibration standard. `-1` indicates the analyte itself is internal standard, and `0` indicates no internal standard. `model` stores the calibration model. For example, a row `(analytes = AnalyteX, isd = 2, std = 3, model = LinearCalibrator(ConstWeight()))` means that internal standard of `AnalyteX` is the second analyte, and it will be external calibrated by the third analyte with ordinary linear regression. If isd and std are the same, internal calibrator is used.|
+|`analytetable::M <: Table`|table with at least 4 columns, containing calibration settings.|
 |`signal::Symbol`|type and key name of experimental acquisition data.|
-|`rel_sig::Symbol`|key name of  relative signal.|
-|`est_conc::Symbol`|key name of  estimated concentration.|
-|`true_conc::Symbol`| key name of  true concentration.|
+|`rel_sig::Symbol`|key name of relative signal.|
+|`est_conc::Symbol`|key name of estimated concentration.|
+|`nom_conc::Symbol`| key name of nominal concentration.|
 |`acc::Symbol`|key name of accuracy.|
 |`pointlevel::Vector{Int}`| matching each point to level. It can be empty if there is only one level in `conctable`.|
 |`conctable::C <: AbstractDataTable{A, Int}`| containing concentration data for each level. Sample names must be symbol or string of integers for multiple levels.|
@@ -53,8 +53,18 @@ This package provides two wrappers for data, `SampleDataTable{A, S, N, T}` and `
 |`point::AbstractVector{S}`|calibration points, identical to `signaltable.samples`. If `signaltable` is `nothing`, this value is `nothing` too.|
 |`level::AbstractVector{Int}`|calibration levels, identical to `conctable.samples`.|
 
-Constructors of `AnalysisMethod`:
-1. `AnalysisMethod(analytetable::Table, signal::Symbol, rel_sig::Symbol, est_conc::Symbol, true_conc::Symbol, acc::Symbol, pointlevel::Vector{Int}, conctable::AbstractDataTable{A, Int}, signaltable::Union{AbstractDataTable, Nothing})`
+The columns in `analytetable`
+|Column|Description|
+|------|-----------|
+|`analytes`|dentical to property `analytes`|
+|`isd`|matches each analyte to index of its internal standard|
+|`std`|matches each analyte to the index of calibration standard|
+|`model`|assigns the calibration model.|
+
+For column `isd` and `std`, `-1` indicates the analyte itself is an internal standard, and `0` indicates no internal standard. For example, a row `(analytes = AnalyteX, isd = 2, std = 3, model = LinearCalibrator(ConstWeight()))` means that internal standard of `AnalyteX` is the second analyte, and it will be external calibrated by the third analyte with ordinary linear regression. If isd and std are the same, internal calibrator is used. 
+
+Constructors of `AnalysisMethod`
+1. `AnalysisMethod(analytetable::Table, signal::Symbol, rel_sig::Symbol, est_conc::Symbol, nom_conc::Symbol, acc::Symbol, pointlevel::Vector{Int}, conctable::AbstractDataTable{A, Int}, signaltable::Union{AbstractDataTable, Nothing})`
 2. `AnalysisMethod(conctable::AbstractDataTable, signaltable::SampleDataTable, signal, levelname; kwargs...)`
 3. `AnalysisMethod(conctable::AbstractDataTable, signaltable::Nothing; kwargs...)`
 4. `AnalysisMethod(conctable::AbstractDataTable, signaltable::Union{AbstractDataTable, Nothing}, signal, pointlevel::AbstractVector{Int}; kwargs...)`
@@ -62,7 +72,7 @@ Constructors of `AnalysisMethod`:
 Keyword arguments
 * `rel_sig`: key name of relative signa. It defaults to `:relative_signal`.
 * `est_conc`: key name of estimated concentration. It defaults to `:estimated_concentration`.
-* `true_conc`: key name of true concentration. It defaults to `:true_concentration`. 
+* `nom_conc`: key name of nominal concentration. It defaults to `:nominal_concentration`. 
 * `acc`: key name of accuracy. It defaults to `:accuracy`.
 * Other keyword arguments will be columns in `analytetable`; when `analyte`, `isd` and `std` are not provided, it will use analyte in `conctable`. 
 
@@ -76,7 +86,7 @@ Keyword arguments
 |`sample::Vector{S}`|samples in user-defined types.|
 |`tables::Dictionary{Symbol, <: AbstractDataTable{T}}`|a dictionary mapping data type to datatable.|
 
-The key names are determined by an `AnalysisMethod`. 
+The meaning of key name is determined by an `AnalysisMethod`. 
 
 `AnalysisTable{A, S, T}` can be constructed in the following ways:
 1. `AnalysisTable(keys::AbstractVector{Symbol}, tables::AbstractVector{<: AbstractDataTable{A, S}})`
@@ -97,8 +107,7 @@ This type is for external calibration with or without internal calibration. It c
 |`model::AbstractCalibrationModel`|calibration model|
 |`machine`|calibration machine. Either a `LsqFitMachine` or fitted `GLM` object|
 
-
-The columns in `table`:
+The columns in `table`
 |Column|Description|
 |------|-----------|
 |`id`|Point name|
@@ -118,6 +127,49 @@ This type contains data for single point internal calibration.
 |`analyte::Tuple{A}`|the analyte with known concentration (internal standard).|
 |`conc::Float64`|concentration of analyte.|
 
+## CalibrationModel and CalibrationWeight
+The calibration model type and weight is stored within `AbstractCalibrationModel`. The default type is `CalibrationModel`.
+It takes one type argument `<: CurveType` and a field `weight`. Available shorhand constructor includes
+|Model type|Constructor|Shorhand|Formula|
+|----------|-----------|--------|-------|
+|Linear (passing origin)|`CalibrationModel{LinearOrigin}`|`LinearOriginCalibrator`|y=β₀x|
+|Linear (passing origin)|`CalibrationModel{Proportional}`|`ProportionalCalibrator`|y=β₀x|
+|Linear|`CalibrationModel{Linear}`|`LinearCalibrator`|y=β₀+β₁x|
+|Quadratic (passing origin)|`CalibrationModel{QuadraticOrigin}`|`QuadraticOriginCalibrator`|y=β₀x+β₁x²|
+|Quadratic|`CalibrationModel{Quadratic}`|`QuadraticCalibrator`|y=β₀+β₁x+β₂x²|
+|Logarithmic|`CalibrationModel{Logarithmic}`|`LogarithmicCalibrator`|y=β₀+β₁ln(x)|
+|Exponential|`CalibrationModel{Exponential}`|`ExponentialCalibrator`|y=αeᵝˣ|
+|Power|`CalibrationModel{Power}`|`PowerCalibrator`|y=αxᵝ|
+
+The field `weight` is type `CalibrationWeight`, which contains the curve type of x and y, how to merge x and y weight, and the final square or root operation.
+
+|Weight type|Constructor|Shorhand|Formula|
+|-----------|-----------|--------|-------|
+|Constant|`CalibrationWeight{Nothing, Nothing, WSum, 1}`|`ConstWeight`|1|
+|Root x|`CalibrationWeight{Proportional, Nothing, WSum, 1//2}`|`RootXWeight`|1/√x|
+|Root y|`CalibrationWeight{Nothing, Proportional, WSum, 1//2}`|`RootYWeight`|1/√y|
+|Root x+y|`CalibrationWeight{Proportional, Proportional, WSum, 1//2}`|`RootXYWeight`|1/√(x+y)|
+|Linear x|`CalibrationWeight{Proportional, Nothing, WSum, 1}`|`XWeight`|1/x|
+|Linear y|`CalibrationWeight{Nothing, Proportional, WSum, 1}`|`YWeight`|1/y|
+|Linear x+y|`CalibrationWeight{Proportional, Proportional, WSum, 1}`|`XYWeight`|1/(x+y)|
+|Squared x|`CalibrationWeight{Proportional, Nothing, WSum, 2}`|`XWeight`|1/x²|
+|Squared y|`CalibrationWeight{Nothing, Proportional, WSum, 2}`|`YWeight`|1/y²|
+|Squared x+y|`CalibrationWeight{Proportional, Proportional, WSum, 2}`|`XYWeight`|1/(x+y)²|
+|Root logarithmic x|`CalibrationWeight{Logarithmic, Nothing, WSum, 1//2}`|`RootLogXWeight`|1/√ln(x)|
+|Root logarithmic y|`CalibrationWeight{Nothing, Logarithmic, WSum, 1//2}`|`RootLogYWeight`|1/√ln(y)|
+|Logarithmic x|`CalibrationWeight{Logarithmic, Nothing, WSum, 1}`|`LogXWeight`|1/ln(x)|
+|Logarithmic y|`CalibrationWeight{Nothing, Logarithmic, WSum, 1}`|`LogYWeight`|1/ln(y)|
+|Squared logarithmic x|`CalibrationWeight{Logarithmic, Nothing, WSum, 2}`|`SqLogXWeight`|1/ln(x)²|
+|Squared logarithmic y|`CalibrationWeight{Nothing, Logarithmic, WSum, 2}`|`SqLogYWeight`|1/ln(y)²|
+|Root exponential x|`CalibrationWeight{Exponential, Nothing, WSum, 1//2}`|`RootExpXWeight`|1/√eˣ|
+|Root exponential y|`CalibrationWeight{Nothing, Exponential, WSum, 1//2}`|`RootExpYWeight`|1/√eʸ|
+|Exponentail x|`CalibrationWeight{Exponential, Nothing, WSum, 1}`|`ExpXWeight`|1/eˣ|
+|Exponentail y|`CalibrationWeight{Nothing, Exponential, WSum, 1}`|`ExpYWeight`|1/eʸ|
+|Squared exponential x|`CalibrationWeight{Exponential, Nothing, WSum, 2}`|`SqExpXWeight`|1/e²ˣ|
+|Squared exponential y|`CalibrationWeight{Nothing, Exponential, WSum, 2}`|`SqExpYWeight`|1/e²ʸ|
+
+User can construct a `CalibrationModel` by `CalibrationModel{CurveType}(weight::CaibrationWeight)`. For example, `LinearCalibrator(ConstWeight())`. For function related to calibration, calibration model type can be passed as keyword argument `model` or column `model` in argument `params`, and weight object can be passed as keyword argument `weight` or column `weight` in argument `params`.
+
 ## Batch
 `Batch{A, M, C, D}` represents a batch for quantitative analysis.
 |Property|Description|
@@ -125,32 +177,42 @@ This type contains data for single point internal calibration.
 |`method::M <: AnalysisMethod{A}`|method|
 |`calibrator::C <: Union{AbstractVector{ExternalCalibrator{A}}, AbstractVector{InternallCalibrator{A}}}`|calibrators|
 |`data::D <: Union{AnalysisTable{A}, Nothing`|Data for analysis|
-|`analyte::AbstractVector{A}|analytes in user-defined types, identical to `method.analyte`.|
+|`analyte::AbstractVector{A}`|analytes in user-defined types, identical to `method.analyte`.|
 |`isd::AbstractVector{A}`|analytes which are internal standards, identical to `method.isd`.|
 |`nonisd::AbstractVector{A}`|analytes which are not internal standards, identical to `method.nonstd`.|
 |`std::AbstractVector{A}`|analytes which are calibration standards, identical to `method.std`.|
 |`point::Union{Nothing, AbstractVector{S}}`|calibration points, identical to `method.point`.|
 |`level::AbstractVector{Int}`|calibration levels, identical to `method.level`.|
 
-Constructors for `Batch{A, M, C, D}`:
+Constructors for `Batch{A, M, C, D}`
 1. `Batch(method::M, calibrator::C, data::D = nothing)`
 2. `Batch(method::AnalysisMethod, data = nothing; type = true, zero = false, weight = 0)`
 3. `Batch(batch::Batch, at::AnalysisTable)`
-4. `Batch(dt::AbstractDataTable; signal = :area, rel_sig = :relative_signal, est_conc = :estimated_concentration, true_conc = :true_concentration, acc = :accuracy, calid = r"Cal_(\d)_(\d*-*\d*)", order = "LR", level = nothing, ratio = nothing, dilution_factor = nothing, conc_factor = 1, parse_decimal = x -> replace(x, "-" => "."))`
+4. `Batch(dt::AbstractDataTable; signal = :area, rel_sig = :relative_signal, est_conc = :estimated_concentration, nom_conc = :nominal_concentration, acc = :accuracy, calid = r"Cal_(\d)_(\d*-*\d*)", order = "LR", level = nothing, ratio = nothing, dilution_factor = nothing, conc_factor = 1, parse_decimal = x -> replace(x, "-" => "."))`
 
-The last method allows user to use encoded sample names or additional tabular data from `dt` to generate `AnalysisMethod`. 
+The last method allows user to use encoded sample names or additional tabular data from `dt` to generate `AnalysisMethod`.
 
-Note that the constructor does not automatically fit any calibration curves if no calibrators are given. User can edit `analytetable` with `edit_method!`, `assign_isd!`, `assign_std!`, and then apply `calibrate!` to start calibration or in combination, `..._calibrate!`.
+Keyword arguments 
+* `calid`: identifier for calibration point. It has two possible values.
+    * `Regex`, level and concentration related factors (ratio of concentration or dilution factor) should be captured. The former should be able to be parsed as integer directly; the latter should be able to be parsed as floating number after applying `parse_decimal`. 
+* `order::String`: represents the order and identity of captured string; `L` is level, `R` is ratio of concentration, `D` is dilution factor.
+* `level`: level of calibration of each sample (`missing` for non calibration sample). If it is a property name of `dt`, the column is used. `nothing` indicates using captured values. 
+* `ratio`: ratio of concantrations of each level. If it is a property name of `dt`, the column is used. `nothing` indicates using captured values. 
+* `dilution_factor`: dilution factors of each level. If it is a property name of `dt`, the column is used. `nothing` indicates using captured values. 
+* `conc_factor::Union{Number, Vector{<: Number}`: concentration equals to `conc_factor * ratio` or `conc_factor / dilution_factor`. When a vector is provided, each element represents `conc_factor` value of each analyte. If it is a property name of `dt`, the column is used. 
+* `parse_decimal::Function`: converts a string into another string which can be parsed as floating number.
+
+Note that the constructor does not automatically fit any calibration curves if no calibrators are given. User can edit `analytetable` with `edit_method!`, `assign_isd!`, `assign_std!`, and then apply `calibrate!` to start calibration or in combination, `..._calibrate!`. User can also use `model_calibrator!` to only change the calibration and weight setting, and subsequently run calibration. 
 
 To calculate relative signal, concentration or accuracy and save the result, call `quantify_relative_signal!`, `quantify_inv_predict!` (in combination, `quantify!!`) and `validate!` (in combination with `quantify!, `analyze!`), respectively.
 
 ## Reading and writting data to disk
-To use data on disk, user should create a directory in the following structure:
+To store and read batch on disk, user should create a directory in the following structure:
 ```
 batch_name.batch
 ├──config.txt
 ├──method.am
-│  ├──true_concentration.sdt
+│  ├──nominal_concentration.sdt
 │  │  ├──config.txt
 │  │  └──table.txt
 │  ├──area.sdt
@@ -220,7 +282,7 @@ sample_col_name_2
 ``` 
 
 ### *.am
-It must contain two `.sdt` or `.adt` files. A file must contain nominal concentration for each analyte and level. The sample names must be integers.
+`*.am` is read as `AnalysisMethod`. It must contain two `.sdt` or `.adt` files. A file must contain nominal concentration for each analyte and level. The sample names must be integers.
 Another file is signal data for each analyte and calibration point. The file name is determined by `config.txt`.
 
 Config file for `method.am` needs the following headers.
@@ -268,7 +330,33 @@ analyte2 isd2  std2 LinearCalibrator(ConstWeight())
 The delimiter should be "\t", and the order of columns does not matter.
 
 ### *.at
-It can contain multiple `*.sdt` or `*.adt`. The file names must start from an integer with `_` following the name, e.g. `0_area.sdt`. The integer is for the order of reading into `AnalysisTable`, and `name` will be the key. The name of data is determined in `method.am/config.txt`.
+`*.at` is read as `AnalysisTable`. It can contain multiple `*.sdt` or `*.adt`. The file names must start from an integer with `_` following the name, e.g. `0_area.sdt`. The integer is for the order of reading into `AnalysisTable`, and `name` will be the key. The name of data is determined in `method.am/config.txt`.
+
+### *.ecal
+`*.ecal` is read as `ExternalCalibrator`. It contains a config file and a table `table.txt`. Config file needs the following headers
+```
+[analyte]
+analyte
+
+[isd]
+internal_standard_for_analyte
+
+[model]
+string_repr_of_field_model
+
+[delim]
+\t
+```
+`table.txt` is exactly field `table`.
+### *.ical
+`*.ical` is read as `InternalnalCalibrator`. It contains a config file with the following headers
+```
+[analyte]
+analyte(isd)
+
+[conc]
+concentration_of_analyte(isd)
+```
 
 ### Reading and writing Batch
 To read a batch into julia, call `ChemistryQuantitativeAnalysis.read`.
@@ -285,7 +373,7 @@ To write batch to disk, call `ChemistryQuantitativeAnalysis.write`. There is a k
 ```julia-repl
 julia> ChemistryQuantitativeAnalysis.write("batch_name.batch", batch; delim = '\t')
 ```
-There will be a folder `calibrator` containing multiple `*.ecal` or `*.ical` folders. The former is for `ExternalCalibrator` and the latter is for `InternallCalibrator`.
+The folder `calibrator` stores calibration data with `*.ecal` or `*.ical` folders. 
 
 ## Examples
 ```julia
@@ -328,7 +416,8 @@ conctable = SampleDataTable(
          "G1(drug_a)" => conc,
          "G1(drug_b)" => conc .* 10, 
          "G2(drug_a)" => repeat([50.0], 8),
-         "G2(drug_b)" => repeat([50.0], 8)),
+         "G2(drug_b)" => repeat([50.0], 8)
+      ),
       AnalyteTest,
       :level
 )
@@ -339,13 +428,16 @@ signaltable = SampleDataTable(
          "G1(drug_a)" => signal1,
          "G2(drug_a)" => repeat([5.0], 24),
          "G1(drug_b)" => signal2,
-         "G2(drug_b)" => repeat([2.0], 24)), 
+         "G2(drug_b)" => repeat([2.0], 24)
+      ), 
       AnalyteTest,
       :point; 
       analytename = Symbol.(analytes)
 )
 method = AnalysisMethod(conctable, signaltable, :area, :level; analyte = analytes, isd = [2, -1, 4, -1], std = [1, -1, 3, -1])
-cdata = AnalysisTable([:area], [
+cdata = AnalysisTable(
+   [:area], 
+   [
       SampleDataTable(
          DataFrame(
             "Sample" => ["S1", "S2", "S3"], 
@@ -355,10 +447,11 @@ cdata = AnalysisTable([:area], [
             "G2(drug_b)" => Float64[2, 2, 2]), 
          AnalyteTest,
          :Sample
-         )
-      ]
+      )
+   ]
 )
-rdata = analysistable((:area => 
+rdata = analysistable(
+   (:area => 
       AnalyteDataTable(
          DataFrame(
             "Analyte" => analytes, 
@@ -367,8 +460,8 @@ rdata = analysistable((:area =>
             "S3" => Float64[54, 6, 9800, 2]
             ), 
          :Analyte
-         )
-      , )
+      ), 
+   )
 )
 
 nominal_conc = SampleDataTable(
@@ -377,29 +470,33 @@ nominal_conc = SampleDataTable(
             "G1(drug_a)" => Float64[5, 25, 50],
             "G2(drug_a)" => Float64[5, 5, 5],
             "G1(drug_b)" => Float64[150, 300, 980],
-            "G2(drug_b)" => Float64[2, 2, 2]), 
+            "G2(drug_b)" => Float64[2, 2, 2]
+         ), 
          AnalyteTest,
          :Sample
-         )
+      )
 
 # Create batch
 cbatch = Batch(method, cdata)
 rbatch = Batch(deepcopy(method), rdata)
 
 # Calibration
-calibrate!(cbatch)
-calibrate!(rbatch)
+calibrate!(cbatch) # calibrate all analytes
 cbatch.calibrator # a vector of `ExternalCalibrator`
-model_calibrator!(cbatch, 3; model = QuadraticCalibrator)
-model_calibrator!(rbatch, AnalyteG1("G1(drug_b)"); weight = XWeight())
+edit_method_calibrate!(rbatch, 
+   Table(; analyte = rbatch.analyte, std = [AnalyteG1("G1(drug_a)"), -1, AnalyteG1("G1(drug_b)"), -1], isd = [2, -1, 4, -1], model = [LinearCalibrator, ProportionalCalibrator]); weight = SqXWeight()) # Assign std, isd, model to each analyte, weight to all analytes and calbrate
+assign_isd_calibrate!(rbatch, AnalyteG1("G1(drug_b)"), AnalyteG1("G2(drug_b)")) # Assign `AnalyteG2("G1(drug_b)")` as internal standard of `AnalyteG1("G1(drug_b)")` and calibrate
+assign_std_calibrate!(rbatch, AnalyteG1("G1(drug_a)"), AnalyteG1("G1(drug_b)"), AnalyteG1("G2(drug_b)")) # Assign `AnalyteG1("G1(drug_b)")` as calibration standard of `AnalyteG1("G1(drug_a)")`, `AnalyteG2("G1(drug_b)")` as internal standard of `AnalyteG1("G1(drug_b)")` and calibrate
+model_calibrator!(rbatch, 3; model = QuadraticCalibrator) # Assign model to the thrid analyte and calibrate
+model_calibrator!(rbatch, AnalyteG1("G1(drug_b)"); weight = XWeight()) # Assign weight to `AnalyteG1("G1(drug_b)")` and calibrate
 
 # Quantification
 quantify_relative_signal!(cbatch) # A new data `cbatch.data.relative_signal` is created.
 quantify_inv_predict!(cbatch) # Fit `cbatch.data.relative_signal` into calibration curve to create `cbatch.data.estimated_concentration`.
 quantify!(cbatch) # equivalent to `update_inv_predict!(update_relative_signal!(cbatch))`
 cbatch.data[:nominal_concentration] = nominal_conc
-validate!(cbatch)
-analyze!(cbatch)
+validate!(cbatch) # Compute accuracy
+analyze!(cbatch) # equivalent to validate!(quantify!(cbatch))
 
 # Utils
 analyteobj(cdata.area) # analytes of type `AnalyteTest`
@@ -408,19 +505,20 @@ analytename(cdata) # analytes of type `Symbol`
 samplename(cdata.area) # samples of type `Symbol`
 cdata.area[AnalyteTest("G2(drug_a)"), "S1"] = 6 # Set value using `dt[analyte, sample]`
 cdata.area[AnalyteTest("G2(drug_a)"), "S1"] == 6
-collect(eachanalyte(cdata.area))
-collect(eachsample(cdata.area))
+collect(eachanalyte(cdata.area)) # iterate each analyte of data area
+collect(eachsample(cdata.area)) # iterate each sample of data area
 getanalyte(cdata.area, AnalyteG1("G1(drug_b)")) # get data of `AnalyteG1("G1(drug_b)")`
 getanalyte(cdata.area, 1) # get data of first analyte
-getsample(cdata.area, "S2")
-getcalibrator(cbatch, AnalyteTest("G1(drug_a)"))
-dynamic_range(cbatch.calibrator[1])
-signal_range(rbatch.calibrator[2])
-signal_lob(rbatch.calibrator[2])
-signal_lod(rbatch.calibrator[2])
-signal_loq(rbatch.calibrator[2])
-signal_lloq(rbatch.calibrator[2])
-signal_uloq(rbatch.calibrator[2])
-lloq(rbatch.calibrator[2])
-uloq(rbatch.calibrator[2])
+getsample(cdata.area, "S2") # get data of sample S2
+getcalibrator(cbatch, AnalyteTest("G1(drug_a)")) # get calibrator of `AnalyteG1("G1(drug_b)")`
+
+signal_lob(rbatch.calibrator[2]) # Signal of limit of blank
+signal_lod(rbatch.calibrator[2]) # Signal of limit of detection
+signal_loq(rbatch.calibrator[2]) # Signal of limit of quantification
+signal_lloq(rbatch.calibrator[2]) # Signal of limit of lower limit of quantification
+signal_uloq(rbatch.calibrator[2]) # Signal of limit of upper limit of quantification
+lloq(rbatch.calibrator[2]) # Lower limit of quantification
+uloq(rbatch.calibrator[2]) # Upper limit of quantification
+dynamic_range(cbatch.calibrator[1]) # A Tuple, (LLOQ, ULOQ)
+signal_range(rbatch.calibrator[2]) # A Tuple, signal of LLOQ and ULOQ
 ```

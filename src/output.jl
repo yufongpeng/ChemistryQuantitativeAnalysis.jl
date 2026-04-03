@@ -380,20 +380,20 @@ end
 
 """
     human_name(::CurveType)
-    human_name(::ComposedWeight)
+    human_name(::CalibrationWeight)
 
 Names for human.
 """
 human_name(::T) where {T <: CurveType} = repr(T)
-human_name(::Proportional) = "Proportional"
+human_name(::Proportional) = "Linear (origin)"
 human_name(::Linear) = "Linear"
-human_name(::QuadraticProportional) = "QuadraticProportional"
+human_name(::QuadraticOrigin) = "Quadratic (origin)"
 human_name(::Quadratic) = "Quadratic"
 human_name(::Logarithmic) = "Logarithmic"
 human_name(::Exponential) = "Exponential"
 human_name(::Power) = "Power"
 
-human_name(x::T) where {T <: ComposedWeight} = repr(x)
+human_name(x::T) where {T <: CalibrationWeight} = repr(x)
 human_name(::ConstWeight) = "1"
 human_name(::RootXWeight) = "1/√x"
 human_name(::RootYWeight) = "1/√y"
@@ -419,12 +419,12 @@ human_name(::SqExpYWeight) = "1/e²ʸ"
 
 """
     human_name_ascii(::CurveType)
-    human_name_ascii(::ComposedWeight)
+    human_name_ascii(::CalibrationWeight)
 
 Names for text output.
 """
 human_name_ascii(x::T) where {T <: CurveType} = human_name(x)
-human_name_ascii(x::T) where {T <: ComposedWeight} = human_name(x)
+human_name_ascii(x::T) where {T <: CalibrationWeight} = human_name(x)
 human_name_ascii(::RootXWeight) = "1/x^0.5"
 human_name_ascii(::RootYWeight) = "1/y^0.5"
 human_name_ascii(::RootXYWeight) = "1/(x+y)^0.5"
@@ -471,7 +471,7 @@ function formula_repr(::CalibrationModel{Linear}, β::AbstractVector; digits = n
     end
     string("y = ", format_number(β[1]; digits, sigdigits), op[1], abs(format_number(β[2]; digits, sigdigits)), "x")
 end
-function formula_repr(::CalibrationModel{QuadraticProportional}, β::AbstractVector; digits = nothing, sigdigits = 4) 
+function formula_repr(::CalibrationModel{QuadraticOrigin}, β::AbstractVector; digits = nothing, sigdigits = 4) 
     op = map(β[2:end]) do b
         b < 0 ? " - " : " + "
     end
