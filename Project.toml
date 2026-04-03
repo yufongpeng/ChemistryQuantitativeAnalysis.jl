@@ -1,6 +1,6 @@
 name = "ChemistryQuantitativeAnalysis"
 uuid = "3ed48883-6809-43ec-b77a-d23b0650d8c4"
-version = "0.9.5"
+version = "0.9.6"
 authors = ["Yu-Fong Peng <sciphypar@gmail.com>"]
 
 [deps]
@@ -26,4 +26,4 @@ StatsAPI = "1.8"
 Tables = "1"
 ThreadsX = "0.1"
 TypedTables = "1.4"
-julia = "1.9, 1.10, 1.11, 1.12"
+julia = "1.9"
