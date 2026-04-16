@@ -3,6 +3,17 @@ using Test
 import Base: show, convert
 const CQA = ChemistryQuantitativeAnalysis
 
+struct AnalyteN
+    N::Int
+end
+show(io::IO, analyte::AnalyteN) = print(io, "Analyte", analyte.N)
+function AnalyteN(name::AbstractString) 
+    nm = match(r"Analyte(\d*)$", name)
+    isnothing(nm) && throw(ArgumentError("Invalid name"))
+    (n, ) = nm 
+    AnalyteN(parse(Int, n))
+end
+
 struct AnalyteG1
     name::String
 end
@@ -128,7 +139,7 @@ end
         global cbatch = Batch(method, cdata)
         global rbatch = Batch(method, rdata)
         global ebatch = Batch(method)
-        global sdt = SampleDataTable(CSV.read(joinpath(datapath, "area.sdt", "table.txt"), Table; delim = '\t', stringtype = String), :Sample)
+        global sdt = SampleDataTable(AnalyteN, :Sample, CSV.read(joinpath(datapath, "area.sdt", "table.txt"), Table; delim = '\t', stringtype = String))
         global adt = AnalyteDataTable(CSV.read(joinpath(datapath, "area.adt", "table.txt"), Table; delim = '\t', stringtype = String), :Analyte)
         global sbatch = Batch(sdt; conc_factor = repeat([1], 10))
         global abatch = Batch(adt; level = vcat(repeat(1:6; inner = 3), repeat([missing], 50)), ratio = [0.1, 0.2, 0.5, 1, 2, 5], conc_factor = repeat([1], 10))
@@ -211,20 +222,20 @@ end
         @test rbatch.calibrator[1].analyte == cbatch.calibrator[1].analyte
         @test all(isapprox.(cbatch.calibrator[1].table.accuracy[4:6], [1, 1.1, 0.9]))
         @test all(isapprox.(rbatch.calibrator[2].table.accuracy[4:6], [1, sqrt(1.1), sqrt(0.9)]))
-        assign_isd_calibrate!(sbatch, "Analyte1", "Analyte4")
-        @test sbatch.calibrator[1].isd == "Analyte4"
+        assign_isd_calibrate!(sbatch, AnalyteN(1), AnalyteN(4))
+        @test sbatch.calibrator[1].isd == AnalyteN(4)
         @test sbatch.method.analytetable.isd[1] == 4
-        assign_isd_calibrate!(sbatch, "Analyte1", "Analyte2")
-        @test sbatch.calibrator[1].isd == "Analyte2"
+        assign_isd_calibrate!(sbatch, AnalyteN(1), AnalyteN(2))
+        @test sbatch.calibrator[1].isd == AnalyteN(2)
         @test sbatch.method.analytetable.isd[1] == 2
-        assign_std_calibrate!(sbatch, "Analyte1", "Analyte3")
+        assign_std_calibrate!(sbatch, AnalyteN(1), AnalyteN(3))
         @test sbatch.method.analytetable.std[1] == 3
         @test sbatch.method.analytetable.isd[1] == 4
-        assign_std_calibrate!(sbatch, "Analyte1", "Analyte1", "Analyte2")
-        @test last(sbatch.calibrator).analyte == "Analyte1"
+        assign_std_calibrate!(sbatch, AnalyteN(1), AnalyteN(1), AnalyteN(2))
+        @test last(sbatch.calibrator).analyte == AnalyteN(1)
         @test sbatch.method.analytetable.std[1] == 1
         @test sbatch.method.analytetable.isd[1] == 2
-        assign_std_calibrate!(sbatch, "Analyte3", "Analyte3", "Analyte4")
+        assign_std_calibrate!(sbatch, AnalyteN(3), AnalyteN(3), AnalyteN(4))
         @test sbatch.method.analytetable.std[3] == 3
         @test sbatch.method.analytetable.isd[3] == 4
         pushfirst!(sbatch.calibrator, pop!(sbatch.calibrator))
@@ -262,10 +273,10 @@ end
         @test all(isapprox.(accuracy(cbatch, cbatch.data).var"G1(drug_b)", accuracy(cbatch.method, cbatch.data).var"G1(drug_b)"))
     end
     @testset "Utils" begin
-        @test isstd("Analyte1", sbatch.method)
-        @test isisd("Analyte2", sbatch.method)
-        @test isdof("Analyte1", sbatch.method) == "Analyte2"
-        @test stdof("Analyte5", sbatch.method) == "Analyte5"
+        @test isstd(AnalyteN(1), sbatch.method)
+        @test isisd(AnalyteN(2), sbatch.method)
+        @test isdof(AnalyteN(1), sbatch.method) == AnalyteN(2)
+        @test stdof(AnalyteN(5), sbatch.method) == AnalyteN(5)
         @test getanalyte(cdata.area, AnalyteG1("G1(drug_b)")) == getanalyte(cdata.area, Symbol("G1(drug_b)"))
         @test getanalyte(rdata.area, AnalyteG1("G1(drug_b)")) == getanalyte(rdata.area, Symbol("G1(drug_b)"))
         @test getsample(cdata.area, "S2") == getsample(cdata.area, Symbol("S2"))

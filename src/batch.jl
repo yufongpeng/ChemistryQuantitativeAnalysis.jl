@@ -131,7 +131,7 @@ function Batch(dt::AbstractDataTable;
         signaltable = AnalyteDataTable(aj, sj[idc], id, getproperties(tbl, tuple(samplename(dt)[idc]...)))
     end
     if dt isa SampleDataTable
-        conctable = SampleDataTable(Table(; Level = levels, (analytename(dt) .=> (collect(i) for i in zip(concs...)))...), :Level)
+        conctable = SampleDataTable(aj, :Level, Table(; Level = levels, (analytename(dt) .=> (collect(i) for i in zip(concs...)))...))
     else
         conctable = AnalyteDataTable(Table(; (id => aj, )..., (Symbol.(levels) .=> map(x -> repeat([0], length(aj)) .+ x, concs))...), id, Int)
     end
