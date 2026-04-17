@@ -2,6 +2,7 @@ module ChemistryQuantitativeAnalysis
 
 using GLM, LsqFit, CSV, TypedTables, LinearAlgebra, Dictionaries, ThreadsX, Tables, Pkg, Statistics, StatsAPI
 using LsqFit: LsqFitResult
+using StatsBase: FrequencyWeights
 
 export 
     # DataType

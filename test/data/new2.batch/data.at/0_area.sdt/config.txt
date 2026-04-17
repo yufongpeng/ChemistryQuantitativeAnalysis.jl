@@ -1,0 +1,9 @@
+[delim]
+\t
+
+[Analyte]
+A1
+A2
+
+[Sample]
+Sample

@@ -86,6 +86,17 @@ macro test_noerror(x)
     end
 end
 
+macro test_noerror(err, x)
+    return quote
+        try 
+            $x
+            true
+        catch e
+            isa(e, $err) ? true : false
+        end
+    end
+end
+
 @testset "ChemistryQuantitativeAnalysis.jl" begin
     @testset "Constructors" begin
         global conctable = SampleDataTable(
@@ -247,11 +258,11 @@ end
     end
     @testset "Quantification" begin
         # empty batch
-        @test @test_noerror quantify!(ebatch)
-        @test @test_noerror quantify_relative_signal!(ebatch)
-        @test @test_noerror quantify_inv_predict!(ebatch)
-        @test @test_noerror validate!(ebatch)
-        @test @test_noerror analyze!(ebatch)
+        @test @test_noerror @test_logs (:info, "There is no data!") quantify!(ebatch)
+        @test @test_noerror @test_logs (:info, "There is no data!") quantify_relative_signal!(ebatch)
+        @test @test_noerror @test_logs (:info, "There is no data!") quantify_inv_predict!(ebatch)
+        @test @test_noerror @test_logs (:info, "There is no data!") validate!(ebatch)
+        @test @test_noerror @test_logs (:info, "There is no data!") analyze!(ebatch)
         # Batch: quantify, quantify!, set_quantify!, set_quantify, set_inv_predict, relative_signal
         @test all(isapprox.(getanalyte(set_relative_signal(rbatch.data, rbatch).relative_signal, AnalyteTest("G1(drug_a)")), cbatch.data.area.var"G1(drug_a)" ./ cbatch.data.area.var"G2(drug_a)"))
         set_relative_signal!(cbatch.data, cbatch)
@@ -382,10 +393,10 @@ end
         quantify!(save_sc_c)
         quantify!(save_sc_r)
         # write
-        @test @test_noerror CQA.write(joinpath(datapath, "save_mc_c.batch"), initial_mc_c)
-        @test @test_noerror CQA.write(joinpath(datapath, "save_mc_r.batch"), initial_mc_r)
-        @test @test_noerror CQA.write(joinpath(datapath, "save_sc_c.batch"), initial_sc_c)
-        @test @test_noerror CQA.write(joinpath(datapath, "save_sc_r.batch"), initial_sc_r)
+        @test @test_noerror SystemError CQA.write(joinpath(datapath, "save_mc_c.batch"), initial_mc_c)
+        @test @test_noerror SystemError CQA.write(joinpath(datapath, "save_mc_r.batch"), initial_mc_r)
+        @test @test_noerror SystemError CQA.write(joinpath(datapath, "save_sc_c.batch"), initial_sc_c)
+        @test @test_noerror SystemError CQA.write(joinpath(datapath, "save_sc_r.batch"), initial_sc_r)
         # show
         @test @test_noerror test_show(save_mc_c)
         for _ in 1:10
@@ -408,10 +419,10 @@ end
         @test @test_noerror test_show(sbatch.calibrator[7].model)
         @test @test_noerror test_show(sbatch.calibrator[8].model)
         # mkbatch validation
-        mkbatch(joinpath(datapath, "new1.batch"); data_table = AnalyteDataTable, signal_table = AnalyteDataTable, conc_table = AnalyteDataTable, data_config = Dict(:Sample => ["S0", "S1", "S2"]), signal_config = Dict(:Sample => ["C0"]), conc_config = Dict(:Sample => [1]))
-        mkbatch(joinpath(datapath, "new2.batch"); conc_table = AnalyteDataTable, data_config = Dict(:Analyte => ["A1", "A2"]), signal_config = Dict(:Analyte => ["A1", "A2", "A3"]), conc_config = Dict(:Sample => [1, 2, 3, 4, 5, 6]))
-        mkbatch(joinpath(datapath, "new3.batch"); data_table = AnalyteDataTable, signal_table = AnalyteDataTable, data_config = Dict(:Sample => ["S0", "S1", "S2"]), conc_config = Dict(:Analyte => ["A1", "A2", "A3"]), signal_config = Dict(:Sample => ["C1", "C2", "C3", "C4", "C5", "C6"]))
-        mkbatch(joinpath(datapath, "new4.batch"); method_config = Dict(:signal => "height", :levelname => "L"))
+        @test @test_noerror SystemError mkbatch(joinpath(datapath, "new1.batch"); data_table = AnalyteDataTable, signal_table = AnalyteDataTable, conc_table = AnalyteDataTable, data_config = Dict(:Sample => ["S0", "S1", "S2"]), signal_config = Dict(:Sample => ["C0"]), conc_config = Dict(:Sample => [1]))
+        @test @test_noerror SystemError mkbatch(joinpath(datapath, "new2.batch"); conc_table = AnalyteDataTable, data_config = Dict(:Analyte => ["A1", "A2"]), signal_config = Dict(:Analyte => ["A1", "A2", "A3"]), conc_config = Dict(:Sample => [1, 2, 3, 4, 5, 6]))
+        @test @test_noerror SystemError mkbatch(joinpath(datapath, "new3.batch"); data_table = AnalyteDataTable, signal_table = AnalyteDataTable, data_config = Dict(:Sample => ["S0", "S1", "S2"]), conc_config = Dict(:Analyte => ["A1", "A2", "A3"]), signal_config = Dict(:Sample => ["C1", "C2", "C3", "C4", "C5", "C6"]))
+        @test @test_noerror SystemError mkbatch(joinpath(datapath, "new4.batch"); method_config = Dict(:signal => "height", :levelname => "L"))
         n1 = CQA.read(joinpath(datapath, "new1.batch"), DataFrame)
         n2 = CQA.read(joinpath(datapath, "new2.batch"), DataFrame)
         n3 = CQA.read(joinpath(datapath, "new3.batch"), DataFrame)

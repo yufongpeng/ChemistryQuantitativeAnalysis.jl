@@ -60,6 +60,8 @@ The columns in `analytetable`
 |`isd`|matches each analyte to index of its internal standard|
 |`std`|matches each analyte to the index of calibration standard|
 |`model`|assigns the calibration model.|
+|`signal_threshold`|signal threshold|
+|`rel_sig_threshold`|relative signal threshold|
 
 For column `isd` and `std`, `-1` indicates the analyte itself is an internal standard, and `0` indicates no internal standard. For example, a row `(analytes = AnalyteX, isd = 2, std = 3, model = LinearCalibrator(ConstWeight()))` means that internal standard of `AnalyteX` is the second analyte, and it will be external calibrated by the third analyte with ordinary linear regression. If isd and std are the same, internal calibrator is used. 
 

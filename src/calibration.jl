@@ -13,6 +13,9 @@ Edit analysis method.
     * `:isd`: assigin internal standards for calibration standards (do not assign if it is not a calibration standard). Both analyte objects or ids are accepted. Use `0` to not assign isd and `-1` if it is an internal standard.
     * `:std`: assigin calibration standards. Both analyte objects or ids are accepted. Use `0` to not assign std and `-1` if it is an internal standard.
     * `:model`: calibration model types (`AbstractCalibrationModel`). Use `Nothing` to not assign meodel.
+    * `:signal_threshold`: signal threshold.
+    * `:rel_sig_threshold`: relative signal threshold.
+    * Columns of `method.analytetable`. 
     * Keyword arguments of function `mkcalmodel`.
 
 Calibration standards and internal standards can be provided separately
@@ -20,7 +23,7 @@ Calibration standards and internal standards can be provided separately
 * `isd::Vector`: analyte objects or ids of internal standards.  
 * `std_isd::Vector{<: Pair}`: std_isd pairs. Assign internal stadards to calibration standards. Both analyte objects or ids are accepted. Use `0` to not assign isd.
 
-Other keyword arguments are applied to all included models in function `mkcalmodel`.
+Other keyword arguments are applied to all analytes in `method.analytetable` or all included models in function `mkcalmodel`.
 """
 function edit_method!(batch::Batch, args...; kwargs...)
     edit_method!(batch.method, args...; kwargs...) 
@@ -138,15 +141,21 @@ end
 _edit_method!(method::AnalysisMethod; kwargs...) = _edit_method!(method, nothing; kwargs...)
 function _edit_method!(method::AnalysisMethod, params::Nothing; kwargs...)
     isempty(kwargs) && return method
-    model, kwargs = model_params(params; kwargs...)
-    method.analytetable.model .= [modifycalmodel(m, model; kwargs...) for m in method.analytetable.model]
+    model, param, kwarg = model_params(params, method.analytetable; kwargs...)
+    for (k, v) in param 
+        getproperty(method.analytetable, k) .= v 
+    end
+    method.analytetable.model .= [modifycalmodel(m, model; kwarg...) for m in method.analytetable.model]
     method
 end
 function _edit_method!(method::AnalysisMethod, params; kwargs...)
-    analyte, models, param = model_params(params; kwargs...)
+    analyte, models, param, kwarg = model_params(params, method.analytetable; kwargs...)
     aid = getanalyteid_check.(Ref(method), analyte)
-    for (a, model, kwargs) in zip(aid, models, param)
-        method.analytetable.model[a] = modifycalmodel(method.analytetable.model[a], model; kwargs...)
+    for (a, model, pm, kw) in zip(aid, models, param, kwarg)
+        for (k, v) in pm 
+            getproperty(method.analytetable, k)[a] = v 
+        end
+        method.analytetable.model[a] = modifycalmodel(method.analytetable.model[a], model; kw...)
     end
     method
 end
@@ -382,10 +391,14 @@ function calibrate(method::AnalysisMethod{A}, analyte::B) where {A, B <: A}
     isd == analyte && return InternalCalibrator(analyte, first(getanalyte(method.conctable, analyte)))
     ord = sortperm(method.pointlevel)
     level = method.pointlevel[ord]
+    include = collect(level .> 0)
+    analyteid = getanalyteid(method, analyte)
     conc = getanalyte(method.conctable, analyte)
     ya = getanalyte(method.signaltable, analyte)
+    include .*= ya .> method.analytetable.signal_threshold[analyteid]
     yi = isnothing(isd) ? [1.0] : getanalyte(method.signaltable, isd)
     y = @. (ya / yi)[ord]
+    include .*= y .> method.analytetable.rel_sig_threshold[analyteid]
     id = sampleobj(method.signaltable)
     # Use Float64, bug of GLM
     numbertype = Float64 # eltype(conctable)
@@ -398,9 +411,9 @@ function calibrate(method::AnalysisMethod{A}, analyte::B) where {A, B <: A}
                     end, 
                     x̂ = zeros(numbertype, length(id)), 
                     accuracy = zeros(numbertype, length(id)),
-                    include = collect(level .> 0)
+                    include
                     )
-    calmodel = method.analytetable.model[getanalyteid(method, analyte)]
+    calmodel = method.analytetable.model[analyteid]
     isnothing(calmodel) && throw(ArgumentError(""))
     calmachine = mkcalmachine(calmodel, table)
     analyze_calibrator!(ExternalCalibrator(analyte, isd, table, calmodel, calmachine))
@@ -596,14 +609,7 @@ Construct calibration machine from `tbl` (`cal.table`) of type `model` (`cal.mod
 """
 mkcalmachine(model::Type{T}, tbl) where {T <: AbstractCalibrationModel} = throw(ArgumentError("`mkcalmachine` not defined for `$T`"))
 function mkcalmachine(model::CalibrationModel{T}, tbl) where T
-    lm1 = lm(getformula(T), tbl[tbl.include]; weights = getweights(model.weight, tbl.x[tbl.include], tbl.y[tbl.include]))
-    # if T == Quadratic && lm1.model.pp.beta0[1] == 0
-    #     m = hcat(ones(eltype(tbl.x), count(tbl.include)), tbl.x[tbl.include], tbl.x[tbl.include] .^ 2)
-    #     sqrtw = diagm(sqrt.(getweights(model.wfn, tbl.x[tbl.include], tbl.y[tbl.include])))
-    #     y = tbl.y[tbl.include]
-    #     lm1.model.pp.beta0 = (sqrtw * m) \ (sqrtw * y)
-    #     GLM.updateμ!(lm1.model.rr, predict(lm1, tbl[tbl.include]))
-    # end
+    lm1 = lm(getformula(T), tbl[tbl.include]; weights = FrequencyWeights(getweights(model.weight, tbl.x[tbl.include], tbl.y[tbl.include])))
     lm1
 end
 function mkcalmachine(model::CalibrationModel{T}, tbl) where {T <: Union{Exponential, Power}}

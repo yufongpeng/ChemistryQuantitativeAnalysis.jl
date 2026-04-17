@@ -1,0 +1,9 @@
+[delim]
+\t
+
+[Analyte]
+Analyte1
+Analyte2
+
+[Sample]
+Level

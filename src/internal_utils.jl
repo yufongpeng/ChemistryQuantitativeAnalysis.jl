@@ -12,7 +12,7 @@ function cal_params(params)
         std = params.std
         id = findall(x -> !(x isa Int && x < 0), std)
         analyte_std = [a => s for (a, s) in zip(analyte[id], std[id])]
-        params = Table(params; std = nothing)
+        params = length(pn) == 1 ? nothing : Table(params; std = nothing)
         visd = vcat(visd, setdiff(eachindex(std), id))
     else
         analyte_std = Pair[]
@@ -21,7 +21,7 @@ function cal_params(params)
         isd = params.isd
         id = findall(x -> !(x isa Int && x < 0), isd)
         std_isd = [a => i for (a, i) in zip(analyte[id], isd[id])]
-        params = Table(params; isd = nothing)
+        params = length(pn) == 1 ? nothing : Table(params; isd = nothing)
         visd = vcat(visd, setdiff(eachindex(isd), id))
     else
         std_isd = Pair[]
@@ -34,7 +34,7 @@ end
 
 Extract `model` and vectorize `kwargs`.
 """
-function model_params(params; kwargs...)
+function model_params(params, analytetable; kwargs...)
     params = Table(params)
     pn = propertynames(params)
     analyte = :analyte in pn ? params.analyte : collect(eachindex(params))
@@ -46,17 +46,34 @@ function model_params(params; kwargs...)
         end 
     end
     params = Table(params; analyte, add...)
-    if :model in propertynames(params) 
-        analyte, params.model, length(propertynames(params)) == 2 ? [Pair[] for _ in 1:n] : Table(params; analyte = nothing, model = nothing)
-    else
-        analyte, [Nothing for _ in eachindex(params)], length(propertynames(params)) == 1 ? [Pair[] for _ in 1:n] : Table(params; analyte = nothing, model = nothing)
-    end
+    pt = propertynames(params)
+    tid = findall(x -> x in propertynames(analytetable), pt)
+    did = findall(x -> x in [:analyte, :model], pt)
+    tid = setdiff(tid, did)
+    mid = setdiff(eachindex(pt), tid, did)
+    (
+        analyte, 
+        :model in pt ? params.model : [Nothing for _ in eachindex(params)], 
+        isempty(tid) ? [Pair[] for _ in 1:n] : getproperties(params, pt[tid]),
+        isempty(mid) ? [Pair[] for _ in 1:n] : getproperties(params, pt[mid])
+    )
 end
-function model_params(params::Nothing; kwargs...)
+function model_params(params::Nothing, analytetable; kwargs...)
     kwargs = Dict{Symbol, Any}(kwargs)
     model = get!(kwargs, :model, Nothing)
     delete!(kwargs, :model)
-    model, kwargs
+    param = Dict{Symbol, Any}()
+    del = Symbol[]
+    for (k, v) in kwargs
+        if k in propertynames(analytetable)
+            param[k] = v 
+            push!(del, k)
+        end
+    end
+    for k in del 
+        delete!(kwargs, k)
+    end
+    model, param, kwargs
 end
 
 """

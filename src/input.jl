@@ -248,6 +248,8 @@ function read_method(file::String, T; analytetype = String, sampletype = String,
         end : nothing
     model = :model in propertynames(analytetable) ? cqaconvert.(modeltype, analytetable.model) : [LinearCalibrator(ConstWeight()) for _ in eachindex(analytetable)]
     model = convert(Vector{modeltype}, model)
+    signal_threshold = :signal_threshold in propertynames(analytetable) ? convert(Vector{numbertype}, analytetable.signal_threshold) : [zero(numbertype) for _ in eachindex(analytetable)]
+    rel_sig_threshold = :rel_sig_threshold in propertynames(analytetable) ? convert(Vector{numbertype}, analytetable.rel_sig_threshold) : [zero(numbertype) for _ in eachindex(analytetable)]
     conctable = read_datatable(joinpath(file, in("$nom_conc.sdt", readdir(file)) ? "$nom_conc.sdt" : "$nom_conc.adt"), T; analytetype, sampletype = Int, numbertype, delim)
     if length(sampleobj(conctable)) > 1
         signaltable = read_datatable(joinpath(file, in("$signal.sdt", readdir(file)) ? "$signal.sdt" : "$signal.adt"), T; analytetype, sampletype, numbertype, delim, levelname = get(config, :levelname, nothing))
@@ -273,7 +275,7 @@ function read_method(file::String, T; analytetype = String, sampletype = String,
         end
         # std = [v > 0 ? v : i for (i, v) in enumerate(isd)]
     end
-    AnalysisMethod(Table(analytetable; analyte, isd, std, model), signal, rel_sig, est_conc, nom_conc, acc, pointlevel, conctable, signaltable)
+    AnalysisMethod(Table(analytetable; analyte, isd, std, model, signal_threshold, rel_sig_threshold), signal, rel_sig, est_conc, nom_conc, acc, pointlevel, conctable, signaltable)
 end
 """
     read_batch(file::String, T; analytetype = String, sampletype = String, numbertype = Float64, modeltype = CalibrationModel, delim = '\\t') -> Batch{analytetype}

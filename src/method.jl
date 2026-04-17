@@ -9,6 +9,8 @@ A type containing analytes settings, and source calibration data. `A` determines
     * `isd::AbstractVector{Int}: index of internal standard. `0` means no internal standard, and `-1` means the analyte itself is a internal standard.
     * `std`: index of analyte as calibration standard (internal or external). `0` means no standard.
     * `model`: calibration model type.
+    * `signal_threshold`: signal threshold.
+    * `rel_sig_threshold`: relative signal threshold.
 * `signal::Symbol`: type and key name of experimental acquisition data, e.g. `:area`.
 * `rel_sig::Symbol`: key name of relative signal.
 * `est_conc::Symbol`: key name of estimated concentration.
@@ -52,7 +54,13 @@ struct AnalysisMethod{A, M <: Table, C <: AbstractDataTable, D <: Union{Abstract
         :isd in cp || throw(ArgumentError("Column `:isd` is required in `analytetable"))
         :std in cp || throw(ArgumentError("Column `:std` is required in `analytetable"))
         if !in(:model, cp)
-            analytetable = Table(analytetable; model = Any[mkcalmodel(CalibrationModel{Linear})  for _ in eachindex(analytetable)])
+            analytetable = Table(analytetable; model = Any[mkcalmodel(CalibrationModel{Linear}) for _ in eachindex(analytetable)])
+        end
+        if !in(:signal_threshold, cp)
+            analytetable = Table(analytetable; signal_threshold = [0.0 for _ in eachindex(analytetable)])
+        end
+        if !in(:rel_sig_threshold, cp)
+            analytetable = Table(analytetable; rel_sig_threshold = [0.0 for _ in eachindex(analytetable)])
         end
         A = eltype(analytetable.analyte)
         B <: A || throw(ArgumentError("Analyte type of conctable $B should be a subtype of $A"))
@@ -85,6 +93,12 @@ struct AnalysisMethod{A, M <: Table, C <: AbstractDataTable, D <: Union{Abstract
         :std in cp || throw(ArgumentError("Column `:std` is required in `analytetable"))
         if !in(:model, cp)
             analytetable = Table(analytetable; model = Any[mkcalmodel(CalibrationModel{Linear}) for _ in eachindex(analytetable)])
+        end
+        if !in(:signal_threshold, cp)
+            analytetable = Table(analytetable; signal_threshold = [0.0 for _ in eachindex(analytetable)])
+        end
+        if !in(:rel_sig_threshold, cp)
+            analytetable = Table(analytetable; rel_sig_threshold = [0.0 for _ in eachindex(analytetable)])
         end
         A = eltype(analytetable.analyte)
         B <: A || throw(ArgumentError("Analyte type of conctable should be a subtype of $A"))
@@ -139,11 +153,13 @@ function AnalysisMethod(
         pointlevel = getproperty(signaltable, Symbol(pointlevel))
     end
     analyte = get(kwargs, :analyte, analyteobj(conctable))
-    isd = get(kwargs, :isd, zeros(Int, length(analyteobj(conctable))))
-    std = get(kwargs, :std, collect(eachindex(analyteobj(conctable))))
+    isd = get(kwargs, :isd, zeros(Int, length(analyte)))
+    std = get(kwargs, :std, collect(eachindex(analyte)))
     model = get(kwargs, :model, 
         Any[mkcalmodel(CalibrationModel{Linear}) for i in eachindex(std)]
     )
-    analytetable = Table(; analyte, isd, std, model, kwargs...)    
+    signal_threshold = get(kwargs, :signal_threshold, [0.0 for _ in eachindex(analyte)])
+    rel_sig_threshold = get(kwargs, :rel_sig_threshold, [0.0 for _ in eachindex(analyte)])
+    analytetable = Table(; analyte, isd, std, model, signal_threshold, rel_sig_threshold, kwargs...)    
     AnalysisMethod(analytetable, signal, rel_sig, est_conc, nom_conc, acc, pointlevel, conctable, signaltable)
 end

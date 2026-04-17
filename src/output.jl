@@ -192,7 +192,7 @@ function mkbatch(file::String;
     end
     if haskey(method_config, :pointlevel)
         if length(method_config[:pointlevel]) != length(pointlevel) || any(x -> !in(x, default_level), method_config[:pointlevel])
-            @warn "Replace poinlevel with default: $(pointlevel)"
+            @info "Replace poinlevel with default: $(pointlevel)"
             method_config[:pointlevel] = pointlevel
         end
     end

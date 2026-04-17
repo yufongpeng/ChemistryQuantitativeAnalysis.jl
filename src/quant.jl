@@ -65,7 +65,7 @@ function quantify_relative_signal!(batch::Batch{A, M, C, D}; signal = batch.meth
     batch
 end
 function quantify_relative_signal!(batch::Batch{A, M, C, Nothing}; signal = batch.method.signal, rel_sig = batch.method.rel_sig) where {A, M, C}
-    @warn "There is no data!"
+    @info "There is no data!"
     batch
 end
 """
@@ -158,7 +158,7 @@ function quantify_inv_predict!(batch::Batch{A, M, C, D}; rel_sig = batch.method.
     batch
 end
 function quantify_inv_predict!(batch::Batch{A, M, C, Nothing}; rel_sig = batch.method.rel_sig, est_conc = batch.method.est_conc) where {A, M, C}
-    @warn "There is no data!"
+    @info "There is no data!"
     batch
 end
 
@@ -235,7 +235,7 @@ function quantify!(batch::Batch{A, M, C, D}; signal = batch.method.signal, rel_s
     quantify_inv_predict!(batch; rel_sig, est_conc)
 end
 function quantify!(batch::Batch{A, M, C, Nothing}; signal = batch.method.signal, rel_sig = batch.method.rel_sig, est_conc = batch.method.est_conc) where {A, M, C}
-    @warn "There is no data!"
+    @info "There is no data!"
     batch
 end
 """
@@ -327,7 +327,7 @@ function validate!(batch::Batch{A, M, C, D}; nom_conc = batch.method.nom_conc, e
     batch
 end
 function validate!(batch::Batch{A, M, C, Nothing}; nom_conc = batch.method.nom_conc, est_conc = batch.method.est_conc, acc = batch.method.acc) where {A, M, C}
-    @warn "There is no data!"
+    @info "There is no data!"
     batch
 end
 
@@ -343,6 +343,6 @@ function analyze!(batch::Batch{A, M, C, D}; signal = batch.method.signal, rel_si
     validate!(batch; nom_conc, est_conc, acc)
 end
 function analyze!(batch::Batch{A, M, C, Nothing}; signal = batch.method.signal, rel_sig = batch.method.rel_sig, nom_conc = batch.method.nom_conc, est_conc = batch.method.est_conc, acc = batch.method.acc) where {A, M, C}
-    @warn "There is no data!"
+    @info "There is no data!"
     batch
 end

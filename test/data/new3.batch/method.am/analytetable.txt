@@ -1,0 +1,4 @@
+analyte	isd	std
+A1	0	1
+A2	0	2
+A3	0	3
