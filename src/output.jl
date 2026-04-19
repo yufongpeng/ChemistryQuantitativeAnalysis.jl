@@ -461,6 +461,7 @@ formula_repr(cal::InternalCalibrator; digits = nothing, sigdigits = 4) = "y = $(
 formula_repr(cal::ExternalCalibrator; digits = nothing, sigdigits = 4) = formula_repr(cal.model, cal.machine; digits, sigdigits)
 function formula_repr(model::CalibrationModel, machine; digits = nothing, sigdigits = 4)
     β = coef(machine)
+    isempty(β) && return ""
     formula_repr(model, β; digits, sigdigits)
 end
 

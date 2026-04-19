@@ -114,8 +114,12 @@ Base.iterate(it::EachAnalyte{<: AnalyteDataTable}, st = 1) = st > length(it) ? n
 Base.iterate(it::EachSample{<: SampleDataTable}, st = 1) = st > length(it) ? nothing : ([getproperty(table(it.table), p)[st] for p in analytename(it.table)], st + 1)
 Base.iterate(it::EachSample{<: AnalyteDataTable}, st = 1) = st > length(it) ? nothing : (getproperty(table(it.table), samplename(it.table)[st]), st + 1)
 
+StatsAPI.coef(machine::EmptyMachine) = Real[]
 StatsAPI.coef(machine::LsqFitMachine) = coef(machine.fit)
+StatsAPI.r2(machine::EmptyMachine) = 0
 StatsAPI.r2(machine::LsqFitMachine) = 1 - rss(machine.fit) / machine.totalvariance
+StatsAPI.predict(machine::EmptyMachine, x::AbstractVector{N}) where {N <: Real} = [N(NaN) for _ in x]
+StatsAPI.predict(machine::EmptyMachine, x::T) where T = Tables.istable(T) ? StatsAPI.predict(machine, Tables.getcolumn(x, :x)) : [eltype(x)(NaN) for _ in x]
 StatsAPI.predict(machine::LsqFitMachine, x::AbstractVector{<: Real}) = machine.fn(x, machine.fit.param)
 StatsAPI.predict(machine::LsqFitMachine, x::T) where T = 
     Tables.istable(T) ? machine.fn(Tables.getcolumn(x, :x), machine.fit.param) : machine.fn(x, machine.fit.param)

@@ -414,7 +414,7 @@ function calibrate(method::AnalysisMethod{A}, analyte::B) where {A, B <: A}
                     include
                     )
     calmodel = method.analytetable.model[analyteid]
-    isnothing(calmodel) && throw(ArgumentError(""))
+    isnothing(calmodel) && throw(ArgumentError("Invalid model type"))
     calmachine = mkcalmachine(calmodel, table)
     analyze_calibrator!(ExternalCalibrator(analyte, isd, table, calmodel, calmachine))
 end
@@ -608,11 +608,13 @@ end
 Construct calibration machine from `tbl` (`cal.table`) of type `model` (`cal.model`). 
 """
 mkcalmachine(model::Type{T}, tbl) where {T <: AbstractCalibrationModel} = throw(ArgumentError("`mkcalmachine` not defined for `$T`"))
-function mkcalmachine(model::CalibrationModel{T}, tbl) where T
+mkcalmachine(model::CalibrationModel, tbl) = 
+    length(unique(tbl.x[tbl.include])) < 3 ? EmptyMachine() : _mkcalmachine(model, tbl)
+function _mkcalmachine(model::CalibrationModel{T}, tbl) where T
     lm1 = lm(getformula(T), tbl[tbl.include]; weights = FrequencyWeights(getweights(model.weight, tbl.x[tbl.include], tbl.y[tbl.include])))
     lm1
 end
-function mkcalmachine(model::CalibrationModel{T}, tbl) where {T <: Union{Exponential, Power}}
+function _mkcalmachine(model::CalibrationModel{T}, tbl) where {T <: Union{Exponential, Power}}
     lm1 = lm(getformula(T), tbl[tbl.include])
     wts = getweights(model.weight, tbl.x[tbl.include], tbl.y[tbl.include])
     beta0 = lm1.model.pp.beta0

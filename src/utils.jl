@@ -235,13 +235,19 @@ signal_range(cal::ExternalCalibrator) = (predict(cal.machine, Table(; x = collec
 
 Return lower limit of quantification.
 """
-lloq(cal::ExternalCalibrator) = cal.table.x[findfirst(cal.table.include)]
+function lloq(cal::ExternalCalibrator) 
+    i = findfirst(cal.table.include)
+    isnothing(i) ? eltype(cal.table.x)(NaN) : cal.table.x[i]
+end
 """
     uloq(cal::ExternalCalibrator)
 
 Return upper limit of quantification.
 """
-uloq(cal::ExternalCalibrator) = cal.table.x[findlast(cal.table.include)]
+function uloq(cal::ExternalCalibrator) 
+    i = findlast(cal.table.include)
+    isnothing(i) ? eltype(cal.table.x)(NaN) : cal.table.x[i]
+end
 """
     signal_lloq(cal::ExternalCalibrator)
 
@@ -277,7 +283,13 @@ Theoretical limit of blank (LOB) in signal space.
 """
 function signal_lob(cal::ExternalCalibrator)
     zero_id = findall(==(0), cal.table.level)
-    isempty(zero_id) ? blank(cal) + 1.645 * std(cal.table.y[cal.table.x .== cal.table.x[findfirst(cal.table.include)]]) : mean(cal.table.y[zero_id]) + 1.645 * std(cal.table.y[zero_id])
+    if isempty(zero_id) && isnan(lloq(cal))
+        eltype(cal.table.y)(NaN)
+    elseif isempty(zero_id)
+        blank(cal) + 1.645 * std(cal.table.y[cal.table.x .== cal.table.x[findfirst(cal.table.include)]]) 
+    else 
+        mean(cal.table.y[zero_id]) + 1.645 * std(cal.table.y[zero_id])
+    end
 end
 
 """
@@ -287,14 +299,26 @@ Theoretical limit of detection (LOD) in signal space.
 """
 function signal_lod(cal::ExternalCalibrator) 
     zero_id = findall(==(0), cal.table.level)
-    isempty(zero_id) ? blank(cal) + 3.3 * std(cal.table.y[cal.table.x .== cal.table.x[findfirst(cal.table.include)]]) : signal_lob(cal) + 1.645 * std(cal.table.y[cal.table.x .== cal.table.x[findfirst(cal.table.include)]])
+    if isempty(zero_id) && isnan(lloq(cal))
+        eltype(cal.table.y)(NaN)
+    elseif isempty(zero_id)
+        blank(cal) + 3.3 * std(cal.table.y[cal.table.x .== cal.table.x[findfirst(cal.table.include)]])
+    else 
+        signal_lob(cal) + 1.645 * std(cal.table.y[cal.table.x .== cal.table.x[findfirst(cal.table.include)]])
+    end
 end
 """
     signal_loq(cal::ExternalCalibrator)
 
 Theoretical limit of quantification (LOQ) in signal space.
 """
-signal_loq(cal::ExternalCalibrator) = blank(cal) + 10 * std(cal.table.y[cal.table.x .== cal.table.x[findfirst(cal.table.include)]])
+function signal_loq(cal::ExternalCalibrator) 
+    if isnan(lloq(cal))
+        eltype(cal.table.y)(NaN)
+    else
+        blank(cal) + 10 * std(cal.table.y[cal.table.x .== cal.table.x[findfirst(cal.table.include)]])
+    end
+end
 
 """
     getweight(cal::InternalCalibrator)

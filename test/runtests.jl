@@ -152,8 +152,8 @@ end
         global ebatch = Batch(method)
         global sdt = SampleDataTable(AnalyteN, :Sample, CSV.read(joinpath(datapath, "area.sdt", "table.txt"), Table; delim = '\t', stringtype = String))
         global adt = AnalyteDataTable(CSV.read(joinpath(datapath, "area.adt", "table.txt"), Table; delim = '\t', stringtype = String), :Analyte)
-        global sbatch = Batch(sdt; conc_factor = repeat([1], 10))
-        global abatch = Batch(adt; level = vcat(repeat(1:6; inner = 3), repeat([missing], 50)), ratio = [0.1, 0.2, 0.5, 1, 2, 5], conc_factor = repeat([1], 10))
+        global sbatch = Batch(sdt; conc_factor = repeat([1], 11))
+        global abatch = Batch(adt; level = vcat(repeat(1:6; inner = 3), repeat([missing], 50)), ratio = [0.1, 0.2, 0.5, 1, 2, 5], conc_factor = repeat([1], 11))
         global sdt2 = CQA.read(joinpath(datapath, "area2.sdt"), Table)
         global adt2 = CQA.read(joinpath(datapath, "area2.adt"), Table)
         global sbatch2 = Batch(sdt2; level = :Level, ratio = :Ratio, conc_factor = 1:10)
@@ -211,14 +211,14 @@ end
         model_calibrator!(rbatch, AnalyteG1("G1(drug_b)"); model = QuadraticCalibrator)
         @test rbatch.calibrator[2].model isa QuadraticCalibrator
         edit_method_calibrate!(sbatch, Table(; 
-            std = [1, -1, 3, -1, 5, 6, 7, 8, 9, 10], 
-            isd = [2, -1, 4, -1, 0, 0, 0, 0, 0, 0],
-            model = [LinearCalibrator, Nothing, ProportionalCalibrator, Nothing, LinearCalibrator, QuadraticCalibrator, QuadraticOriginCalibrator, LogarithmicCalibrator, ExponentialCalibrator, PowerCalibrator]))
+            std = [1, -1, 3, -1, 5, 6, 7, 8, 9, 10, 11], 
+            isd = [2, -1, 4, -1, 0, 0, 0, 0, 0, 0, 0],
+            model = [LinearCalibrator, Nothing, ProportionalCalibrator, Nothing, LinearCalibrator, QuadraticCalibrator, QuadraticOriginCalibrator, LogarithmicCalibrator, ExponentialCalibrator, PowerCalibrator, Nothing]))
         edit_method_calibrate!(abatch, 
             [], 
             [2, 4], 
             [1 => 2, 3 => 4], 
-            Table(; analyte = abatch.std, model = [LinearCalibrator, ProportionalCalibrator, LinearCalibrator, QuadraticCalibrator, QuadraticOriginCalibrator, LogarithmicCalibrator, ExponentialCalibrator, PowerCalibrator]))
+            Table(; analyte = abatch.std, model = [LinearCalibrator, ProportionalCalibrator, LinearCalibrator, QuadraticCalibrator, QuadraticOriginCalibrator, LogarithmicCalibrator, ExponentialCalibrator, PowerCalibrator, Nothing]))
         sbatch.data.area.Analyte2 .*= 10
         sbatch.method.signaltable.Analyte2 .*= 10
         for v in columns(abatch.data.area)
@@ -227,8 +227,8 @@ end
         for v in columns(abatch.method.signaltable)
             v[2] /= 10
         end
-        edit_method!(sbatch; model = LinearCalibrator, signal_threshold = 1)
-        edit_method_calibrate!(sbatch, Table(; analyte = sbatch.std, model = [LinearCalibrator, ProportionalCalibrator, LinearCalibrator, QuadraticCalibrator, QuadraticOriginCalibrator, LogarithmicCalibrator, ExponentialCalibrator, PowerCalibrator]))
+        edit_method!(sbatch; model = LinearCalibrator, signal_threshold = 1e-3)
+        edit_method_calibrate!(sbatch, Table(; analyte = sbatch.std, model = [LinearCalibrator, ProportionalCalibrator, LinearCalibrator, QuadraticCalibrator, QuadraticOriginCalibrator, LogarithmicCalibrator, ExponentialCalibrator, PowerCalibrator, Nothing]))
         calibrate!(abatch, "Analyte1")
         @test rbatch.calibrator[1].analyte == cbatch.calibrator[1].analyte
         @test all(isapprox.(cbatch.calibrator[1].table.accuracy[4:6], [1, 1.1, 0.9]))
@@ -250,6 +250,7 @@ end
         @test sbatch.method.analytetable.std[3] == 3
         @test sbatch.method.analytetable.isd[3] == 4
         pushfirst!(sbatch.calibrator, pop!(sbatch.calibrator))
+        @test last(sbatch.calibrator).machine isa CQA.EmptyMachine
         # InternalCalibrator
         global ical = CQA.analyze_calibrator!(InternalCalibrator(analyteobj(method.conctable)[3], 50.0))
         @test isapprox(CQA.quantify_calibrator(ical)[1], getanalyte(method.conctable, 3)[1])

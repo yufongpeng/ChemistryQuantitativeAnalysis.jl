@@ -38,6 +38,8 @@ struct LsqFitMachine
     totalvariance::Real
 end
 
+struct EmptyMachine end
+
 @doc cdoc 
 const LinearOriginCalibrator = CalibrationModel{LinearOrigin}
 @doc cdoc 

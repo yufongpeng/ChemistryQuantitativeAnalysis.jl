@@ -103,6 +103,7 @@ Inversely predict concentration of `analyte` or analyte specified in `cal`, and 
 inv_predict(cal::InternalCalibrator, dt::AbstractDataTable, analyte) = inv_predict(cal, getanalyte(dt, analyte))
 inv_predict(cal::ExternalCalibrator, dt::AbstractDataTable, analyte = cal.analyte) = inv_predict(cal, getanalyte(dt, analyte))
 inv_predict(cal::ExternalCalibrator, y::AbstractArray) = inv_predict(cal.model, cal.machine, y)
+inv_predict(model::CalibrationModel, machine::EmptyMachine, y::AbstractArray{T}) where T = [T(NaN) for _ in y]
 function inv_predict(model::CalibrationModel, machine, y::AbstractArray{T}) where T
     β = convert(Vector{T}, coef(machine))::Vector{T}
     inv_predict(model, β, y)
