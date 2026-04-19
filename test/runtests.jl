@@ -227,7 +227,7 @@ end
         for v in columns(abatch.method.signaltable)
             v[2] /= 10
         end
-        edit_method!(sbatch; model = LinearCalibrator)
+        edit_method!(sbatch; model = LinearCalibrator, signal_threshold = 1)
         edit_method_calibrate!(sbatch, Table(; analyte = sbatch.std, model = [LinearCalibrator, ProportionalCalibrator, LinearCalibrator, QuadraticCalibrator, QuadraticOriginCalibrator, LogarithmicCalibrator, ExponentialCalibrator, PowerCalibrator]))
         calibrate!(abatch, "Analyte1")
         @test rbatch.calibrator[1].analyte == cbatch.calibrator[1].analyte

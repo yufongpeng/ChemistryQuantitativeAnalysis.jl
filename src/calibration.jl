@@ -142,7 +142,7 @@ _edit_method!(method::AnalysisMethod; kwargs...) = _edit_method!(method, nothing
 function _edit_method!(method::AnalysisMethod, params::Nothing; kwargs...)
     isempty(kwargs) && return method
     model, param, kwarg = model_params(params, method.analytetable; kwargs...)
-    for (k, v) in param 
+    for (k, v) in pairs(param)
         getproperty(method.analytetable, k) .= v 
     end
     method.analytetable.model .= [modifycalmodel(m, model; kwarg...) for m in method.analytetable.model]
@@ -152,7 +152,7 @@ function _edit_method!(method::AnalysisMethod, params; kwargs...)
     analyte, models, param, kwarg = model_params(params, method.analytetable; kwargs...)
     aid = getanalyteid_check.(Ref(method), analyte)
     for (a, model, pm, kw) in zip(aid, models, param, kwarg)
-        for (k, v) in pm 
+        for (k, v) in pairs(pm)
             getproperty(method.analytetable, k)[a] = v 
         end
         method.analytetable.model[a] = modifycalmodel(method.analytetable.model[a], model; kw...)

@@ -1,6 +1,6 @@
 name = "ChemistryQuantitativeAnalysis"
 uuid = "3ed48883-6809-43ec-b77a-d23b0650d8c4"
-version = "0.9.8"
+version = "0.9.9"
 authors = ["Yu-Fong Peng <sciphypar@gmail.com>"]
 
 [deps]
