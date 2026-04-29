@@ -607,9 +607,23 @@ end
 
 Construct calibration machine from `tbl` (`cal.table`) of type `model` (`cal.model`). 
 """
-mkcalmachine(model::Type{T}, tbl) where {T <: AbstractCalibrationModel} = throw(ArgumentError("`mkcalmachine` not defined for `$T`"))
-mkcalmachine(model::CalibrationModel, tbl) = 
-    length(unique(tbl.x[tbl.include])) < 3 ? EmptyMachine() : _mkcalmachine(model, tbl)
+function mkcalmachine(model::Type{T}, tbl) where {T <: AbstractCalibrationModel} 
+    @error "`mkcalmachine` not defined for `$T`!"
+    EmptyMachine()
+end
+mkcalmachine(model::Nothing, tbl) = EmptyMachine()
+function mkcalmachine(model::CalibrationModel, tbl) 
+    if length(unique(tbl.x[tbl.include])) < nparam(model)
+        @error "Not enough points for calibration!"
+        return EmptyMachine() 
+    end
+    try 
+        _mkcalmachine(model, tbl)
+    catch e 
+        @error e 
+        EmptyMachine() 
+    end 
+end
 function _mkcalmachine(model::CalibrationModel{T}, tbl) where T
     lm1 = lm(getformula(T), tbl[tbl.include]; weights = FrequencyWeights(getweights(model.weight, tbl.x[tbl.include], tbl.y[tbl.include])))
     lm1
@@ -623,6 +637,20 @@ function _mkcalmachine(model::CalibrationModel{T}, tbl) where {T <: Union{Expone
     LsqFitMachine(fit, fn, var(tbl.y[tbl.include]))
 end
 mkcalmachine(cal::ExternalCalibrator) = mkcalmachine(cal.model, cal.table)
+
+"""
+    nparam(model)
+
+Number of parameters for `model`. 
+"""
+nparam(::Nothing) = 0
+nparam(::AbstractCalibrationModel{Linear}) = 2
+nparam(::AbstractCalibrationModel{LinearOrigin}) = 1
+nparam(::AbstractCalibrationModel{Quadratic}) = 3
+nparam(::AbstractCalibrationModel{QuadraticOrigin}) = 2
+nparam(::AbstractCalibrationModel{Logarithmic}) = 2
+nparam(::AbstractCalibrationModel{Exponential}) = 2
+nparam(::AbstractCalibrationModel{Power}) = 2
 
 """
     getlsqfn(::Type{Exponential})

@@ -3,40 +3,6 @@ using Test
 import Base: show, convert
 const CQA = ChemistryQuantitativeAnalysis
 
-struct AnalyteN
-    N::Int
-end
-show(io::IO, analyte::AnalyteN) = print(io, "Analyte", analyte.N)
-function AnalyteN(name::AbstractString) 
-    nm = match(r"Analyte(\d*)$", name)
-    isnothing(nm) && throw(ArgumentError("Invalid name"))
-    (n, ) = nm 
-    AnalyteN(parse(Int, n))
-end
-
-struct AnalyteG1
-    name::String
-end
-struct AnalyteG2
-    name::String
-end
-struct AnalyteOther
-    name::String
-end
-const AnalyteTest = Union{AnalyteG1, AnalyteG2, AnalyteOther}
-show(io::IO, analyte::AnalyteTest) = print(io, analyte.name)
-function (::Type{AnalyteTest})(name::String)
-    g = match(r"^G(\d)\(.*\)$", name)
-    isnothing(g) && return AnalyteOther(name)
-    g = parse(Int, first(g))
-    g == 1 ? AnalyteG1(name) : g == 2 ? AnalyteG2(name) : AnalyteOther(name)
-end
-
-analytes = typedmap(AnalyteTest, ["G1(drug_a)", "G2(drug_a)", "G1(drug_b)", "G2(drug_b)"])
-conc = Float64[0, 1, 2, 5, 10, 20, 50, 100]
-signal1 = vcat(0.001, Float64[1, 2, 5, 10, 20, 50, 100], 0.005, [1, 2, 5, 10, 20, 50, 100] .+ 0.1, 0.002, [1, 2, 5, 10, 20, 50, 100] .- 0.1)
-signal2 = vcat(0.002, Float64[1, 2, 5, 10, 20, 50, 100] .^ 2, 0.001, [1, 2, 5, 10, 20, 50, 100] .^ 2 .+ 0.1, 0.005, [1, 2, 5, 10, 20, 50, 100] .^ 2 .- 0.1)
-
 # sdt, adt
 # Analyte 1: Linear, 1000 * x, AX = A1 / 1000 
 # Analyte 2: ISD
@@ -97,68 +63,10 @@ macro test_noerror(err, x)
     end
 end
 
+include("objects.jl")
+
 @testset "ChemistryQuantitativeAnalysis.jl" begin
     @testset "Constructors" begin
-        global conctable = SampleDataTable(
-            Table(;
-                var"level" = collect(0:7), 
-                var"G1(drug_a)" = conc,
-                var"G1(drug_b)" = conc .* 10, 
-                var"G2(drug_a)" = repeat([50.0], 8),
-                var"G2(drug_b)" = repeat([50.0], 8)),
-            AnalyteTest,
-            :level
-        )
-        global signaltable = SampleDataTable(
-            Table(;
-                var"point" = reshape([string(a, "_", b) for (a, b) in Iterators.product(0:7, 1:3)], 24), 
-                var"level" = repeat(0:7, 3),
-                var"G1(drug_a)" = signal1,
-                var"G2(drug_a)" = repeat([5.0], 24),
-                var"G1(drug_b)" = signal2,
-                var"G2(drug_b)" = repeat([2.0], 24)), 
-            AnalyteTest,
-            :point; 
-            analytename = Symbol.(analytes)
-        )
-        global method = AnalysisMethod(conctable, signaltable, :area, :level; analyte = analytes, isd = [2, -1, 4, -1], std = [1, -1, 3, -1])
-        global cdata = AnalysisTable([:area], [
-            SampleDataTable(
-                Table(;
-                    var"Sample" = ["S1", "S2", "S3"], 
-                    var"G1(drug_a)" = Float64[6, 24, 54],
-                    var"G2(drug_a)" = Float64[5, 6, 6],
-                    var"G1(drug_b)" = Float64[200, 800, 9800],
-                    var"G2(drug_b)" = Float64[2, 2, 2]), 
-                AnalyteTest,
-                :Sample
-                )
-            ]
-        )
-        global rdata = analysistable((:area => 
-            AnalyteDataTable(
-                Table(;
-                    var"Analyte" = analytes, 
-                    var"S1" = Float64[6, 6, 200, 2],
-                    var"S2" = Float64[24, 6, 800, 2],
-                    var"S3" = Float64[54, 6, 9800, 2]
-                    ), 
-                :Analyte
-                )
-            , )
-        )
-        global cbatch = Batch(method, cdata)
-        global rbatch = Batch(method, rdata)
-        global ebatch = Batch(method)
-        global sdt = SampleDataTable(AnalyteN, :Sample, CSV.read(joinpath(datapath, "area.sdt", "table.txt"), Table; delim = '\t', stringtype = String))
-        global adt = AnalyteDataTable(CSV.read(joinpath(datapath, "area.adt", "table.txt"), Table; delim = '\t', stringtype = String), :Analyte)
-        global sbatch = Batch(sdt; conc_factor = repeat([1], 11))
-        global abatch = Batch(adt; level = vcat(repeat(1:6; inner = 3), repeat([missing], 50)), ratio = [0.1, 0.2, 0.5, 1, 2, 5], conc_factor = repeat([1], 11))
-        global sdt2 = CQA.read(joinpath(datapath, "area2.sdt"), Table)
-        global adt2 = CQA.read(joinpath(datapath, "area2.adt"), Table)
-        global sbatch2 = Batch(sdt2; level = :Level, ratio = :Ratio, conc_factor = 1:10)
-        global abatch2 = Batch(adt2; level = vcat(repeat(1:6; inner = 3), repeat([missing], 50)), ratio = [0.1, 0.2, 0.5, 1, 2, 5], conc_factor = :Factor)
-  
         @test all(isapprox.(sbatch.method.conctable.Analyte1, collect(abatch.method.conctable[1])[2:end]))
         @test getanalyte(cdata.area, 1) == getanalyte(rdata.area, 1) == getanalyte(SampleDataTable(rdata.area, :Sample, Table), 1)
         @test getsample(cdata.area, 2) == getsample(rdata.area, 2) == getsample(AnalyteDataTable(cdata.area, :Analyte, Table), 2)
@@ -252,7 +160,6 @@ end
         pushfirst!(sbatch.calibrator, pop!(sbatch.calibrator))
         @test last(sbatch.calibrator).machine isa CQA.EmptyMachine
         # InternalCalibrator
-        global ical = CQA.analyze_calibrator!(InternalCalibrator(analyteobj(method.conctable)[3], 50.0))
         @test isapprox(CQA.quantify_calibrator(ical)[1], getanalyte(method.conctable, 3)[1])
         @test CQA.analyze_calibrator!(Batch(method, [ical])).calibrator[1] == ical
         @test model_calibrator!(ical, Nothing) == ical
@@ -363,10 +270,6 @@ end
         end 
         @test @test_noerror CQA.formula_repr_ascii(ical)
         @test endswith(CQA.formula_repr_ascii(rbatch.calibrator[2]), "x^2")
-        global initial_mc_c = CQA.read(joinpath(datapath, "initial_mc_c.batch"), DataFrame)
-        global initial_mc_r = CQA.read(joinpath(datapath, "initial_mc_r.batch"), DataFrame)
-        global initial_sc_c = CQA.read(joinpath(datapath, "initial_sc_c.batch"), DataFrame)
-        global initial_sc_r = CQA.read(joinpath(datapath, "initial_sc_r.batch"), DataFrame)
         @test @test_noerror CQA.read(joinpath(datapath, "initial_mc_c.batch", "data.at"), DataFrame)
         @test @test_noerror CQA.read(joinpath(datapath, "initial_mc_c.batch", "data.at", "0_area.sdt"), DataFrame)
         @test @test_noerror CQA.read(joinpath(datapath, "initial_mc_r.batch", "data.at", "0_area.adt"), DataFrame)
@@ -383,10 +286,6 @@ end
         quantify!(initial_mc_r)
         quantify!(initial_sc_c)
         quantify!(initial_sc_r)
-        global save_mc_c = CQA.read(joinpath(datapath, "save_mc_c.batch"), DataFrame)
-        global save_mc_r = CQA.read(joinpath(datapath, "save_mc_r.batch"), DataFrame)
-        global save_sc_c = CQA.read(joinpath(datapath, "save_sc_c.batch"), DataFrame)
-        global save_sc_r = CQA.read(joinpath(datapath, "save_sc_r.batch"), DataFrame)
         # value validation
         @test isapprox(CQA.table(initial_mc_c.data.estimated_concentration)[1, 2], collect(CQA.table(sbatch.data.estimated_concentration)[1])[2] * 10)
         @test all(isapprox_nan.(collect(CQA.table(initial_mc_c.data.estimated_concentration)[1, :]), collect(CQA.table(save_mc_c.data.estimated_concentration)[1, :])))
@@ -396,6 +295,7 @@ end
         @test all(isapprox_nan.(collect(CQA.table(initial_sc_r.data.estimated_concentration)[1, :]), collect(CQA.table(save_sc_r.data.estimated_concentration)[1, :])))
         model_calibrator!(save_mc_c; model = PowerCalibrator)
         model_calibrator!(save_mc_r; weight = SqXWeight())
+        @test all(isapprox.(StatsAPI.predict(save_mc_c.calibrator[1], Table(; x = [1, 2, 3])), StatsAPI.predict(save_mc_c.calibrator[1], [1, 2, 3])))
         @test all(isapprox.(StatsAPI.predict(save_mc_c.calibrator[1].machine, Table(; x = [1, 2, 3])), StatsAPI.predict(save_mc_c.calibrator[1].machine, [1, 2, 3])))
         calibrate!(save_mc_c)
         calibrate!(save_mc_r)
