@@ -11,7 +11,7 @@ typedmap(fn::F, ::Type{T}, iters...) where {F, T} = collect(T, Base.Generator(fn
 """
     stdof(analyte::B, method::AnalysisMethod{A}) where {A, B <: A}
 
-Return calibratio standard of `analyte` based on `method`.
+Return calibration standard of `analyte` based on `method`.
 """
 function stdof(analyte::B, method::AnalysisMethod{A}) where {A, B <: A}
     aid = getanalyteid(method, analyte)
@@ -218,20 +218,21 @@ getcalibrator(batch::Batch, id::Int) = getcalibrator(batch.calibrator, id)
 getcalibrator(calibrator::AbstractVector{A}, id::Int) where {A <: AbstractCalibrator} = calibrator[id]
 
 """
-    dynamic_range(cal::ExternalCalibrator)
+    dynamic_range(cal::AbstractCalibrator)
 
 Return dynamic range as a `Tuple` (lloq, uloq).
 """
-dynamic_range(cal::ExternalCalibrator) = (lloq(cal), uloq(cal))
+dynamic_range(cal::AbstractCalibrator) = (lloq(cal), uloq(cal))
+
 """
-    signal_range(cal::ExternalCalibrator)
+    signal_range(cal::AbstractCalibrator)
 
 Return theoretical signal of dynamic range as a `Tuple` (lloq, uloq).
 """
-signal_range(cal::ExternalCalibrator) = (predict(cal.machine, Table(; x = collect(dynamic_range(cal))))..., )
+signal_range(cal::AbstractCalibrator) = (predict(cal, collect(dynamic_range(cal)))..., )
 
 """
-    lloq(cal::ExternalCalibrator)
+    lloq(cal::AbstractCalibrator)
 
 Return lower limit of quantification.
 """
@@ -239,8 +240,10 @@ function lloq(cal::ExternalCalibrator)
     i = findfirst(cal.table.include)
     isnothing(i) ? eltype(cal.table.x)(NaN) : cal.table.x[i]
 end
+lloq(cal::InternalCalibrator{A, N}) where {A, N} = N(0)
+
 """
-    uloq(cal::ExternalCalibrator)
+    uloq(cal::AbstractCalibrator)
 
 Return upper limit of quantification.
 """
@@ -248,26 +251,30 @@ function uloq(cal::ExternalCalibrator)
     i = findlast(cal.table.include)
     isnothing(i) ? eltype(cal.table.x)(NaN) : cal.table.x[i]
 end
+uloq(cal::InternalCalibrator{A, N}) where {A, N} = N(Inf)
+
 """
-    signal_lloq(cal::ExternalCalibrator)
+    signal_lloq(cal::AbstractCalibrator)
 
 Return theoretical signal of lower limit of quantification.
 """
-signal_lloq(cal::ExternalCalibrator) = only(predict(cal.machine, Table(; x = [lloq(cal)])))
+signal_lloq(cal::AbstractCalibrator) = only(predict(cal, [lloq(cal)]))
+
 """
-    uloq(cal::ExternalCalibrator)
+    signal_uloq(cal::AbstractCalibrator)
 
 Return theoretical signal of upper limit of quantification.
 """
-signal_uloq(cal::ExternalCalibrator) = only(predict(cal.machine, Table(; x = [uloq(cal)])))
+signal_uloq(cal::AbstractCalibrator) = only(predict(cal, [uloq(cal)]))
 
 """
-    blank(cal::ExternalCalibrator)
+    blank(cal::AbstractCalibrator)
     blank(model::CalibrationModel)
 
 Blank signal of `cal`.
 """
 blank(cal::ExternalCalibrator) = blank(cal.model)
+blank(cal::InternalCalibrator) = 0
 blank(model::CalibrationModel{Proportional}) = 0
 blank(model::CalibrationModel{Linear}) = 0
 blank(model::CalibrationModel{QuadraticOrigin}) = 0
@@ -277,7 +284,7 @@ blank(model::CalibrationModel{Exponential}) = 0
 blank(model::CalibrationModel{Power}) = 0
 
 """
-    signal_lob(cal::ExternalCalibrator)
+    signal_lob(cal::AbstractCalibrator)
 
 Theoretical limit of blank (LOB) in signal space.
 """
@@ -291,9 +298,10 @@ function signal_lob(cal::ExternalCalibrator)
         mean(cal.table.y[zero_id]) + 1.645 * std(cal.table.y[zero_id])
     end
 end
+signal_lob(cal::InternalCalibrator) = blank(cal)
 
 """
-    signal_lod(cal::ExternalCalibrator)
+    signal_lod(cal::AbstractCalibrator)
 
 Theoretical limit of detection (LOD) in signal space.
 """
@@ -307,8 +315,10 @@ function signal_lod(cal::ExternalCalibrator)
         signal_lob(cal) + 1.645 * std(cal.table.y[cal.table.x .== cal.table.x[findfirst(cal.table.include)]])
     end
 end
+signal_lod(cal::InternalCalibrator) = signal_lob(cal)
+
 """
-    signal_loq(cal::ExternalCalibrator)
+    signal_loq(cal::AbstractCalibrator)
 
 Theoretical limit of quantification (LOQ) in signal space.
 """
@@ -319,6 +329,7 @@ function signal_loq(cal::ExternalCalibrator)
         blank(cal) + 10 * std(cal.table.y[cal.table.x .== cal.table.x[findfirst(cal.table.include)]])
     end
 end
+signal_loq(cal::InternalCalibrator) = signal_lod(cal)
 
 """
     getweight(cal::InternalCalibrator)
@@ -330,3 +341,129 @@ Get weight object from `cal` or `model`.
 getweight(cal::InternalCalibrator) = ConstWeight()
 getweight(cal::ExternalCalibrator) = getweight(cal.model)
 getweight(model::CalibrationModel) = model.weight
+
+"""
+    findoutofrange(batch::Batch[, analyte]; data = batch.method.est_conc, limit = dynamic_range, dev = (0.2, 0.15)) -> Vector{Pair}
+
+Find all samples that have quantity `data` out of acceptable range for each analyte. The return vector is analyte-id vector pairs. 
+
+* `analyte` specifys target analyte; otherwise, all analytes are included.
+* `data::Symbol`: quantity to be evaluated.
+* `limit::Function` takes each calibrator and returns acceptable range.
+* `dev::Tuple`: allowed devience of range.
+"""
+findoutofrange(batch::Batch, analyte = nothing; data = batch.method.est_conc, limit = dynamic_range, dev = (0.2, 0.15)) = _findoutofrange(batch, analyte, data, isoutofrange, limit, dev)
+
+"""
+    findunderrange(batch::Batch[, analyte]; data = batch.method.est_conc, limit = lloq, dev = 0.2) -> Vector{Pair}
+
+Find all samples that have quantity `data` under acceptable range for each analyte. The return vector is analyte-id vector pairs. 
+
+* `analyte` specifys target analyte; otherwise, all analytes are included.
+* `data::Symbol`: quantity to be evaluated.
+* `limit::Function` takes each calibrator and returns acceptable lower limit.
+* `dev::Real`: allowed devience of limit.
+"""
+findunderrange(batch::Batch, analyte = nothing; data = batch.method.est_conc, limit = lloq, dev = 0.2) = _findoutofrange(batch, analyte, data, isunderrange, limit, dev)
+
+"""
+    findoverrange(batch::Batch[, analyte]; data = batch.method.est_conc, limit = uloq, dev = 0.15) -> Vector{Pair}
+
+Find all samples that have quantity `data` over acceptable range for each analyte. The return vector is analyte-id vector pairs. 
+
+* `analyte` specifys target analyte; otherwise, all analytes are included.
+* `data::Symbol`: quantity to be evaluated.
+* `limit::Function` takes each calibrator and returns acceptable upper limit.
+* `dev::Tuple`: allowed devience of limit.
+"""
+findoverrange(batch::Batch, analyte = nothing; data = batch.method.est_conc, limit = uloq, dev = 0.15) = _findoutofrange(batch, analyte, data, isoverrange, limit, dev)
+
+"""
+    markoutofrange(batch::Batch[, analyte]; data = batch.method.est_conc, limit = dynamic_range, dev = (0.2, 0.15), value = (x, y) -> (NaN, NaN)) -> AbstractDataTable
+
+Mark all samples that have quantity `data` out of acceptable range with `value` for each analyte. 
+
+* `analyte` specifys target analyte; otherwise, all analytes are included.
+* `data::Symbol`: quantity to be evaluated.
+* `limit::Function` takes each calibrator and returns acceptable range.
+* `dev::Tuple`: allowed devience of range.
+* `value::Function`: 2-arg functions returning marked values for each analyte. The first argument is calibrator; the second is sample data vector.
+"""
+markoutofrange(batch::Batch, analyte = nothing; data = batch.method.est_conc, limit = dynamic_range, dev = (0.2, 0.15), value = (x, y) -> (NaN, NaN)) = 
+    _markoutofrange(batch, analyte, data, (isunderrange, isoverrange), limit, dev, value)
+
+"""
+    markunderrange(batch::Batch[, analyte]; data = batch.method.est_conc, limit = lloq, dev = 0.2, value = (x, y) -> NaN) -> AbstractDataTable
+
+Mark all samples that have quantity `data` under acceptable range with `value` for each analyte. 
+
+* `analyte` specifys target analyte; otherwise, all analytes are included.
+* `data::Symbol`: quantity to be evaluated.
+* `limit::Function` takes each calibrator and returns acceptable lower limit.
+* `dev::Real`: allowed devience of limit.
+* `value::Function`: 2-arg function returning marked value for each analyte. The first argument is calibrator; the second is sample data vector.
+"""
+markunderrange(batch::Batch, analyte = nothing; data = batch.method.est_conc, limit = lloq, dev = 0.2, value = (x, y) -> NaN) = 
+    _markoutofrange(batch, analyte, data, isunderrange, limit, dev, value)
+
+"""
+    markoverrange(batch::Batch; data = batch.method.est_conc, limit = uloq, dev = 0.15, value = (x, y) -> NaN) -> AbstractDataTable
+
+Mark all samples that have quantity `data` over acceptable range with `value` for each analyte. 
+
+* `analyte` specifys target analyte; otherwise, all analytes are included.
+* `data::Symbol`: quantity to be evaluated.
+* `limit::Function` takes each calibrator and returns acceptable upper limit.
+* `dev::Tuple`: allowed devience of limit.
+* `value::Function`: 2-arg function returning marked value for each analyte. The first argument is calibrator; the second is sample data vector.
+"""
+markoverrange(batch::Batch, analyte = nothing; data = batch.method.est_conc, limit = uloq, dev = 0.15, value = (x, y) -> NaN) = 
+    _markoutofrange(batch, analyte, data, isoverrange, limit, dev, value)
+
+"""
+    markoutofrange!(batch::Batch[, analyte]; data = batch.method.est_conc, limit = dynamic_range, dev = (0.2, 0.15), value = (x, y) -> (NaN, NaN)) -> Batch
+
+Mark all samples that have quantity `data` out of acceptable range with `value` for each analyte, and returns the updated `batch`. 
+
+* `analyte` specifys target analyte; otherwise, all analytes are included.
+* `data::Symbol`: quantity to be evaluated.
+* `limit::Function` takes each calibrator and returns acceptable range.
+* `dev::Tuple`: allowed devience of range.
+* `value::Function`: 2-arg functions returning marked values for each analyte. The first argument is calibrator; the second is sample data vector.
+"""
+function markoutofrange!(batch::Batch, analyte = nothing; data = batch.method.est_conc, limit = dynamic_range, dev = (0.2, 0.15), value = (x, y) -> (NaN, NaN)) 
+    set!(batch.data, data, markoutofrange(batch, analyte; data, limit, dev, value))
+    batch
+end
+
+"""
+    markunderrange!(batch::Batch[, analyte]; data = batch.method.est_conc, limit = lloq, dev = 0.2, value = (x, y) -> NaN) -> Batch
+
+Mark all samples that have quantity `data` under acceptable range with `value` for each analyte, and returns the updated `batch`. 
+
+* `analyte` specifys target analyte; otherwise, all analytes are included.
+* `data::Symbol`: quantity to be evaluated.
+* `limit::Function` takes each calibrator and returns acceptable lower limit.
+* `dev::Real`: allowed devience of limit.
+* `value::Function`: 2-arg function returning marked value for each analyte. The first argument is calibrator; the second is sample data vector.
+"""
+function markunderrange!(batch::Batch, analyte = nothing; data = batch.method.est_conc, limit = dynamic_range, dev = 0.2, value = (x, y) -> NaN) 
+    set!(batch.data, data, markunderrange(batch, analyte; data, limit, dev, value))
+    batch
+end
+
+"""
+    markoverrange!(batch::Batch[, analyte]; data = batch.method.est_conc, limit = uloq, dev = 0.15, value = (x, y) -> NaN) -> Batch
+
+Mark all samples that have quantity `data` over acceptable range with `value` for each analyte, and returns the updated `batch`. 
+
+* `analyte` specifys target analyte; otherwise, all analytes are included.
+* `data::Symbol`: quantity to be evaluated.
+* `limit::Function` takes each calibrator and returns acceptable lower limit.
+* `dev::Real`: allowed devience of limit.
+* `value::Function`: 2-arg function returning marked value for each analyte. The first argument is calibrator; the second is sample data vector.
+"""
+function markoverrange!(batch::Batch, analyte = nothing; data = batch.method.est_conc, limit = dynamic_range, dev = 0.15, value = (x, y) -> NaN) 
+    set!(batch.data, data, markoverrange(batch, analyte; data, limit, dev, value))
+    batch
+end

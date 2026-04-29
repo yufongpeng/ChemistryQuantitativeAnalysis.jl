@@ -67,6 +67,7 @@ export
     findanalyte, getanalyte, findsample, getsample, findcalibrator, getcalibrator, eachanalyte, eachsample,
     # analytical attr
     dynamic_range, lloq, uloq, signal_range, signal_lloq, signal_uloq, signal_lob, signal_lod, signal_loq, 
+    findoutofrange, findunderrange, findoverrange, markoutofrange, markunderrange, markoverrange, markoutofrange!, markunderrange!, markoverrange!, 
     
     # batch construction utils
     mkbatch, 

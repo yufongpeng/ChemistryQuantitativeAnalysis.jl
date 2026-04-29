@@ -299,6 +299,9 @@ end
         @test analytename(cdata) == analytename(cdata.area)
         @test all(isapprox.(dynamic_range(cbatch.calibrator[1]), (1, 100)))
         @test all(isapprox.(signal_range(cbatch.calibrator[2]), (signal_lloq(cbatch.calibrator[2]), signal_uloq(cbatch.calibrator[2]))))
+        @test isapprox(first(signal_range(ical)), signal_lloq(ical))
+        @test isinf(signal_uloq(ical))
+        @test signal_loq(ical) == 0
         @test isapprox(signal_lob(sbatch.calibrator[2]) + signal_lod(sbatch.calibrator[2]),  0.4945 * signal_loq(sbatch.calibrator[2]))
         for cal in sbatch.calibrator
             global c = cal
@@ -316,6 +319,15 @@ end
         @test CQA.table(CQA.table_convert(DataFrame, cdata.area)) isa DataFrame
         @test CQA.table(CQA.table_convert(DataFrame, sdt)) isa DataFrame
         @test CQA.table(CQA.table_convert(DataFrame, adt)) isa DataFrame
+        @test last(first(findoutofrange(cbatch, AnalyteG1("G1(drug_a)"); limit = x -> (8, 50)))) == [1]
+        @test last(first(findunderrange(cbatch; limit = x -> lloq(x) * 8))) == [1]
+        @test last(first(findoverrange(cbatch; limit = x -> uloq(x) / 3))) == [3]
+        markoutofrange!(cbatch, AnalyteG1("G1(drug_a)"); limit = x -> (8, 50))
+        markunderrange!(rbatch; limit = x -> lloq(x) * 8)
+        markoverrange!(rbatch; limit = x -> uloq(x) / 3, value = (x, y) -> Inf)
+        @test isnan(getanalyte(cbatch.data.estimated_concentration, AnalyteG1("G1(drug_a)"))[1])
+        @test isnan(getanalyte(rbatch.data.estimated_concentration, AnalyteG1("G1(drug_a)"))[1])
+        @test isinf(getanalyte(rbatch.data.estimated_concentration, AnalyteG1("G1(drug_b)"))[3])
     end
     @testset "IO" begin
         for w in [ConstWeight,

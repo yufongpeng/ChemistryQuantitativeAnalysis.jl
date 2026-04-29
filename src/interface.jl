@@ -118,6 +118,12 @@ StatsAPI.coef(machine::EmptyMachine) = Real[]
 StatsAPI.coef(machine::LsqFitMachine) = coef(machine.fit)
 StatsAPI.r2(machine::EmptyMachine) = 0
 StatsAPI.r2(machine::LsqFitMachine) = 1 - rss(machine.fit) / machine.totalvariance
+StatsAPI.predict(cal::InternalCalibrator, x::AbstractVector{<: Real}) = x ./ cal.conc
+StatsAPI.predict(cal::InternalCalibrator, x::T) where T = 
+    Tables.istable(T) ? Tables.getcolumn(x, :x) ./ cal.conc : x ./ cal.conc
+StatsAPI.predict(cal::ExternalCalibrator, x::AbstractVector{<: Real}) = StatsAPI.predict(cal.machine, Table(; x))
+StatsAPI.predict(cal::ExternalCalibrator, x::T) where T = 
+    Tables.istable(T) ? StatsAPI.predict(cal.machine, x) : StatsAPI.predict(cal.machine, Table(; x))
 StatsAPI.predict(machine::EmptyMachine, x::AbstractVector{N}) where {N <: Real} = [N(NaN) for _ in x]
 StatsAPI.predict(machine::EmptyMachine, x::T) where T = Tables.istable(T) ? StatsAPI.predict(machine, Tables.getcolumn(x, :x)) : [eltype(x)(NaN) for _ in x]
 StatsAPI.predict(machine::LsqFitMachine, x::AbstractVector{<: Real}) = machine.fn(x, machine.fit.param)

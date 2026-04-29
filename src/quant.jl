@@ -21,7 +21,7 @@ function relative_signal(method::AnalysisMethod, dt::AbstractDataTable{A, S, N})
                 analytetable.isd[aid[i]] == 0 ? getanalyte(dt, i) :
                 getanalyte(dt, i) ./ getanalyte(dt, analytetable.analyte[analytetable.isd[aid[i]]]))::Vector{N}
     end
-    fill_result!(deepcopy(dt), cs::Vector{Vector{N}})
+    fill_result_by_analyte!(deepcopy(dt), cs::Vector{Vector{N}})
 end
 
 """
@@ -88,7 +88,7 @@ function inv_predict(batch::Batch, dt::AbstractDataTable{A, S, N}) where {A, S, 
         convert(Vector{N}, isnothing(cal_id[i]) ? repeat([N(NaN)], length(sampleobj(dt))) : 
             inv_predict(batch.calibrator[cal_id[i]], getanalyte(dt, i)))::Vector{N}
     end
-    fill_result!(deepcopy(dt), cs::Vector{Vector{N}})
+    fill_result_by_analyte!(deepcopy(dt), cs::Vector{Vector{N}})
 end
 
 """
@@ -167,7 +167,7 @@ end
     quantify(batch::Batch, at::AnalysisTable; signal = batch.method.signal)
     quantify(batch::Batch, dt::AbstractDataTable)
 
-Quantify all analyes based on relative signal data, and return the result as `AbstractDataTable` using `getproperty(at, signal)` or `dt` as signal data.
+Quantify all analytes based on relative signal data, and return the result as `AbstractDataTable` using `getproperty(at, signal)` or `dt` as signal data.
 """
 quantify(batch::Batch, at::AnalysisTable; signal = batch.method.signal) = quantify(batch, getproperty(at, signal))
 function quantify(batch::Batch, dt::AbstractDataTable{A, S, N}) where {A, S, N}
@@ -183,7 +183,7 @@ function quantify(batch::Batch, dt::AbstractDataTable{A, S, N}) where {A, S, N}
         cal = batch.calibrator[cal_id[i]]
         convert(Vector{N}, quantify(cal, dt, i, cal.isd))::Vector{N}
     end
-    fill_result!(deepcopy(dt), cs::Vector{Vector{N}})
+    fill_result_by_analyte!(deepcopy(dt), cs::Vector{Vector{N}})
 end
 
 """
@@ -268,7 +268,7 @@ function accuracy(dtp::AbstractDataTable{A, S, N}, dtt::AbstractDataTable) where
     end : map(analyteobj(dtp)) do analyte
         convert(Vector{N}, accuracy(getanalyte(dtp, analyte), getanalyte(dtt, analyte)))::Vector{N}
     end
-    fill_result!(deepcopy(dtp), cs::Vector{Vector{N}})
+    fill_result_by_analyte!(deepcopy(dtp), cs::Vector{Vector{N}})
 end
 accuracy(x̂::AbstractVector, x::AbstractVector) = @. x̂ / x
 
@@ -278,7 +278,7 @@ function accuracy(dtp::AbstractDataTable{A, S, N}) where {A, S, N}
     end : map(analyteobj(dtp)) do analyte
         convert(Vector{N}, accuracy(getanalyte(dtp, analyte)))::Vector{N}
     end
-    fill_result!(deepcopy(dtp), cs::Vector{Vector{N}})
+    fill_result_by_analyte!(deepcopy(dtp), cs::Vector{Vector{N}})
 end
 
 accuracy(x̂::AbstractVector) = [NaN for _ in x̂]

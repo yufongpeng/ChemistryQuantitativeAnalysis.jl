@@ -129,18 +129,106 @@ function getcalibratorid_check(x, analyte)
     cid
 end
 
-function fill_result!(dt::SampleDataTable, result)
+function fill_result_by_analyte!(dt::SampleDataTable, result)
     for (a, c) in zip(eachanalyte(dt), result)
         a .= c
     end
     dt
 end
-function fill_result!(dt::AnalyteDataTable, result)
+function fill_result_by_analyte!(dt::AnalyteDataTable, result)
     for (i, p) in enumerate(eachsample(dt))
         p .= getindex.(result, i)
     end
     dt
 end 
+
+function fill_result_by_sample!(dt::AnalyteDataTable, result)
+    for (a, c) in zip(eachanalyte(dt), result)
+        a .= c
+    end
+    dt
+end
+function fill_result_by_sample!(dt::SampleDataTable, result)
+    for (i, p) in enumerate(eachsample(dt))
+        p .= getindex.(result, i)
+    end
+    dt
+end 
+
+isoutofrange(x, rg, dev_acc) = isnan(x) ? false : (first(rg) * (1 - first(dev_acc)) > x || x > last(rg) * (1 + last(dev_acc)))
+isunderrange(x, rg, dev_acc) = isnan(x) ? false : rg * (1 - dev_acc) > x
+isoverrange(x, rg, dev_acc) = isnan(x) ? false : x > rg * (1 + dev_acc)
+
+function _findoutofrange(batch::Batch, analyte, data, isfn, limit, dev)
+    dt = getproperty(batch.data, data)
+    cal_id = findcalibrator(batch, analyte) 
+    isnothing(cal_id) && return [analyte => Int[]]
+    rg = limit(batch.calibrator[cal_id])
+    [analyte => findall(x -> isfn(x, rg, dev), getanalyte(dt, analyte))]
+end
+
+function _findoutofrange(batch::Batch, analyte::Nothing, data, isfn, limit, dev)
+    dt = getproperty(batch.data, data)
+    cal_id = [findcalibrator(batch, analyte) for analyte in analyteobj(dt)]
+    rg = limit.(batch.calibrator)
+    length(cal_id) > 10 ? ThreadsX.map(eachindex(cal_id)) do i
+        analyteobj(dt)[i] => isnothing(cal_id[i]) ? Int[] : findall(x -> isfn(x, rg[cal_id[i]], dev), getanalyte(dt, i))
+    end : map(eachindex(cal_id)) do i
+        analyteobj(dt)[i] => isnothing(cal_id[i]) ? Int[] : findall(x -> isfn(x, rg[cal_id[i]], dev), getanalyte(dt, i))
+    end
+end
+
+function _markoutofrange(batch::Batch, analyte, data, isfn, limit, dev, vfn)
+    dt = getproperty(batch.data, data)
+    cal_id = findcalibrator(batch, analyte) 
+    isnothing(cal_id) && return dt
+    j = findanalyte(dt, analyte)
+    cs = length(eachindex(analyteobj(dt))) > 10 ? ThreadsX.map(eachindex(analyteobj(dt))) do i
+        v = getanalyte(dt, i)
+        if i == j 
+            rg = limit(batch.calibrator[cal_id])
+            _markoutofrange(isfn, rg, dev, vfn(batch.calibrator[cal_id], v), v)
+        else 
+            v
+        end
+    end : map(eachindex(analyteobj(dt))) do i
+        v = getanalyte(dt, i)
+        if i == j 
+            rg = limit(batch.calibrator[cal_id])
+            _markoutofrange(isfn, rg, dev, vfn(batch.calibrator[cal_id], v), v)
+        else 
+            v
+        end
+    end
+    fill_result_by_analyte!(deepcopy(dt), cs)
+end
+
+function _markoutofrange(batch::Batch, analyte::Nothing, data, isfn, limit, dev, vfn)
+    dt = getproperty(batch.data, data)
+    cal_id = [findcalibrator(batch, analyte) for analyte in analyteobj(dt)]
+    rg = limit.(batch.calibrator)
+    cs = length(cal_id) > 10 ? ThreadsX.map(eachindex(cal_id)) do i
+        v = getanalyte(dt, i)
+        isnothing(cal_id[i]) ? v : _markoutofrange(isfn, rg[cal_id[i]], dev, vfn(batch.calibrator[cal_id[i]], v), v)
+    end : map(eachindex(cal_id)) do i
+        v = getanalyte(dt, i)
+        isnothing(cal_id[i]) ? v : _markoutofrange(isfn, rg[cal_id[i]], dev, vfn(batch.calibrator[cal_id[i]], v), v)
+    end
+    fill_result_by_analyte!(deepcopy(dt), cs)
+end
+
+function _markoutofrange(isfn::Tuple, rg::Tuple, dev::Tuple, value::Tuple, v)
+    isfns = x -> (first(isfn)(x, first(rg), first(dev)), last(isfn)(x, last(rg), last(dev)))
+    map(v) do x 
+        lo, up = isfns(x)
+        lo ? first(value) : up ? last(value) : x 
+    end
+end
+
+_markoutofrange(isfn, rg, dev, value, v) = map(v) do x 
+    isfn(x, rg, dev) ? value : x 
+end
+
 
 # function critical_point(cal::ExternalCalibrator{A, N}) where {A, N}
 #     β = cal.model.model.pp.beta0::Vector{N}

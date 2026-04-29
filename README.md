@@ -523,4 +523,10 @@ lloq(rbatch.calibrator[2]) # Lower limit of quantification
 uloq(rbatch.calibrator[2]) # Upper limit of quantification
 dynamic_range(cbatch.calibrator[1]) # A Tuple, (LLOQ, ULOQ)
 signal_range(rbatch.calibrator[2]) # A Tuple, signal of LLOQ and ULOQ
+findoutofrange(cbatch, AnalyteG1("G1(drug_a)"); limit = x -> (8, 50)) # Find sample index out of range (8, 50) for `AnalyteG1("G1(drug_a)")`
+findunderrange(cbatch; limit = x -> lloq(x) * 8) # Find sample index under LLOQ * 8 for all analytes
+findoverrange(cbatch; limit = x -> uloq(x) / 3) # Find sample index over ULOQ / 3 for all analytes
+markoutofrange!(cbatch, AnalyteG1("G1(drug_a)"); limit = x -> (8, 50)) # Mark samples out of range (8, 50) with `NaN` for `AnalyteG1("G1(drug_a)")`
+markunderrange!(rbatch; limit = x -> lloq(x) * 8) # Mark samples under LLOQ * 8 with `NaN` for all analytes
+markoverrange!(rbatch; limit = x -> uloq(x) / 3, value = (x, y) -> Inf) # Mark samples over ULOQ / 3 with `Inf` for all analytes
 ```
