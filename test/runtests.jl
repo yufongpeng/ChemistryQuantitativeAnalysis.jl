@@ -1,4 +1,5 @@
-using ChemistryQuantitativeAnalysis, TypedTables, DataFrames, Dictionaries, CSV, StatsAPI
+using ChemistryQuantitativeAnalysis
+using TypedTables, DataFrames, Dictionaries, CSV, StatsAPI
 using Test
 import Base: show, convert
 const CQA = ChemistryQuantitativeAnalysis
@@ -159,6 +160,15 @@ include("objects.jl")
         @test sbatch.method.analytetable.isd[3] == 4
         pushfirst!(sbatch.calibrator, pop!(sbatch.calibrator))
         @test last(sbatch.calibrator).machine isa CQA.EmptyMachine
+        edit_method!(abatch2, [], [2], [1 => 2])
+        reset_isd_calibrate!(abatch2)
+        @test length(abatch2.calibrator) == length(abatch2.analyte)
+        edit_method!(abatch2, [3 => 1], [2], [1 => 2])
+        reset_std_calibrate!(abatch2)
+        @test length(abatch2.calibrator) == length(abatch2.analyte) - 1
+        reset_isd_std_calibrate!(abatch2)
+        @test length(abatch2.calibrator) == length(abatch2.analyte) 
+        edit_method_calibrate!(abatch2, [3 => 1], [2, 4], [1 => 2])
         # InternalCalibrator
         @test isapprox(CQA.quantify_calibrator(ical)[1], getanalyte(method.conctable, 3)[1])
         @test CQA.analyze_calibrator!(Batch(method, [ical])).calibrator[1] == ical
@@ -186,7 +196,7 @@ include("objects.jl")
         @test quantify(ical, cbatch.data.area, AnalyteTest("G1(drug_a)")) == inv_predict(ical, cbatch.data.relative_signal, AnalyteTest("G1(drug_a)"))
         # @test quantify(cbatch.calibrator[2]) == inv_predict(cbatch.calibrator[2])
         @test quantify(cbatch.calibrator[2], cbatch.data.area) == inv_predict(cbatch.calibrator[2], cbatch.data.relative_signal)
-
+        quantify!(abatch2)
         cbatch.data[:nominal_concentration] = deepcopy(cbatch.data.estimated_concentration)
         @test all(isapprox.(validate!(cbatch).data.accuracy.var"G1(drug_b)", set_accuracy(cbatch.data, cbatch).accuracy.var"G1(drug_b)"))
         @test all(isapprox.(accuracy(cbatch, cbatch.data).var"G1(drug_b)", accuracy(cbatch.method, cbatch.data).var"G1(drug_b)"))
@@ -232,9 +242,11 @@ include("objects.jl")
         markoutofrange!(cbatch, AnalyteG1("G1(drug_a)"); limit = x -> (8, 50))
         markunderrange!(rbatch; limit = x -> lloq(x) * 8)
         markoverrange!(rbatch; limit = x -> uloq(x) / 3, value = (x, y) -> Inf)
+        markoutofrange!(abatch2; dev = (0, 0))
         @test isnan(getanalyte(cbatch.data.estimated_concentration, AnalyteG1("G1(drug_a)"))[1])
         @test isnan(getanalyte(rbatch.data.estimated_concentration, AnalyteG1("G1(drug_a)"))[1])
         @test isinf(getanalyte(rbatch.data.estimated_concentration, AnalyteG1("G1(drug_b)"))[3])
+        @test all(<(uloq(abatch2.calibrator[1])), filter(!isnan, getanalyte(abatch2.data.estimated_concentration, abatch2.analyte[3])))
     end
     @testset "IO" begin
         for w in [ConstWeight,

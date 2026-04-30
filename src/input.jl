@@ -309,7 +309,15 @@ function read_batch(file::String, T; analytetype = String, sampletype = String, 
             # cal = [calibrate(method, analyte) for analyte in method.calanalyte]
         # end
     else
-        cal = [read_calibrator(joinpath(file, "calibrator", f); delim, analytetype, numbertype, modeltype) for f in readdir(joinpath(file, "calibrator")) if endswith(f, ".ecal") || endswith(f, ".ical")]
+        cf = readdir(joinpath(file, "calibrator"))
+        filter!(f -> endswith(f, ".ecal") || endswith(f, ".ical"), cf)
+        if length(cf) > 10
+            cal = ThreadsX.map(eachindex(cf)) do i 
+                read_calibrator(joinpath(file, "calibrator", cf[i]); delim, analytetype, numbertype, modeltype)
+            end
+        else
+            cal = [read_calibrator(joinpath(file, "calibrator", f); delim, analytetype, numbertype, modeltype) for f in cf]
+        end
     end
     fd = findfirst(==("data.at"), readdir(file))
     batch = Batch(method, cal,

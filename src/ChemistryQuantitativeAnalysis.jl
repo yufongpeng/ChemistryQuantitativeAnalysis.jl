@@ -46,12 +46,12 @@ export
     SqExpYWeight,
 
     # Workflow1: edit method
-    edit_method!, 
+    edit_method!, reset_isd!, reset_std!, reset_isd_std!,
     assign_isd!, assign_std!, replace_std!, 
     # Workflow2: calibrate
     calibrate, calibrate!, 
-    edit_method_calibrate!, 
-    model_calibrator!, load_method!, assign_isd_calibrate!, assign_std_calibrate!, replace_std_calibrate!,
+    edit_method_calibrate!, reset_isd_calibrate!, reset_std_calibrate!, reset_isd_std_calibrate!, 
+    model_calibrator!, assign_isd_calibrate!, assign_std_calibrate!, replace_std_calibrate!,
     # Workflow3: quantify
     relative_signal, set_relative_signal, set_relative_signal!, quantify_relative_signal!,
     inv_predict, set_inv_predict, set_inv_predict!, quantify_inv_predict!,

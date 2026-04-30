@@ -161,7 +161,7 @@ isoverrange(x, rg, dev_acc) = isnan(x) ? false : x > rg * (1 + dev_acc)
 
 function _findoutofrange(batch::Batch, analyte, data, isfn, limit, dev)
     dt = getproperty(batch.data, data)
-    cal_id = findcalibrator(batch, analyte) 
+    cal_id = findcalibrator(batch, stdof(analyte, batch.method)) 
     isnothing(cal_id) && return [analyte => Int[]]
     rg = limit(batch.calibrator[cal_id])
     [analyte => findall(x -> isfn(x, rg, dev), getanalyte(dt, analyte))]
@@ -169,7 +169,7 @@ end
 
 function _findoutofrange(batch::Batch, analyte::Nothing, data, isfn, limit, dev)
     dt = getproperty(batch.data, data)
-    cal_id = [findcalibrator(batch, analyte) for analyte in analyteobj(dt)]
+    cal_id = [findcalibrator(batch, stdof(analyte, batch.method)) for analyte in analyteobj(dt)]
     rg = limit.(batch.calibrator)
     length(cal_id) > 10 ? ThreadsX.map(eachindex(cal_id)) do i
         analyteobj(dt)[i] => isnothing(cal_id[i]) ? Int[] : findall(x -> isfn(x, rg[cal_id[i]], dev), getanalyte(dt, i))
@@ -180,7 +180,7 @@ end
 
 function _markoutofrange(batch::Batch, analyte, data, isfn, limit, dev, vfn)
     dt = getproperty(batch.data, data)
-    cal_id = findcalibrator(batch, analyte) 
+    cal_id = findcalibrator(batch, stdof(analyte, batch.method)) 
     isnothing(cal_id) && return dt
     j = findanalyte(dt, analyte)
     cs = length(eachindex(analyteobj(dt))) > 10 ? ThreadsX.map(eachindex(analyteobj(dt))) do i
@@ -205,7 +205,7 @@ end
 
 function _markoutofrange(batch::Batch, analyte::Nothing, data, isfn, limit, dev, vfn)
     dt = getproperty(batch.data, data)
-    cal_id = [findcalibrator(batch, analyte) for analyte in analyteobj(dt)]
+    cal_id = [findcalibrator(batch, stdof(analyte, batch.method)) for analyte in analyteobj(dt)]
     rg = limit.(batch.calibrator)
     cs = length(cal_id) > 10 ? ThreadsX.map(eachindex(cal_id)) do i
         v = getanalyte(dt, i)

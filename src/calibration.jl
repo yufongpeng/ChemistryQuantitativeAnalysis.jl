@@ -138,6 +138,80 @@ function analytetable_check(analyte, vstd, visd)
     end
 end
 
+"""
+    reset_isd!(batch::Batch, params = nothing; kwargs...)
+    reset_isd!(method::AnalysisMethod, params = nothing; kwargs...)
+
+Reset internal standards, i.e. all analytes become non-isd, and calbrated by itself if originally not calibrated.
+
+* `params`: object compatible with `Table.jl` interfaces. Columns may include
+    * `:model`: calibration model types (`AbstractCalibrationModel`). Use `Nothing` to not assign meodel.
+    * `:signal_threshold`: signal threshold.
+    * `:rel_sig_threshold`: relative signal threshold.
+    * Columns of `method.analytetable`. 
+    * Keyword arguments of function `mkcalmodel`.
+"""
+function reset_isd!(batch::Batch, params = nothing; kwargs...)
+    reset_isd!(batch.method, params; kwargs...) 
+    batch
+end
+
+function reset_isd!(method::AnalysisMethod, params = nothing; kwargs...)
+    at = method.analytetable
+    at.isd .= 0
+    at.std .= [at.std[i] > 0 ? at.std[i] : i for i in eachindex(at)]
+    _edit_method!(method, params; kwargs...)
+end
+
+"""
+    reset_std!(batch::Batch, params = nothing; kwargs...)
+    reset_std!(method::AnalysisMethod, params = nothing; kwargs...)
+
+Reset calibration standards, i.e. all analytes that are not internal standards become calibrated by itself.
+
+* `params`: object compatible with `Table.jl` interfaces. Columns may include
+    * `:model`: calibration model types (`AbstractCalibrationModel`). Use `Nothing` to not assign meodel.
+    * `:signal_threshold`: signal threshold.
+    * `:rel_sig_threshold`: relative signal threshold.
+    * Columns of `method.analytetable`. 
+    * Keyword arguments of function `mkcalmodel`.
+"""
+function reset_std!(batch::Batch, params = nothing; kwargs...)
+    reset_std!(batch.method, params; kwargs...) 
+    batch
+end
+
+function reset_std!(method::AnalysisMethod, params = nothing; kwargs...)
+    at = method.analytetable
+    at.std .= [at.isd[i] < 0 ? at.std[i] : i for i in eachindex(at)]
+    _edit_method!(method, params; kwargs...)
+end
+
+"""
+    reset_isd_std!(batch::Batch, params = nothing; kwargs...)
+    reset_isd_std!(method::AnalysisMethod, params = nothing; kwargs...)
+
+Reset internal standards and calibration standards, i.e. all analytes become non-isd and calibrated by itself.
+
+* `params`: object compatible with `Table.jl` interfaces. Columns may include
+    * `:model`: calibration model types (`AbstractCalibrationModel`). Use `Nothing` to not assign meodel.
+    * `:signal_threshold`: signal threshold.
+    * `:rel_sig_threshold`: relative signal threshold.
+    * Columns of `method.analytetable`. 
+    * Keyword arguments of function `mkcalmodel`.
+"""
+function reset_isd_std!(batch::Batch, params = nothing; kwargs...)
+    reset_isd_std!(batch.method, params; kwargs...) 
+    batch
+end
+
+function reset_isd_std!(method::AnalysisMethod, params = nothing; kwargs...)
+    at = method.analytetable
+    at.isd .= 0
+    at.std .= [at.isd[i] < 0 ? at.std[i] : i for i in eachindex(at)]
+    _edit_method!(method, params; kwargs...)
+end
+
 _edit_method!(method::AnalysisMethod; kwargs...) = _edit_method!(method, nothing; kwargs...)
 function _edit_method!(method::AnalysisMethod, params::Nothing; kwargs...)
     isempty(kwargs) && return method
@@ -485,11 +559,33 @@ function model_calibrator!(cal::InternalCalibrator, model)
 end
 
 """
-    edit_method_calibrate!(batch::Batch{A}, args...; kwargs...) -> Batch
+    edit_method_calibrate!(batch::Batch, args...; kwargs...) -> Batch
 
 Apply `edit_method!` and `calibrate!` to entire batch. See documentation of both funtions for details.
 """
 edit_method_calibrate!(batch::Batch, args...; kwargs...) = calibrate!(edit_method!(batch, args...; kwargs...))
+
+"""
+    reset_isd_calibrate!(batch::Batch, args...; kwargs...) -> Batch
+
+Apply `reset_isd!` and `calibrate!` to entire batch. See documentation of both funtions for details.
+"""
+reset_isd_calibrate!(batch::Batch, args...; kwargs...) = calibrate!(reset_isd!(batch, args...; kwargs...))
+
+"""
+    reset_std_calibrate!(batch::Batch, args...; kwargs...) -> Batch
+
+Apply `reset_std!` and `calibrate!` to entire batch. See documentation of both funtions for details.
+"""
+reset_std_calibrate!(batch::Batch, args...; kwargs...) = calibrate!(reset_std!(batch, args...; kwargs...))
+
+"""
+    reset_isd_std_calibrate!(batch::Batch, args...; kwargs...) -> Batch
+
+Apply `reset_isd_std!` and `calibrate!` to entire batch. See documentation of both funtions for details.
+"""
+reset_isd_std_calibrate!(batch::Batch, args...; kwargs...) = calibrate!(reset_isd_std!(batch, args...; kwargs...))
+
 """
     assign_isd_calibrate!(batch::Batch, analyte, isd = nothing; kwargs...) -> Batch
 

@@ -21,8 +21,8 @@ function write(file::String, batch::Batch; delim = '\t')
     end
     write(joinpath(file, "method.am"), batch.method; delim)
     mkpath(joinpath(file, "calibrator"))
-    ft = isnothing(batch.method.signaltable) ? "ical" : "ecal"
     for (i, c) in enumerate(batch.calibrator)
+        ft = c isa ExternalCalibrator ? "ecal" : "ical"
         write(joinpath(file, "calibrator", "$i.$ft"), c; delim)
     end
     isnothing(batch.data) || write(joinpath(file, "data.at"), batch.data; delim)
